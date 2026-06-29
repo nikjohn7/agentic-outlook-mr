@@ -1,0 +1,33 @@
+# macOS / editor noise
+.DS_Store
+*.swp
+*.swo
+
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Generated POC outputs
+outputs/
+runs/
+artifacts/
+*.tmp

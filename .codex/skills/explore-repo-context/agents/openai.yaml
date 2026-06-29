@@ -1,0 +1,4 @@
+interface:
+  display_name: "Explore Repo Context"
+  short_description: "Refresh repo understanding before changes"
+  default_prompt: "Use $explore-repo-context to inspect this project before making implementation decisions."

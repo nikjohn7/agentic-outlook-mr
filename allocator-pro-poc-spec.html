@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Markets Recon / Allocator Pro AI POC Specification</title>
+  <style>
+    :root {
+      --ink: #171515;
+      --muted: #5f625d;
+      --paper: #fffdfa;
+      --wash: #f3f0e9;
+      --line: #d7d1c4;
+      --olive: #596b46;
+      --blue: #334d68;
+      --clay: #9b6b4d;
+      --soft-olive: #eef1e8;
+      --soft-blue: #edf2f6;
+      --soft-clay: #f5ece5;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: var(--wash);
+      color: var(--ink);
+      font-family: "Aptos", "Avenir Next", "Segoe UI", sans-serif;
+      line-height: 1.35;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto 24px;
+      padding: 17mm 17mm 15mm;
+      background: var(--paper);
+      border: 1px solid rgba(23, 21, 21, 0.08);
+      box-shadow: 0 18px 44px rgba(23, 21, 21, 0.12);
+      position: relative;
+    }
+
+    .page + .page {
+      page-break-before: always;
+    }
+
+    .document-header {
+      display: grid;
+      grid-template-columns: 66px 1fr auto;
+      gap: 18px;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--ink);
+    }
+
+    .logo {
+      width: 58px;
+      height: 58px;
+      border-radius: 14px;
+      display: block;
+    }
+
+    .eyebrow {
+      color: var(--olive);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      margin-top: 5px;
+      font-family: "Georgia", "Iowan Old Style", serif;
+      font-size: 28px;
+      line-height: 1.04;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-bottom: 8px;
+      font-family: "Georgia", "Iowan Old Style", serif;
+      font-size: 18px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin-bottom: 5px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .meta {
+      text-align: right;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+
+    .section {
+      margin-top: 16px;
+    }
+
+    .lead {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 16px;
+      align-items: stretch;
+      margin-top: 18px;
+    }
+
+    .statement {
+      padding: 15px 16px;
+      background: var(--ink);
+      color: #fffdfa;
+    }
+
+    .statement h2 {
+      color: #fffdfa;
+    }
+
+    .statement p,
+    .recommendation p {
+      font-size: 12px;
+    }
+
+    .recommendation {
+      padding: 15px 16px;
+      background: var(--soft-olive);
+      border-left: 5px solid var(--olive);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .box {
+      padding: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .box.olive {
+      background: var(--soft-olive);
+      border-color: #c7d0bc;
+    }
+
+    .box.blue {
+      background: var(--soft-blue);
+      border-color: #c7d4df;
+    }
+
+    .box.clay {
+      background: var(--soft-clay);
+      border-color: #decab9;
+    }
+
+    .box p,
+    .box li,
+    .flow li,
+    .compact li {
+      color: var(--muted);
+      font-size: 10.5px;
+    }
+
+    ul,
+    ol {
+      margin: 0;
+      padding-left: 16px;
+    }
+
+    li + li {
+      margin-top: 4px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 7px;
+      margin-top: 9px;
+    }
+
+    .step {
+      min-height: 76px;
+      padding: 9px;
+      border: 1px solid var(--line);
+      background: #fff;
+      position: relative;
+    }
+
+    .step-number {
+      color: var(--clay);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .step strong {
+      display: block;
+      margin: 3px 0;
+      font-size: 11px;
+      line-height: 1.15;
+    }
+
+    .step span {
+      display: block;
+      color: var(--muted);
+      font-size: 9.5px;
+      line-height: 1.28;
+    }
+
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      font-size: 10px;
+    }
+
+    .matrix th {
+      padding: 7px 8px;
+      background: var(--ink);
+      color: #fffdfa;
+      font-weight: 700;
+      text-align: left;
+    }
+
+    .matrix td {
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .matrix td:nth-child(n+3),
+    .matrix th:nth-child(n+3) {
+      text-align: center;
+      width: 68px;
+    }
+
+    .callout-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .pill {
+      padding: 8px 9px;
+      border-top: 4px solid;
+      background: #fff;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .pill strong {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--ink);
+      font-size: 10.5px;
+    }
+
+    .pill:nth-child(1) {
+      border-color: var(--olive);
+    }
+
+    .pill:nth-child(2) {
+      border-color: var(--blue);
+    }
+
+    .pill:nth-child(3) {
+      border-color: var(--clay);
+    }
+
+    .rule-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+      margin-top: 8px;
+    }
+
+    .rule-list div {
+      padding-left: 10px;
+      border-left: 3px solid var(--line);
+    }
+
+    .rule-list strong {
+      display: block;
+      font-size: 10.5px;
+      margin-bottom: 2px;
+    }
+
+    .rule-list span {
+      color: var(--muted);
+      display: block;
+      font-size: 10px;
+      line-height: 1.32;
+    }
+
+    .footer {
+      position: absolute;
+      left: 17mm;
+      right: 17mm;
+      bottom: 10mm;
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px solid var(--line);
+      padding-top: 7px;
+      color: var(--muted);
+      font-size: 9px;
+    }
+
+    .tight {
+      margin-top: 11px;
+    }
+
+    .compact {
+      columns: 2;
+      column-gap: 20px;
+    }
+
+    .compact li {
+      break-inside: avoid;
+      margin-bottom: 4px;
+    }
+
+    @media print {
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      html,
+      body {
+        width: 210mm;
+        background: #fff;
+      }
+
+      body {
+        padding: 0;
+      }
+
+      .page {
+        margin: 0;
+        border: 0;
+        box-shadow: none;
+        min-height: 297mm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="document">
+    <div class="page">
+      <div class="document-header">
+        <img class="logo" src="nj_logo.png" alt="Nikhil John logo">
+        <div>
+          <div class="eyebrow">Proof of Concept Specification</div>
+          <h1>Markets Recon / Allocator Pro AI Document Intelligence</h1>
+        </div>
+        <div class="meta">
+          Prepared by Nikhil John<br>
+          24 June 2026<br>
+          Draft for discussion
+        </div>
+      </div>
+
+      <div class="lead">
+        <div class="statement">
+          <h2>Problem Statement</h2>
+          <p>
+            Markets Recon receives fund and asset manager outlook documents in PDF or HTML-derived formats.
+            The POC should identify the asset and sub-asset classes referenced in each source, determine
+            whether each relevant sub-asset is overweight, neutral, or underweight, and retain enough
+            evidence for an analyst to verify the result quickly.
+          </p>
+        </div>
+        <div class="recommendation">
+          <h2>Recommended Next Action</h2>
+          <p>
+            Build a local-first POC pipeline that proves the full extraction and review workflow before
+            investing in a production front end. The first milestone should focus on reliable ingestion,
+            Allocator Pro taxonomy alignment, analyst-calibrated call extraction, deterministic confidence
+            scoring, and a simple reviewable output.
+          </p>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>POC Workflow</h2>
+        <div class="flow">
+          <div class="step">
+            <div class="step-number">01</div>
+            <strong>Input folder</strong>
+            <span>Place one or more source files into a designated folder and start the process.</span>
+          </div>
+          <div class="step">
+            <div class="step-number">02</div>
+            <strong>Auto-detect source</strong>
+            <span>Classify input as PDF or HTML/scraped output and use the relevant ingestion path.</span>
+          </div>
+          <div class="step">
+            <div class="step-number">03</div>
+            <strong>Normalize content</strong>
+            <span>Extract text, tables, sections, page/source references, and searchable chunks.</span>
+          </div>
+          <div class="step">
+            <div class="step-number">04</div>
+            <strong>Detect topics + taxonomy</strong>
+            <span>Extract topics, asset classes, and corresponding Allocator Pro sub-asset classes.</span>
+          </div>
+          <div class="step">
+            <div class="step-number">05</div>
+            <strong>Make + verify calls</strong>
+            <span>Produce OW/N/UW calls, score confidence, and route uncertain items to review.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section grid-2">
+        <div class="box olive">
+          <h3>Analyst Brain</h3>
+          <p>
+            The models should not rely on generic finance prompts alone. They need a compact analyst
+            framework: examples of source excerpts, approved calls, rejected interpretations, and the
+            reasoning a Markets Recon analyst would apply.
+          </p>
+        </div>
+        <div class="box blue">
+          <h3>Confidence Rubric</h3>
+          <p>
+            Confidence should be computed from a documented rubric covering direction evidence, citation
+            support, taxonomy certainty, rationale support, ambiguity, and source quality. Low confidence
+            items should be flagged instead of silently accepted.
+          </p>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Call Output Shape</h2>
+        <table class="matrix" aria-label="Example Allocator Pro call matrix">
+          <thead>
+            <tr>
+              <th>Asset Class</th>
+              <th>Sub-Asset Class</th>
+              <th>Underweight</th>
+              <th>Neutral</th>
+              <th>Overweight</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Fixed Income - Sovereigns North America</td>
+              <td>US Treasuries</td>
+              <td>0</td>
+              <td>0</td>
+              <td>1</td>
+            </tr>
+            <tr>
+              <td>Equities - Sector</td>
+              <td>Energy Sector</td>
+              <td>1</td>
+              <td>0</td>
+              <td>0</td>
+            </tr>
+            <tr>
+              <td>Alts - Private Credit</td>
+              <td>Direct Lending</td>
+              <td>0</td>
+              <td>1</td>
+              <td>0</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="callout-strip">
+          <div class="pill"><strong>CSV export</strong>Simple downstream format for Allocator Pro ingestion or Excel review.</div>
+          <div class="pill"><strong>Run output</strong>One file per run, referencing each processed source and its calls.</div>
+          <div class="pill"><strong>Evidence trail</strong>Each accepted call keeps page/source references and rationale.</div>
+        </div>
+        <div class="box blue tight">
+          <h3>Run-Level Output</h3>
+          <p>
+            Each processing run should create a single reviewable output file containing links or references
+            to all files processed in that run, with the detected asset classes, sub-asset classes, calls,
+            confidence bands, and review flags shown per source file. To preserve readability and output
+            size, each run should contain no more than 20 input items.
+          </p>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>Markets Recon / Allocator Pro AI POC</span>
+        <span>Page 1 of 2</span>
+      </div>
+    </div>
+
+    <div class="page">
+      <div class="document-header">
+        <img class="logo" src="nj_logo.png" alt="Nikhil John logo">
+        <div>
+          <div class="eyebrow">Scope, Decisions, and Delivery</div>
+          <h1>POC Specification Summary</h1>
+        </div>
+        <div class="meta">
+          Prepared by Nikhil John<br>
+          24 June 2026<br>
+          Draft for discussion
+        </div>
+      </div>
+
+      <div class="section grid-3">
+        <div class="box">
+          <h3>In Scope</h3>
+          <ul>
+            <li>Folder-based PDF and HTML/scraped-file input.</li>
+            <li>Asset class, sub-asset, topic, and keyword extraction.</li>
+            <li>OW/N/UW call generation with citations.</li>
+            <li>Confidence scoring and review routing.</li>
+            <li>CSV and simple HTML review output.</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>Out of Scope for POC</h3>
+          <ul>
+            <li>Markets Recon production front-end build.</li>
+            <li>Full website integration and user management.</li>
+            <li>Large-scale batch infrastructure.</li>
+            <li>OCR/vision for heavily scanned documents, unless separately agreed.</li>
+          </ul>
+        </div>
+        <div class="box">
+          <h3>Assumptions</h3>
+          <ul>
+            <li>Markets Recon provides scraped HTML where website scraping is required.</li>
+            <li>The POC can run locally or on a designated Markets Recon machine.</li>
+            <li>Public source documents can use cost-efficient model stages.</li>
+            <li>Allocator Pro taxonomy labels are the target output labels.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="section grid-2">
+        <div class="box blue">
+          <h3>Model Strategy</h3>
+          <p>
+            Use lower-cost models for extraction, document cleaning, topic detection, and initial taxonomy
+            matching. Use stronger models for call-making, reasoning, and verification. A practical setup
+            may combine OpenAI and Claude models, with optional cheaper API routes such as OpenRouter or
+            DeepSeek for low-risk public-data extraction if Markets Recon is comfortable with that.
+          </p>
+        </div>
+        <div class="box clay">
+          <h3>Verification Strategy</h3>
+          <p>
+            Use an LLM-as-judge pattern for higher-risk calls: multiple model passes or model instances
+            independently assess the evidence and then reconcile disagreements. The final confidence score
+            should still be rubric-based, not a free-form model confidence estimate.
+          </p>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Key Decisions Needed from Markets Recon</h2>
+        <div class="rule-list">
+          <div>
+            <strong>Excel benchmark reliability</strong>
+            <span>Confirm whether Alex's spreadsheet is a trusted source of truth or a best-effort baseline that may contain errors.</span>
+          </div>
+          <div>
+            <strong>Analyst calibration examples</strong>
+            <span>Provide reviewed examples showing source excerpt, asset/sub-asset, selected call, rationale, and rejected alternatives.</span>
+          </div>
+          <div>
+            <strong>Model/provider constraints</strong>
+            <span>Confirm comfort level with OpenAI, Claude, OpenRouter, DeepSeek, or any provider restrictions.</span>
+          </div>
+          <div>
+            <strong>Auto-pass threshold</strong>
+            <span>Agree on the confidence threshold for automatic acceptance versus human review.</span>
+          </div>
+          <div>
+            <strong>Preferred POC runtime</strong>
+            <span>Confirm whether the first version should run locally, on a designated internal machine, or hosted lightly.</span>
+          </div>
+          <div>
+            <strong>Output preference</strong>
+            <span>Confirm whether CSV alone is enough for testing, or whether the HTML review file should be the primary analyst output.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section tight">
+        <h2>What I Would Need</h2>
+        <ul class="compact">
+          <li>A representative set of source PDFs and scraped HTML outputs.</li>
+          <li>The latest Allocator Pro taxonomy or confirmation that the current website taxonomy is canonical.</li>
+          <li>Alex's spreadsheet and guidance on how reliable each existing call should be treated.</li>
+          <li>Analyst-reviewed examples to build the call-making framework and confidence rubric.</li>
+          <li>API/provider budget guidance and any compliance restrictions around model vendors.</li>
+          <li>Agreement that the first POC can be local-first and front-end independent.</li>
+        </ul>
+      </div>
+
+      <div class="section grid-2">
+        <div class="box olive">
+          <h3>Commercial / Tooling Note</h3>
+          <p>
+            My working setup would likely require mid-tier Claude and Codex subscriptions, estimated at
+            approximately GBP 180/month combined. Separate API usage for Markets Recon processing would be
+            governed by the chosen model providers and the document volume processed during the POC. Project
+            payment terms are TBD; I am happy to proceed with contracting through Deel and have already
+            created a Deel profile.
+          </p>
+        </div>
+        <div class="box">
+          <h3>POC Success Criteria + Timeline</h3>
+          <p>
+            A successful POC should process representative documents, produce Allocator Pro-compatible
+            call outputs, expose source evidence, separate high-confidence calls from review items, and
+            demonstrate whether the system can match or improve on the benchmark spreadsheet. <strong>Indicative
+            timeline: three weeks end to end.</strong>
+          </p>
+        </div>
+      </div>
+
+      <div class="footer">
+        <span>Markets Recon / Allocator Pro AI POC</span>
+        <span>Page 2 of 2</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

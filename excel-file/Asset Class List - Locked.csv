@@ -1,0 +1,397 @@
+Number,Sub-Asset Class,Asset Class Category,Asset Class,Canva Groupings
+1,Alternative Risk Premia,Alts - HFs,Alternatives,Alts - Hedge Funds
+2,Equity Market Neutral,Alts - HFs,Alternatives,Alts - Hedge Funds
+3,Event-Driven - Activist,Alts - HFs,Alternatives,Alts - Hedge Funds
+4,Event-Driven - Distressed,Alts - HFs,Alternatives,Alts - Hedge Funds
+5,Event-Driven - Merger Arbitrage,Alts - HFs,Alternatives,Alts - Hedge Funds
+6,Event-Driven - Special Sits,Alts - HFs,Alternatives,Alts - Hedge Funds
+7,Global Macro - Discretionary Thematic,Alts - HFs,Alternatives,Alts - Hedge Funds
+8,Global Macro - Systematic Diversified/CTAs/Directional,Alts - HFs,Alternatives,Alts - Hedge Funds
+9,Hedge Funds/Liquid Alts/Absolute Return,Alts - HFs,Alternatives,Alts - Hedge Funds
+10,L/S Credit,Alts - HFs,Alternatives,Alts - Hedge Funds
+11,L/S Equity (Equity Hedge),Alts - HFs,Alternatives,Alts - Hedge Funds
+12,Multi-Strategy Hedge Funds,Alts - HFs,Alternatives,Alts - Hedge Funds
+13,Relative Value - FI Asset-Backed,Alts - HFs,Alternatives,Alts - Hedge Funds
+14,Relative Value - FI Convertible Arbitrage,Alts - HFs,Alternatives,Alts - Hedge Funds
+15,Relative Value - FI Corporate,Alts - HFs,Alternatives,Alts - Hedge Funds
+16,Relative Value - FI EM,Alts - HFs,Alternatives,Alts - Hedge Funds
+17,Relative Value - FI Sovereign,Alts - HFs,Alternatives,Alts - Hedge Funds
+18,Relative Value - FI Volatility/Macro Arb/Global Macro,Alts - HFs,Alternatives,Alts - Hedge Funds
+19,Structured Products,Alts - HFs,Alternatives,Alts - Hedge Funds
+20,PD - Asset-Based/Asset-Backed,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+21,PD - Co-Investments,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+22,PD - Direct Lending,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+23,PD - Middle Market,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+24,PD - Opportunistic Credit,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+25,PD - PIKs,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+26,PD - Secondaries,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+27,PD - Senior Secured,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+28,PD - Speciality Finance/Distressed/Special Situations,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+29,PD - SRTs,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+30,PD - Structured Credit,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+31,Private Credit/Debt,Alts - Private Credit,Alternatives,Alts - Private Equity & Credit
+32,PE - AI,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+33,PE - Asia,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+34,PE - Buyout,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+35,PE - Carve-outs,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+36,PE - Co-Investments,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+37,PE - Direct Deals,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+38,PE - Emerging/Non-AI,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+39,PE - Europe,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+40,PE - Evergreen,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+41,PE - Growth,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+42,PE - Large Funds,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+43,PE - M&A,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+44,PE - Middle Market,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+45,PE - North America,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+46,PE - Point Solutions,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+47,PE - Secondaries,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+48,PE - Start Up/Speculative,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+49,PE - Take privates,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+50,PE - UK,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+51,PE - Venture Capital,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+52,Private Equity,Alts - Private Equity,Alternatives,Alts - Private Equity & Credit
+53,Data Centers,Alts - Infrastructure,Alternatives,Alts - Real Assets
+54,Infra - Digital,Alts - Infrastructure,Alternatives,Alts - Real Assets
+55,Infra - Renewables/Decarb,Alts - Infrastructure,Alternatives,Alts - Real Assets
+56,Infra Debt,Alts - Infrastructure,Alternatives,Alts - Real Assets
+57,Infrastructure - Value-Add,Alts - Infrastructure,Alternatives,Alts - Real Assets
+58,Private Infrastructure,Alts - Infrastructure,Alternatives,Alts - Real Assets
+59,Private Infrastructure - Large-Cap,Alts - Infrastructure,Alternatives,Alts - Real Assets
+60,Private Infrastructure - Mid-Cap,Alts - Infrastructure,Alternatives,Alts - Real Assets
+61,CMBS,Alts - Real Estate,Alternatives,Alts - Real Assets
+62,Private Real Estate,Alts - Real Estate,Alternatives,Alts - Real Assets
+63,RE - Alternative,Alts - Real Estate,Alternatives,Alts - Real Assets
+64,RE - Commercial,Alts - Real Estate,Alternatives,Alts - Real Assets
+65,RE - Core,Alts - Real Estate,Alternatives,Alts - Real Assets
+66,RE - Energy Efficient,Alts - Real Estate,Alternatives,Alts - Real Assets
+67,RE - Healthcare/Medical,Alts - Real Estate,Alternatives,Alts - Real Assets
+68,RE - Hospitality,Alts - Real Estate,Alternatives,Alts - Real Assets
+69,RE - Hotels,Alts - Real Estate,Alternatives,Alts - Real Assets
+70,RE - Industrials,Alts - Real Estate,Alternatives,Alts - Real Assets
+71,RE - Logistics,Alts - Real Estate,Alternatives,Alts - Real Assets
+72,RE - Offices,Alts - Real Estate,Alternatives,Alts - Real Assets
+73,RE - Offices (Prime),Alts - Real Estate,Alternatives,Alts - Real Assets
+74,RE - Offices (Secondary/Non-Prime),Alts - Real Estate,Alternatives,Alts - Real Assets
+75,RE - Opportunistic,Alts - Real Estate,Alternatives,Alts - Real Assets
+76,RE - Ports,Alts - Real Estate,Alternatives,Alts - Real Assets
+77,RE - Residential,Alts - Real Estate,Alternatives,Alts - Real Assets
+78,RE - Retail,Alts - Real Estate,Alternatives,Alts - Real Assets
+79,RE - Retail (Mid-Mkt),Alts - Real Estate,Alternatives,Alts - Real Assets
+80,RE - Retail (Prime),Alts - Real Estate,Alternatives,Alts - Real Assets
+81,RE - Storage,Alts - Real Estate,Alternatives,Alts - Real Assets
+82,RE - Value Add,Alts - Real Estate,Alternatives,Alts - Real Assets
+83,RE Debt,Alts - Real Estate,Alternatives,Alts - Real Assets
+84,Real Assets,Asset Allocation - Broad,Alternatives,Alts - Real Assets
+85,RE - Canada Residential,Alts - Real - North America,Alternatives,Alts - Real Assets Geo
+86,RE - Canada Retail,Alts - Real - North America,Alternatives,Alts - Real Assets Geo
+87,RE - AsiaPac,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+88,RE - AsiaPac Hotels,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+89,RE - AsiaPac Logistics,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+90,RE - AsiaPac Offices,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+91,RE - AsiaPac Residential,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+92,RE - China,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+93,RE - China Hotels,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+94,RE - China Industrial,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+95,RE - China Logistics,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+96,RE - China Retail,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+97,RE - EM,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+98,RE - Hong Kong Real Estate,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+99,RE - Japan,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+100,RE - Japan Industrial,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+101,RE - Japan Logistics,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+102,RE - Japan Residential,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+103,RE - Japan Retail,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+104,RE - Singapore Retail,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+105,RE - Taiwan Commercial,Alts - Real Estate - APAC,Alternatives,Alts - Real Assets Geo
+106,RE - US,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+107,"RE - US Alternative (E.g. Senior Housing, Student Housing)",Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+108,RE - US Commercial,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+109,RE - US Healthcare,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+110,RE - US Hotels,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+111,RE - US Industrial,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+112,RE - US Life Sciences,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+113,RE - US Logistics,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+114,RE - US Offices,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+115,RE - US Residential,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+116,RE - US Retail,Alts - Real Estate - North America,Alternatives,Alts - Real Assets Geo
+117,RE - Canada,Alts - Real Estate - UK,Alternatives,Alts - Real Assets Geo
+118,RE - UK,Alts - Real Estate - UK,Alternatives,Alts - Real Assets Geo
+119,RE - UK Commercial,Alts - Real Estate - UK,Alternatives,Alts - Real Assets Geo
+120,RE - UK Industrials,Alts - Real Estate - UK,Alternatives,Alts - Real Assets Geo
+121,RE - UK Offices (Prime),Alts - Real Estate - UK,Alternatives,Alts - Real Assets Geo
+122,RE - UK Residential,Alts - Real Estate - UK,Alternatives,Alts - Real Assets Geo
+123,RE - UK Retail,Alts - Real Estate - UK,Alternatives,Alts - Real Assets Geo
+124,RE - Europe,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+125,RE - Europe Commercial,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+126,RE - Europe Debt,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+127,RE - Europe Industrials,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+128,RE - Europe Logistics,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+129,RE - Europe Offices (Prime),Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+130,RE - Europe Offices (Secondary/Non-Prime),Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+131,RE - Europe Residential,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+132,RE - Europe Retail,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+133,RE - Europe Tourism,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+134,RE - Switzerland,Alts - Real Estate EU,Alternatives,Alts - Real Assets Geo
+135,Alternatives - General,Asset Allocation - Broad,Alternatives,Asset Allocation
+136,Alts - Private Markets General,Asset Allocation - Broad,Alternatives,Asset Allocation
+137,Agriculture/Farmland,Alts - Commodities,Alternatives,Commodities
+138,Coal,Alts - Commodities,Alternatives,Commodities
+139,Commodities,Alts - Commodities,Alternatives,Commodities
+140,Copper/Industrial,Alts - Commodities,Alternatives,Commodities
+141,Critical Minerals/Rare Earths,Alts - Commodities,Alternatives,Commodities
+142,Energy,Alts - Commodities,Alternatives,Commodities
+143,Gold/Precious,Alts - Commodities,Alternatives,Commodities
+144,Nat Gas,Alts - Commodities,Alternatives,Commodities
+145,Nuclear/Clean Energy,Alts - Commodities,Alternatives,Commodities
+146,Oil,Alts - Commodities,Alternatives,Commodities
+147,Uranium,Alts - Commodities,Alternatives,Commodities
+148,Asia Basket,Currencies,Currencies,Currencies
+149,AUD,Currencies,Currencies,Currencies
+150,BRL,Currencies,Currencies,Currencies
+151,CAD,Currencies,Currencies,Currencies
+152,CHF,Currencies,Currencies,Currencies
+153,CLP,Currencies,Currencies,Currencies
+154,CNY,Currencies,Currencies,Currencies
+155,Digital Assets/Crypto,Currencies,Currencies,Currencies
+156,EM Basket,Currencies,Currencies,Currencies
+157,EUR,Currencies,Currencies,Currencies
+158,GBP,Currencies,Currencies,Currencies
+159,JPY,Currencies,Currencies,Currencies
+160,NOK,Currencies,Currencies,Currencies
+161,Peso,Currencies,Currencies,Currencies
+162,USD,Currencies,Currencies,Currencies
+163,Equities - General,Asset Allocation - Broad,Equities,Asset Allocation
+164,Europe - Large Caps,Equities - DM Caps,Equities,Equities - Geography
+165,Europe - Mid Caps,Equities - DM Caps,Equities,Equities - Geography
+166,Europe - Small Caps,Equities - DM Caps,Equities,Equities - Geography
+167,Global ex-US Large Cap,Equities - DM Caps,Equities,Equities - Geography
+168,Global ex-US Small Cap,Equities - DM Caps,Equities,Equities - Geography
+169,Large Cap Equities,Equities - DM Caps,Equities,Equities - Geography
+170,Small/Mid-Cap,Equities - DM Caps,Equities,Equities - Geography
+171,UK Large Cap,Equities - DM Caps,Equities,Equities - Geography
+172,UK Small Cap,Equities - DM Caps,Equities,Equities - Geography
+173,US Large Cap,Equities - DM Caps,Equities,Equities - Geography
+174,US Mega-Cap (Tech),Equities - DM Caps,Equities,Equities - Geography
+175,US Mid Cap,Equities - DM Caps,Equities,Equities - Geography
+176,US Small Cap,Equities - DM Caps,Equities,Equities - Geography
+177,US SMIDs,Equities - DM Caps,Equities,Equities - Geography
+178,Australia Equities,Equities - DMs,Equities,Equities - Geography
+179,Canada Equities,Equities - DMs,Equities,Equities - Geography
+180,Developed Markets Equities,Equities - DMs,Equities,Equities - Geography
+181,EAFE/Int'l/Developed ex-US,Equities - DMs,Equities,Equities - Geography
+182,Europe Equities,Equities - DMs,Equities,Equities - Geography
+183,Germany Equities,Equities - DMs,Equities,Equities - Geography
+184,Japan Equities,Equities - DMs,Equities,Equities - Geography
+185,New Zealand Equities,Equities - DMs,Equities,Equities - Geography
+186,Switzerland Equities,Equities - DMs,Equities,Equities - Geography
+187,UK Equities,Equities - DMs,Equities,Equities - Geography
+188,US Domestic,Equities - DMs,Equities,Equities - Geography
+189,US Equities,Equities - DMs,Equities,Equities - Geography
+190,US Equities Equal-Weighted,Equities - DMs,Equities,Equities - Geography
+191,Brazil Equities,Equities - EMs,Equities,Equities - Geography
+192,"CE3 Equities (Poland, Czech Republic, Hungary)",Equities - EMs,Equities,Equities - Geography
+193,China Equities,Equities - EMs,Equities,Equities - Geography
+194,China Equities (Policy-Led Alpha),Equities - EMs,Equities,Equities - Geography
+195,China Tech,Equities - EMs,Equities,Equities - Geography
+196,Eastern Europe Equities,Equities - EMs,Equities,Equities - Geography
+197,EEMEA Equities,Equities - EMs,Equities,Equities - Geography
+198,Emerging Markets - BRICS - Equities,Equities - EMs,Equities,Equities - Geography
+199,Emerging Markets Equities,Equities - EMs,Equities,Equities - Geography
+200,Emerging Markets ex-China Equities,Equities - EMs,Equities,Equities - Geography
+201,Frontier Markets Equities,Equities - EMs,Equities,Equities - Geography
+202,Hong Kong Equities,Equities - EMs,Equities,Equities - Geography
+203,India Equities,Equities - EMs,Equities,Equities - Geography
+204,Indonesia Equities,Equities - EMs,Equities,Equities - Geography
+205,LatAm Equities,Equities - EMs,Equities,Equities - Geography
+206,Malaysia Equities,Equities - EMs,Equities,Equities - Geography
+207,Mexico Equities,Equities - EMs,Equities,Equities - Geography
+208,Singapore Equities,Equities - EMs,Equities,Equities - Geography
+209,South Africa/Africa Equities,Equities - EMs,Equities,Equities - Geography
+210,South Korea Equities,Equities - EMs,Equities,Equities - Geography
+211,Taiwan Equities,Equities - EMs,Equities,Equities - Geography
+212,Thailand Equities,Equities - EMs,Equities,Equities - Geography
+213,Vietnam Equities,Equities - EMs,Equities,Equities - Geography
+214,ASEAN Equities,Equities - Geo,Equities,Equities - Geography
+215,Asia Equities,Equities - Geo,Equities,Equities - Geography
+216,Asia ex-China Equities,Equities - Geo,Equities,Equities - Geography
+217,Asia ex-Japan Equities,Equities - Geo,Equities,Equities - Geography
+218,Asia Small Cap,Equities - Geo,Equities,Equities - Geography
+219,Global Equities,Equities - Geo,Equities,Equities - Geography
+220,Europe Equities - Financials,Equities - Country + Sector,Equities,"Equities - Sectors, Factors, Thematics"
+221,Japan Equities - Financials,Equities - Country + Sector,Equities,"Equities - Sectors, Factors, Thematics"
+222,Japan Equities - Industrials,Equities - Country + Sector,Equities,"Equities - Sectors, Factors, Thematics"
+223,Japan Equities - Domestic-Facing,Equities - Country + Theme,Equities,"Equities - Sectors, Factors, Thematics"
+224,Japan Equities - Foreign Income Earners,Equities - Country + Theme,Equities,"Equities - Sectors, Factors, Thematics"
+225,Japan Equities - Low ROE,Equities - Country + Theme,Equities,"Equities - Sectors, Factors, Thematics"
+226,Japan Equities - Structural Growth Exporters,Equities - Country + Theme,Equities,"Equities - Sectors, Factors, Thematics"
+227,GARP,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+228,Global ex-US Growth,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+229,Global ex-US Value,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+230,Growth,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+231,High Dividend/Dividends/Income,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+232,Low Vol.,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+233,Momentum,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+234,Quality,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+235,Small,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+236,US Growth,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+237,US Quality,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+238,US Value,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+239,Value,Equities - Factor,Equities,"Equities - Sectors, Factors, Thematics"
+240,Autos,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+241,Communication Services,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+242,Construction,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+243,Consumer Discretionary,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+244,Consumer Staples,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+245,Cyclicals,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+246,Cyclicals/defensives,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+247,Defence/Aerospace,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+248,Energy Sector,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+249,Financials,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+250,Healthcare/Pharma,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+251,Industrials,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+252,Infrastructure,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+253,IT/Tech/Telecomms (inc. AI),Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+254,Listed Real Assets/REITs/Infra/Real Estate,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+255,Materials,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+256,Media,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+257,Mining Equities,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+258,Multi-Sector Equities - Diversification,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+259,Real Estate,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+260,Technology (Sector),Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+261,US REITs,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+262,Utilities,Equities - Sector,Equities,"Equities - Sectors, Factors, Thematics"
+263,Ageing & Lifestyle/Healthcare Innovation/Demographics,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+264,AI,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+265,Biodiversity,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+266,Climate/Sustainability/Transition,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+267,Connected Consumer/Digital Transformation,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+268,Cybersecurity/Security,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+269,Energy Transition/Clean Energy,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+270,ESG - Exclusion-Based,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+271,ESG - High Carbon Emitters,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+272,Evs/Autonomous Vehicles,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+273,Future Financials,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+274,Infrastructure Theme,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+275,Luxury,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+276,Polycrisis,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+277,Reinsurance,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+278,Smart Cities,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+279,Social Prosperity,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+280,Supply Chain Reshoring,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+281,Tech & Automation,Equities - Thematic,Equities,"Equities - Sectors, Factors, Thematics"
+282,Cash/Money Markets,Asset Allocation - Broad,Fixed Income,Asset Allocation
+283,Fixed Income - General/Global,Asset Allocation - Broad,Fixed Income,Asset Allocation
+284,EM Credit,Fixed Income - Geo,Fixed Income,Fixed Income - Credit & Specialty
+285,Asia HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+286,Aus HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+287,Canada HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+288,China Long-End Bonds,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+289,Developed Markets HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+290,Distressed Debt (DM),Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+291,EM HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+292,Europe HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+293,Global HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+294,Low Quality Issuers,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+295,Nordic HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+296,Short-Dated HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+297,US HY,Fixed Income - High Yield,Fixed Income,Fixed Income - Credit & Specialty
+298,Asia Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+299,Asia IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+300,Aus IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+301,Bank Loans,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+302,Canada Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+303,China IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+304,Credit - General / Multi-Sector / Broad,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+305,Credit - Select Sectors,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+306,Developed Markets IG,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+307,EM IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+308,Europe Bank Loans,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+309,Europe Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+310,Europe IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+311,Global ex-US IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+312,Global IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+313,High Quality Issuers,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+314,Japan IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+315,Long-Term IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+316,Non-Core Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+317,Short-Dated Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+318,Short-Term IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+319,UK IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+320,US Bank Loans,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+321,US Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+322,US IG Credit,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Credit & Specialty
+323,Convertible Bonds,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+324,Corporate Hybrids,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+325,Floating Rate Loans,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+326,Green/Blue Bonds,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+327,Insurance-Linked/Cat Bonds,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+328,Leveraged Loans,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+329,Preferred Securities,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+330,Securitized/Structured (ABS/MBS/CDS/Swaps/CLOs),Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+331,Senior Loans,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+332,Subordinated,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+333,Syndicated Loans,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+334,US Agency MBS,Fixed Income - Specialty,Fixed Income,Fixed Income - Credit & Specialty
+335,Duration,Fixed Income - Duration,Fixed Income,Fixed Income - General
+336,Duration - Intermediate,Fixed Income - Duration,Fixed Income,Fixed Income - General
+337,Duration - Long,Fixed Income - Duration,Fixed Income,Fixed Income - General
+338,Duration - Short,Fixed Income - Duration,Fixed Income,Fixed Income - General
+339,Duration - Short-to-Intermediate,Fixed Income - Duration,Fixed Income,Fixed Income - General
+340,Long-Dated Bonds,Fixed Income - Duration,Fixed Income,Fixed Income - General
+341,Short-Dated Bonds,Fixed Income - Duration,Fixed Income,Fixed Income - General
+342,Asia ex-China Fixed Income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+343,Asia Fixed Income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+344,China Fixed Income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+345,Developed Markets ex-US Fixed income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+346,Emerging Markets Fixed Income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+347,Europe Fixed Income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+348,LatAm Fixed Income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+349,South Africa Fixed Income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+350,U.S. Fixed Income,Fixed Income - Geo,Fixed Income,Fixed Income - General
+351,EM Debt - General,Fixed Income - Geo,Fixed Income,Fixed Income - Rates & Sovereigns
+352,Frontier Markets Debt,Fixed Income - Geo,Fixed Income,Fixed Income - Rates & Sovereigns
+353,EM Distressed,Fixed Income - High Yield,Fixed Income,Fixed Income - Rates & Sovereigns
+354,EM Investment Grade,Fixed Income - Investment Grade,Fixed Income,Fixed Income - Rates & Sovereigns
+355,Developed Markets - Sovereigns,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+356,Developed Markets ex-US - Sovereigns,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+357,EM Debt - Hard Currency,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+358,EM Debt - Local Currency,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+359,EM Sovereign Bonds,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+360,Emerging Markets - Sovereigns,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+361,Global ex-US Sovereigns,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+362,Global Govt Bonds/SSAs,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+363,Non-US Duration,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+364,Non-US Sovereign,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+365,Ultra-Short Govt Bonds,Fixed Income - Sovereigns,Fixed Income,Fixed Income - Rates & Sovereigns
+366,Australia Govt Bonds,Fixed Income - Sovereigns APAC,Fixed Income,Fixed Income - Rates & Sovereigns
+367,China Govt Bonds,Fixed Income - Sovereigns APAC,Fixed Income,Fixed Income - Rates & Sovereigns
+368,India Govt Bonds,Fixed Income - Sovereigns APAC,Fixed Income,Fixed Income - Rates & Sovereigns
+369,Japan Duration,Fixed Income - Sovereigns APAC,Fixed Income,Fixed Income - Rates & Sovereigns
+370,Japan Govt Bonds,Fixed Income - Sovereigns APAC,Fixed Income,Fixed Income - Rates & Sovereigns
+371,Pan-Asia Govt Bonds,Fixed Income - Sovereigns APAC,Fixed Income,Fixed Income - Rates & Sovereigns
+372,Euro Govt Bonds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+373,Euro Govt Bonds (Core),Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+374,Euro Govt Bonds (Peripherals),Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+375,Europe Duration,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+376,French Govt Bonds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+377,German Bunds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+378,Intermediate UK Gilts,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+379,Italy Govt Bonds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+380,Long-Dated EU Bonds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+381,Long-Dated UK Gilts,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+382,Polish Bonds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+383,Short-Dated EU Bonds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+384,Short-Dated UK Gilts,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+385,Sweden Govt Bonds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+386,Swiss Govt Bonds,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+387,UK Duration,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+388,UK Gilts,Fixed Income - Sovereigns Europe,Fixed Income,Fixed Income - Rates & Sovereigns
+389,Canada Govt Bonds,Fixed Income - Sovereigns North America,Fixed Income,Fixed Income - Rates & Sovereigns
+390,Inflation-Linked/TIPs,Fixed Income - Sovereigns North America,Fixed Income,Fixed Income - Rates & Sovereigns
+391,Intermediate US Treasuries,Fixed Income - Sovereigns North America,Fixed Income,Fixed Income - Rates & Sovereigns
+392,Long-Dated US Treasuries,Fixed Income - Sovereigns North America,Fixed Income,Fixed Income - Rates & Sovereigns
+393,Municipal Bonds,Fixed Income - Sovereigns North America,Fixed Income,Fixed Income - Rates & Sovereigns
+394,Short-Dated US Treasuries,Fixed Income - Sovereigns North America,Fixed Income,Fixed Income - Rates & Sovereigns
+395,US Duration,Fixed Income - Sovereigns North America,Fixed Income,Fixed Income - Rates & Sovereigns
+396,US Treasuries,Fixed Income - Sovereigns North America,Fixed Income,Fixed Income - Rates & Sovereigns

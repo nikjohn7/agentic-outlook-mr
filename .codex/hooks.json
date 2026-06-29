@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|shell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".venv/bin/python .codex/hooks/require-python-venv.py",
+            "statusMessage": "Checking Python venv usage"
+          }
+        ]
+      }
+    ]
+  }
+}
