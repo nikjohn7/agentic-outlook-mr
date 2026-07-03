@@ -49,15 +49,23 @@ def call(
     engine: str,
     max_repair_attempts: int = 2,
     runner: Runner | None = None,
+    template_vars: dict[str, Any] | None = None,
 ) -> LLMCallResult:
-    """Call one engine with fresh subprocess context and parse candidate JSON."""
+    """Call one engine with fresh subprocess context and parse candidate JSON.
+
+    template_vars fill ``{{name}}`` placeholders in the prompt body before the
+    machine-readable inputs are appended — the seam for injecting large context
+    (locked taxonomy, few-shot brain, rolling memory, the chunk itself) that
+    should read as prose rather than escaped JSON. The API port fills the same
+    placeholders in the same prompt file.
+    """
     config = ENGINE_CONFIGS.get(engine)
     if config is None:
         valid = ", ".join(sorted(ENGINE_CONFIGS))
         raise ValueError(f"unknown LLM engine {engine!r}; expected one of {valid}")
 
     prompt_path = Path(prompt_file)
-    base_prompt = prompt_path.read_text(encoding="utf-8")
+    base_prompt = _fill_template(prompt_path.read_text(encoding="utf-8"), template_vars)
     runner = runner or _default_runner
     prompt = _compose_prompt(base_prompt, inputs)
     last_error = ""
@@ -92,7 +100,24 @@ def parse_response(raw_response: str) -> tuple[list[CandidateCall], str]:
 
 
 def _default_runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, text=True, capture_output=True, check=False)
+    # stdin must be closed: `codex exec` (and `claude -p`) treat piped stdin as
+    # extra prompt input and block waiting for EOF when the parent's stdin
+    # stays open (e.g. under an orchestrator).
+    return subprocess.run(
+        command,
+        text=True,
+        capture_output=True,
+        check=False,
+        stdin=subprocess.DEVNULL,
+    )
+
+
+def _fill_template(base_prompt: str, template_vars: dict[str, Any] | None) -> str:
+    if not template_vars:
+        return base_prompt
+    for key, value in template_vars.items():
+        base_prompt = base_prompt.replace("{{" + key + "}}", str(value))
+    return base_prompt
 
 
 def _compose_prompt(base_prompt: str, inputs: dict[str, Any]) -> str:

@@ -45,21 +45,54 @@ FAILURE_COLUMNS = (
 class FailureRecord:
     reason_code: str
     message: str
-    candidate: CandidateCall
+    source_id: str
+    chunk_id: str
+    sub_asset_raw: str = ""
+    sub_asset_class: str = ""
+    view: str = ""
+    taxonomy_match: str = ""
+    evidence_kind: str = ""
+    locator: str = ""
+    reasoning: str = ""
+
+    @classmethod
+    def from_candidate(
+        cls, reason_code: str, message: str, candidate: CandidateCall
+    ) -> "FailureRecord":
+        return cls(
+            reason_code=reason_code,
+            message=message,
+            source_id=candidate.source_id,
+            chunk_id=candidate.chunk_id,
+            sub_asset_raw=candidate.sub_asset_raw,
+            sub_asset_class=candidate.sub_asset_class,
+            view=candidate.view,
+            taxonomy_match=candidate.taxonomy_match,
+            evidence_kind=candidate.evidence_kind,
+            locator=candidate.locator,
+            reasoning=candidate.reasoning,
+        )
+
+    @classmethod
+    def from_chunk(
+        cls, reason_code: str, message: str, source_id: str, chunk_id: str
+    ) -> "FailureRecord":
+        """A whole-chunk failure (no candidate survived to inspect)."""
+        return cls(reason_code=reason_code, message=message, source_id=source_id, chunk_id=chunk_id)
 
     def to_row(self) -> dict[str, str]:
         return {
             "reason_code": self.reason_code,
             "message": self.message,
-            "source_id": self.candidate.source_id,
-            "chunk_id": self.candidate.chunk_id,
-            "sub_asset_raw": self.candidate.sub_asset_raw,
-            "sub_asset_class": self.candidate.sub_asset_class,
-            "view": self.candidate.view,
-            "taxonomy_match": self.candidate.taxonomy_match,
-            "evidence_kind": self.candidate.evidence_kind,
-            "locator": self.candidate.locator,
-            "reasoning": self.candidate.reasoning,
+            "source_id": self.source_id,
+            "chunk_id": self.chunk_id,
+            "sub_asset_raw": self.sub_asset_raw,
+            "sub_asset_class": self.sub_asset_class,
+            "view": self.view,
+            "taxonomy_match": self.taxonomy_match,
+            "evidence_kind": self.evidence_kind,
+            "locator": self.locator,
+            "reasoning": self.reasoning,
         }
 
 
@@ -95,14 +128,14 @@ def assemble_candidates(
                 )
             )
         except ValueError as exc:
-            failures.append(FailureRecord(str(exc), str(exc), candidate))
+            failures.append(FailureRecord.from_candidate(str(exc), str(exc), candidate))
 
     output_rows: list[dict[str, str]] = []
     for group in _group_scored(scored).values():
         views = {item.candidate.view for item in group}
         if len(views) > 1:
             failures.extend(
-                FailureRecord(
+                FailureRecord.from_candidate(
                     "unresolved_conflict",
                     "multiple views survived validation for the same source and leaf",
                     item.candidate,
@@ -115,7 +148,7 @@ def assemble_candidates(
         source = sources.get(selected.candidate.source_id)
         if source is None:
             failures.append(
-                FailureRecord(
+                FailureRecord.from_candidate(
                     "source_metadata_missing",
                     "source metadata was not available for this candidate",
                     selected.candidate,
@@ -131,16 +164,30 @@ def assemble_candidates(
     )
 
 
-def write_run_outputs(result: AssemblyResult, output_dir: str | Path) -> None:
+def write_run_outputs(
+    result: AssemblyResult,
+    output_dir: str | Path,
+    *,
+    source_summaries: list[dict[str, object]] | None = None,
+    chunk_failures: list[FailureRecord] | None = None,
+) -> None:
+    """Write the run's three review files.
+
+    chunk_failures are whole-chunk failures (e.g. unparseable model output) that
+    produced no candidate; they are recorded in failures.csv and counted
+    separately in the manifest so the candidate reconciliation stays exact.
+    """
+    chunk_failures = chunk_failures or []
     run_dir = Path(output_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
     _write_csv(
         run_dir / "failures.csv",
         FAILURE_COLUMNS,
-        [failure.to_row() for failure in result.failures],
+        [failure.to_row() for failure in [*result.failures, *chunk_failures]],
     )
-    (run_dir / "manifest.md").write_text(_manifest_text(result), encoding="utf-8")
+    manifest = _manifest_text(result, source_summaries or [], chunk_failures)
+    (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
 
 
 def _output_row(
@@ -191,17 +238,34 @@ def _write_csv(path: Path, columns: tuple[str, ...], rows: list[dict[str, str]])
         writer.writerows(rows)
 
 
-def _manifest_text(result: AssemblyResult) -> str:
+def _manifest_text(
+    result: AssemblyResult,
+    source_summaries: list[dict[str, object]],
+    chunk_failures: list[FailureRecord],
+) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
-    return "\n".join(
-        [
-            "# Run Manifest",
-            "",
-            f"- candidates: {result.candidate_count}",
-            f"- kept: {kept}",
-            f"- failed: {failed}",
-            f"- count check: {'pass' if result.candidate_count == kept + failed else 'review'}",
-            "",
-        ]
-    )
+    lines = [
+        "# Run Manifest",
+        "",
+        "## Candidate reconciliation",
+        f"- candidates: {result.candidate_count}",
+        f"- kept: {kept}",
+        f"- failed: {failed}",
+        f"- count check: {'pass' if result.candidate_count == kept + failed else 'review'}",
+        f"- chunk failures (no candidate): {len(chunk_failures)}",
+        "",
+    ]
+    if source_summaries:
+        lines.append("## Sources processed")
+        for summary in source_summaries:
+            flag_text = " [visual_heavy]" if summary.get("visual_heavy") else ""
+            pages = summary.get("page_count")
+            chunk_count = summary.get("chunk_count", 0)
+            size = f"{pages}p / {chunk_count} chunks" if pages else f"{chunk_count} chunks"
+            lines.append(
+                f"- {summary.get('source_id')} ({summary.get('source_type')}, {size}): "
+                f"{summary.get('candidates', 0)} candidates emitted{flag_text}"
+            )
+        lines.append("")
+    return "\n".join(lines)

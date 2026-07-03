@@ -38,6 +38,28 @@ class LLMTest(unittest.TestCase):
         self.assertEqual("exec", commands[0][1])
 
 
+    def test_template_vars_fill_prompt_body_before_dispatch(self) -> None:
+        seen: list[str] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            seen.append(prompt)
+            return subprocess.CompletedProcess(command, 0, stdout=_valid_response(), stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            prompt_path = Path(temp_dir) / "prompt.md"
+            prompt_path.write_text("Taxonomy:\n{{taxonomy}}\nGo.", encoding="utf-8")
+            call(
+                prompt_path,
+                {"chunk_id": "p1-5"},
+                engine="claude",
+                runner=runner,
+                template_vars={"taxonomy": "- Global Equities"},
+            )
+
+        self.assertIn("- Global Equities", seen[0])
+        self.assertNotIn("{{taxonomy}}", seen[0])
+
+
 def _valid_response() -> str:
     return """
 {
