@@ -10,23 +10,32 @@ POC for Markets Recon / Allocator Pro: ingest fund/asset-manager outlook sources
 Class List - Locked.csv`. Full spec: `CLAUDE.md`, `POC_CONTEXT.md`,
 `WORKBOOK_SCHEMA.md`, `POC_PLAN.md`.
 
-Currently in the planning/scaffolding stage — no ingestion, extraction, or
-scoring code has been written yet. The workbook has been fully parsed and
-documented (taxonomy, target sources, output shape), the first milestone (a
-blind pilot on 5 sources in `prev-excel/pilot.csv`) is defined, and
-`POC_PLAN.md` locks a 3-phase build order (deterministic spine → LLM analyze →
-scale), a model-routing policy (deterministic joins/lookups/arithmetic stay as
-plain code; Haiku/Sonnet/Opus or GPT-5.5 tiers for judgment only), and an
-LLM-native ingestion design: the engine reads PDFs as rendered page ranges and
-HTML from saved snapshots, while `pdfplumber`/`trafilatura` serve only as a
-thin snapshot layer (quote-check corpus + audit trail). LLM calls run as
+Currently in the planning/scaffolding stage. The first deterministic spine
+slice is implemented: `src/taxonomy.py` loads the locked 396-leaf taxonomy,
+validates exact `Sub-Asset Class` labels, and returns deterministic lookup
+fields for `Asset Class Category`, `Asset Class`, and `Canva Groupings`; the
+unit tests read the real workbook CSV and verify all 396 leaves round-trip.
+No ingestion, extraction, LLM adapter, assembly, or scoring code has been
+written yet. The workbook has been fully parsed and documented (taxonomy,
+target sources, output shape), the first milestone (a blind pilot on 5 sources
+in `prev-excel/pilot.csv`) is defined, and `POC_PLAN.md` locks a 3-phase build
+order (deterministic spine → LLM analyze → scale), a model-routing policy
+(deterministic joins/lookups/arithmetic stay as plain code;
+Haiku/Sonnet/Opus or GPT-5.5 tiers for judgment only), and an LLM-native
+ingestion design: the engine reads PDFs as rendered page ranges and HTML from
+saved snapshots, while `pdfplumber`/`trafilatura` serve only as a thin snapshot
+layer (quote-check corpus + audit trail). Planned LLM calls will run as
 headless `claude -p` / `codex exec` subprocesses behind `src/llm.py` with JSON
 schema-validation and repair-retry; both CLIs read PDFs natively, so the
-Claude-vs-Codex split is decided after the pilot. A `.venv` is scaffolded with
-`pdfplumber`, `pdfminer.six`, `trafilatura`, `htmldate`.
+Claude-vs-Codex split is decided after the pilot. A `.venv` is scaffolded
+with `pdfplumber`, `pdfminer.six`, `trafilatura`, `htmldate`.
 
 ## Recent Changes
 
+- 2026-07-03: Added the first Phase 1 deterministic spine slice:
+  `src/taxonomy.py` exact-label validation and deterministic lookup over
+  `excel-file/Asset Class List - Locked.csv`, plus unittest coverage proving
+  all 396 locked leaves round-trip and unknown/non-exact labels are rejected.
 - 2026-07-03: Revised `POC_PLAN.md` after design review — LLM-native ingestion
   (native PDF/HTML reading; parsing libs demoted to snapshot layer), concrete
   headless `llm.py` spec with JSON repair-retry, `failures.csv` split
@@ -50,8 +59,9 @@ Claude-vs-Codex split is decided after the pilot. A `.venv` is scaffolded with
 
 ## Next / Open
 
-- Phase 1 (deterministic spine + run scaffolding, e.g. `taxonomy.py`) not
-  started.
+- Continue Phase 1 deterministic spine + run scaffolding: thin `ingest.py`,
+  `confidence.py`, `assemble.py`, `llm.py`, `run.py`, `requirements.txt`, and
+  `DESIGN.md`/`prompts/REGISTRY.md` skeletons.
 - Reconcile source count with client (user says 38, workbook CSV has 37) and
   pick an output date-format policy (see `POC_PLAN.md` open items).
 - Open questions tracked in `CLAUDE.md` (View legend confirmation, ground-truth
