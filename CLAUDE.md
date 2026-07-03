@@ -10,10 +10,11 @@ The POC should identify topics, asset classes, and sub-asset classes, then assig
 
 Before making implementation decisions, read:
 
-1. `WORKBOOK_SCHEMA.md` — the canonical reference for the workbook
-2. `POC_CONTEXT.md`
-3. The workbook CSVs in `excel-file/` (one CSV per sheet)
-4. The client-facing spec `allocator-pro-poc-spec.html`
+1. `STATE.md` — current project state and recent changes; read this first for orientation
+2. `WORKBOOK_SCHEMA.md` — the canonical reference for the workbook
+3. `POC_CONTEXT.md`
+4. The workbook CSVs in `excel-file/` (one CSV per sheet)
+5. The client-facing spec `allocator-pro-poc-spec.html`
 
 The workbook (in `excel-file/`) is the primary source of truth for:
 
