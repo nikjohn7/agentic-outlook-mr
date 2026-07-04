@@ -35,8 +35,32 @@ parent→child fan-out), semantic snapping with `taxonomy_match` recorded,
 means source ambiguity only, and table/visual evidence needs a specific
 table/figure locator.
 
-## Planned Prompts
+### `brain.md` — v1.1 (2026-07-04)
 
-- `brain.md` - Phase 2 few-shot calibration file built in a **separate session**
-  from any pilot run, with the 5 pilot sources excluded (blindness protocol).
-  `analyze_chunk.md` consumes it via `{{brain_examples}}`; absent is fine.
+Analyst-calibration few-shots consumed by `analyze_chunk.md` via
+`{{brain_examples}}` (loaded at runtime by `run.py` `_brain_text()`; absent is
+still fine). Built in a session separate from any pilot run, from the user's
+five-source ground truth in `ground-truth/ground-truth.csv` (Charles Schwab,
+CBRE IM, Cantor Fitzgerald, BMO GAM, Barings) — **none of the 5 pilot sources
+appear in it**, preserving the blindness protocol. Every ground-truth row was
+validated against the locked taxonomy (69/69 exact leaves + parent lookups) and
+verified against all five sources (Schwab, Cantor, Barings live pages; CBRE
+PDF read page-by-page; BMO via a user-supplied print-to-PDF after the site
+proved unreachable — its positioning dials confirmed 11 rows and exposed 4
+prose-vs-dial ground-truth discrepancies, flagged to the user).
+
+v1.1 added the published-level rule after BMO verification: a printed dial/
+score/tier is the call; prose tone and change verbs ("upgraded to neutral",
+"caution has increased") never override the printed level.
+
+Content (~1.4k tokens, kept deliberately small): house-scale → O/N/U
+translation (sign-not-intensity, tier collapse, rating-beats-hedging-prose,
+published-level-wins),
+portfolio actions as implied calls, forecast/ranking/posture implication rules
+(price forecast revision → commodity call; yield forecast up → sovereign `U`;
+cross-market ranking cuts both ways; macro house view → its investable
+universe; two-sided rate path nets `N`; regional netting with per-leaf
+carve-outs), not-a-call boundaries (market-move reporting, absence of mention,
+non-conviction → `N` not `UNCERTAIN`), snapping defaults (GICS names, house
+scope for generic instruments, snap-up to regional leaves), and `reasoning`
+sentence style (drives `Full Commentary`).
