@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from src.confidence import (
+    CHECKER_UNCONFIRMED_CAP,
     MIN_HTML_SNAPSHOT_CHARS,
     MIN_PDF_CHARS_PER_PAGE,
     evidence_passes,
@@ -10,7 +11,7 @@ from src.confidence import (
     score_candidate,
     snapshot_read_quality,
 )
-from src.schemas import CandidateCall
+from src.schemas import CandidateCall, CheckVerdict
 from src.taxonomy import Taxonomy
 
 
@@ -103,6 +104,70 @@ class ConfidenceTest(unittest.TestCase):
         check = evidence_passes(candidate, "Regional views grid Taiwan overweight")
 
         self.assertTrue(check.passed)
+
+
+class CheckerScoringTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def _score(self, verdict: CheckVerdict | None, *, checker_enabled: bool = True):
+        return score_candidate(
+            _candidate(),
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot("EM equities are favored in the outlook."),
+            verdict=verdict,
+            checker_enabled=checker_enabled,
+        )
+
+    def test_fail_verdict_is_a_hard_failure_with_specific_reason(self) -> None:
+        verdict = _verdict(supports_view="fail")
+
+        with self.assertRaises(ValueError) as caught:
+            self._score(verdict)
+
+        self.assertEqual("checker_sign_mismatch", str(caught.exception))
+
+    def test_confirmed_verdict_leaves_score_uncapped(self) -> None:
+        result = self._score(_verdict())
+
+        self.assertEqual(100, result.confidence)
+        self.assertEqual("confirmed", result.checker_status)
+        self.assertEqual("none", result.review_flag)
+
+    def test_unclear_verdict_caps_below_high_and_flags_review(self) -> None:
+        result = self._score(_verdict(forward_looking="unclear", note="mixed recap"))
+
+        self.assertEqual(CHECKER_UNCONFIRMED_CAP, result.confidence)
+        self.assertEqual("Medium", result.band)
+        self.assertEqual("review", result.review_flag)
+        self.assertEqual("unclear", result.checker_status)
+        self.assertEqual("mixed recap", result.checker_note)
+
+    def test_missing_verdict_caps_when_checker_enabled(self) -> None:
+        result = self._score(None)
+
+        self.assertEqual(CHECKER_UNCONFIRMED_CAP, result.confidence)
+        self.assertEqual("missing", result.checker_status)
+        self.assertEqual("review", result.review_flag)
+
+    def test_checker_off_keeps_legacy_scoring(self) -> None:
+        result = self._score(None, checker_enabled=False)
+
+        self.assertEqual(100, result.confidence)
+        self.assertEqual("off", result.checker_status)
+
+
+def _verdict(**overrides: object) -> CheckVerdict:
+    values = {
+        "index": 0,
+        "supports_view": "pass",
+        "forward_looking": "pass",
+        "asset_match": "pass",
+        "note": "",
+    }
+    values.update(overrides)
+    return CheckVerdict.from_mapping(values)
 
 
 def _healthy_snapshot(quote: str) -> str:

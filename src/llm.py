@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from src.schemas import CandidateCall, SchemaError
+from src.schemas import CandidateCall, CheckVerdict, SchemaError
 
 
 Runner = Callable[[list[str], str], subprocess.CompletedProcess[str]]
@@ -60,6 +60,16 @@ class LLMCallResult:
     attempts: int
 
 
+@dataclass(frozen=True, slots=True)
+class ParsedCallResult:
+    """Result of a call parsed by a step-specific parser (checker, arbiter)."""
+
+    payload: Any
+    raw_response: str
+    engine: str
+    attempts: int
+
+
 class LLMParseError(ValueError):
     """Raised when the LLM response remains invalid after repair attempts."""
 
@@ -88,6 +98,38 @@ def call(
     alias or full model name. When omitted, the engine CLI's own default
     applies (the run CLI never omits them; tests may).
     """
+    result = call_parsed(
+        prompt_file,
+        inputs,
+        engine=engine,
+        model=model,
+        effort=effort,
+        max_repair_attempts=max_repair_attempts,
+        runner=runner,
+        template_vars=template_vars,
+        parser=parse_response,
+    )
+    candidates, summary = result.payload
+    return LLMCallResult(candidates, summary, result.raw_response, engine, result.attempts)
+
+
+def call_parsed(
+    prompt_file: str | Path,
+    inputs: dict[str, Any],
+    *,
+    engine: str,
+    model: str | None = None,
+    effort: str | None = None,
+    max_repair_attempts: int = 2,
+    runner: Runner | None = None,
+    template_vars: dict[str, Any] | None = None,
+    parser: Callable[[str], Any],
+) -> ParsedCallResult:
+    """Like ``call`` but with a step-specific response parser (checker/arbiter).
+
+    The parser receives the raw stdout and must raise on contract violations;
+    the same JSON repair-retry loop applies.
+    """
     config = ENGINE_CONFIGS.get(engine)
     if config is None:
         valid = ", ".join(sorted(ENGINE_CONFIGS))
@@ -111,8 +153,8 @@ def call(
             raise RuntimeError(completed.stderr.strip() or f"{engine} exited with non-zero status")
         raw_response = completed.stdout
         try:
-            candidates, summary = parse_response(raw_response)
-            return LLMCallResult(candidates, summary, raw_response, engine, attempt)
+            payload = parser(raw_response)
+            return ParsedCallResult(payload, raw_response, engine, attempt)
         except (json.JSONDecodeError, SchemaError, TypeError, ValueError) as exc:
             last_error = str(exc)
             prompt = _repair_prompt(base_prompt, inputs, raw_response, last_error)
@@ -131,6 +173,33 @@ def parse_response(raw_response: str) -> tuple[list[CandidateCall], str]:
     if not isinstance(summary, str):
         raise ValueError("LLM summary must be a string")
     return [CandidateCall.from_mapping(item) for item in candidates_raw], summary
+
+
+def parse_verdicts(raw_response: str) -> list[CheckVerdict]:
+    """Parse the checker's response: {"verdicts": [{index, three verdicts, note}]}."""
+    payload = json.loads(_extract_json(raw_response))
+    if not isinstance(payload, dict):
+        raise ValueError("checker response must be a JSON object")
+    verdicts_raw = payload.get("verdicts")
+    if not isinstance(verdicts_raw, list):
+        raise ValueError("checker response must include a verdicts list")
+    return [CheckVerdict.from_mapping(item) for item in verdicts_raw]
+
+
+def parse_arbitration(raw_response: str) -> tuple[int | None, str]:
+    """Parse the arbiter's response: {"winning_index": int|null, "reasoning": str}."""
+    payload = json.loads(_extract_json(raw_response))
+    if not isinstance(payload, dict):
+        raise ValueError("arbiter response must be a JSON object")
+    winning_index = payload.get("winning_index")
+    if winning_index is not None and (
+        not isinstance(winning_index, int) or isinstance(winning_index, bool) or winning_index < 0
+    ):
+        raise ValueError("winning_index must be a non-negative integer or null")
+    reasoning = payload.get("reasoning")
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        raise ValueError("arbiter reasoning must be a non-empty string")
+    return winning_index, reasoning
 
 
 def _default_runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:

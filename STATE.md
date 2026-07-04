@@ -25,22 +25,43 @@ plus `confidence`, `band`, and `review_flag`; one-hot columns are
 intentionally omitted. A `.claude/settings.json` hook blocks git commits
 containing Claude/Anthropic self-attribution — commit messages stay plain.
 
-The Phase 2 analyze path is now wired end-to-end (not yet run live on the
-pilot). `src/run.py` ingests each source, then for every chunk fills the
-`prompts/analyze_chunk.md` template (injected taxonomy + brain few-shots +
-rolling `memory.md` + the native chunk), calls the engine via `src/llm.py`,
-collects candidates, and scores/assembles one run into `runs/<run-id>/`.
-`analyze_chunk.md` is authored (full taxonomy injected at runtime from the
-locked CSV, granularity + semantic-snapping + evidence-kind + visual-locator +
-unseen-figures rules, JSON contract) and indexed in `prompts/REGISTRY.md`.
-`--engine {claude,codex}` selects the engine per run. The workbook is fully
-parsed; the first milestone is a blind pilot on 5 sources in
-`prev-excel/pilot.csv`; `POC_PLAN.md` locks the 3-phase build order and
+The pipeline runs three LLM steps, each with its own engine/model/effort:
+analyze (per-chunk extraction via `prompts/analyze_chunk.md`: injected
+taxonomy + brain few-shots + rolling `memory.md` + native chunk), a
+second-reader checker (`prompts/check_candidates.md`, one call per source,
+categorical verdicts feeding the deterministic rubric; default
+codex/gpt-5.5/high), and a conflict arbiter (`prompts/arbitrate_conflict.md`,
+fires only on surviving view conflicts; default codex/gpt-5.5/medium). Both
+engine CLIs read PDF pages visually (codex renders pages to PNG itself), so
+engine routing is unconstrained by source type. All
+prompts are indexed in `prompts/REGISTRY.md`. Blind pilots `pilot-01` and
+`pilot-02` (5 sources from `prev-excel/pilot.csv`) are frozen in `runs/`
+awaiting user review; `POC_PLAN.md` locks the 3-phase build order and
 LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`, `playwright` (+ chromium). 44 unittests pass.
+`trafilatura`, `htmldate`, `playwright` (+ chromium). 61 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-04: Added the checker and arbiter LLM steps (per-step config:
+  `--checker-engine/-model/-effort`, `--arbiter-*`; defaults codex/gpt-5.5 at
+  high and medium). Checker: one second-reader call per source over its
+  candidate batch, returning categorical verdicts (`supports_view`,
+  `forward_looking`, `asset_match`: pass|unclear|fail + note) — never a
+  self-confidence number, preserving the deterministic-confidence rule. Any
+  `fail` hard-fails the candidate (`checker_sign_mismatch` /
+  `checker_not_forward_looking` / `checker_asset_mismatch`); anything short of
+  all-pass caps confidence at 74, so High now means "a second model confirmed
+  the evidence supports the call"; rubric weights unchanged for cross-run
+  comparability. Arbiter: fires only on surviving view conflicts, applies
+  brain conventions (published-level-wins, specific-beats-general,
+  current-beats-conditional), names a winner (kept, forced `review`, reasoning
+  in commentary; losers recorded `arbitrated_out`) or null → falls back to
+  `unresolved_conflict`; it is not shown deterministic scores (anchoring).
+  Checker/arbiter call failures degrade to capped+review, never promote.
+  Manifest gains checker/arbiter config and a failure-reason breakdown. Live
+  codex smoke: checker cleared a sound candidate and failed a fabricated
+  recap-evidence candidate on sign + forward-looking; arbiter chose a printed
+  grid level over prose tone citing rule 1. 61 tests pass.
 - 2026-07-04: Applied both post-pilot-01 fixes. (1) `analyze_chunk.md` v1.1:
   text inside a designed layout artifact (callout box, sidebar, banner, stat
   panel, infographic column) must be tagged `evidence_kind: visual`, not
@@ -111,31 +132,15 @@ LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   registry entry. 5 new tests (analyze loop via fake runner, template fill,
   chunk-content rendering); 32 total pass. A live pilot run is intentionally
   deferred to a fresh session (blindness).
-- 2026-07-04: Closed the Phase 1 gate. Check A: all 3 pilot PDFs read natively
-  page-by-page — J.P. Morgan scenario/positioning table (p.3),
-  AllianceBernstein forecast tables + gauge dials (p.2, p.10), PIMCO
-  infographic calls (p.1) all legible; no source needs special treatment.
-  Check B: real headless smoke calls through `src/llm.py` all pass — claude
-  trivial + PDF-read, codex trivial + PDF-read, each `attempts=1`. An initial
-  codex failure was a corrupted/stale codex install (fixed by user reinstall,
-  verified working with inherited stdin afterward); `_default_runner` keeps
-  `stdin=DEVNULL` as defense since `codex exec` documents that piped stdin is
-  appended to the prompt. Gauge-dial test confirmed **both engines read PDFs
-  visually**: codex's session log shows it rendered page 2 via `pdftoppm` to
-  PNG and viewed the image, correctly reporting all three AllianceBernstein
-  dial needle positions (matching claude and manual reading). Engine routing
-  is therefore unconstrained by source type. Codex writes rendered pages to
-  `tmp/` in the workdir (gitignored).
 
 ## Next / Open
 
-- Phase 2 evaluation: `pilot-01` is frozen and awaits the user's blind review
-  against held-back originals (per-call view/leaf/citation). Both post-pilot
-  fixes (`evidence_kind: visual` for box text; print-to-PDF for visual-heavy
-  HTML) are applied and the next blind run (`pilot-02`) can go whenever the
-  user is ready. Still open: whether the softer key-token check should also
-  cover `prose` evidence when the cited page's snapshot is detected as
-  scrambled (column-merge/rotated text).
+- Phase 2 evaluation: `pilot-01` and `pilot-02` are frozen and await the
+  user's blind review against held-back originals (per-call
+  view/leaf/citation). The next blind run (`pilot-03`) will be the first with
+  the checker + arbiter steps active. Still open: whether the softer key-token
+  check should also cover `prose` evidence when the cited page's snapshot is
+  detected as scrambled (column-merge/rotated text).
 - Disputed ground-truth calls (7: BMO Cash/Quality/EM Debt/CAD prose-vs-dial,
   Barings Hedge Funds/EM Equities/TIPs) and possibly-missing rows (3: BMO
   Growth and Materials, Barings US Small Cap) were sent to the Markets Recon

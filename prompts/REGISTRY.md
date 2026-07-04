@@ -42,6 +42,33 @@ text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
 
+### `check_candidates.md` — v1 (2026-07-04)
+
+The second-reader (checker) step: one call per source over all of that
+source's candidates. Judges three categorical questions per candidate —
+`supports_view` (evidence supports the view sign), `forward_looking` (stance,
+not market recap), `asset_match` (evidence is about the named leaf) — each
+`pass | unclear | fail`, plus a `note`. No source access, no re-extraction,
+and **no self-confidence number**: verdicts are facts consumed by the
+deterministic rubric (`src/confidence.py`) — any `fail` hard-fails the
+candidate to review (`checker_sign_mismatch` / `checker_not_forward_looking`
+/ `checker_asset_mismatch`); anything short of all-pass caps confidence at 74
+so the call cannot reach High. Default engine codex @ high effort
+(`--checker-engine/--checker-model/--checker-effort`). Inputs (appended JSON):
+source_id, firm, source_title, candidates[] with echoed `index`.
+
+### `arbitrate_conflict.md` — v1 (2026-07-04)
+
+The conflict-arbiter step: called only when validated candidates give the same
+(source, leaf) different views. Applies house publication conventions —
+published-level-wins, specific-beats-general, current-beats-conditional — and
+names a `winning_index` or `null` (→ falls back to `unresolved_conflict`
+routing). Winner is kept but always flagged `review` with the arbiter's
+reasoning appended to commentary; losers land in `failures.csv` as
+`arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
+confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
+Default engine codex @ medium effort (`--arbiter-*` flags).
+
 ### `brain.md` — v1.1 (2026-07-04)
 
 Analyst-calibration few-shots consumed by `analyze_chunk.md` via

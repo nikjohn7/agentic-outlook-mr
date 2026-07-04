@@ -10,6 +10,8 @@ VALID_TAXONOMY_MATCHES = ("exact", "semantic", "none")
 VALID_VIEWS = ("O", "N", "U", "UNCERTAIN")
 VALID_CALL_LANGUAGES = ("explicit", "implied", "none")
 VALID_EVIDENCE_KINDS = ("prose", "table", "visual")
+VALID_CHECK_VERDICTS = ("pass", "unclear", "fail")
+CHECK_QUESTIONS = ("supports_view", "forward_looking", "asset_match")
 
 
 class SchemaError(ValueError):
@@ -70,6 +72,49 @@ class CandidateCall:
             "reasoning": self.reasoning,
             "conflict": self.conflict,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class CheckVerdict:
+    """A second-reader model's categorical verdicts on one candidate.
+
+    Verdicts are facts fed into the deterministic rubric — never a
+    self-confidence number. `index` echoes the candidate's position in the
+    checked batch so alignment is exact.
+    """
+
+    index: int
+    supports_view: str
+    forward_looking: str
+    asset_match: str
+    note: str = ""
+
+    @classmethod
+    def from_mapping(cls, value: dict[str, Any]) -> "CheckVerdict":
+        index = value.get("index")
+        if not isinstance(index, int) or isinstance(index, bool) or index < 0:
+            raise SchemaError("verdict index must be a non-negative integer")
+        return cls(
+            index=index,
+            supports_view=_require_choice(value, "supports_view", VALID_CHECK_VERDICTS),
+            forward_looking=_require_choice(value, "forward_looking", VALID_CHECK_VERDICTS),
+            asset_match=_require_choice(value, "asset_match", VALID_CHECK_VERDICTS),
+            note=str(value.get("note", "")),
+        )
+
+    def answers(self) -> dict[str, str]:
+        return {
+            "supports_view": self.supports_view,
+            "forward_looking": self.forward_looking,
+            "asset_match": self.asset_match,
+        }
+
+    @property
+    def all_pass(self) -> bool:
+        return all(answer == "pass" for answer in self.answers().values())
+
+    def failed_questions(self) -> list[str]:
+        return [question for question, answer in self.answers().items() if answer == "fail"]
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,7 +5,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.llm import CODEX_MODEL, ENGINE_CONFIGS, call, parse_response
+from src.llm import (
+    CODEX_MODEL,
+    ENGINE_CONFIGS,
+    call,
+    call_parsed,
+    parse_arbitration,
+    parse_response,
+    parse_verdicts,
+)
+from src.schemas import SchemaError
 
 
 class LLMTest(unittest.TestCase):
@@ -77,6 +86,70 @@ class LLMTest(unittest.TestCase):
 
         self.assertIn("- Global Equities", seen[0])
         self.assertNotIn("{{taxonomy}}", seen[0])
+
+
+class StepParserTest(unittest.TestCase):
+    def test_parse_verdicts_returns_typed_verdicts(self) -> None:
+        raw = (
+            '{"verdicts": [{"index": 1, "supports_view": "pass", '
+            '"forward_looking": "unclear", "asset_match": "pass", "note": "thin stance"}]}'
+        )
+
+        verdicts = parse_verdicts(raw)
+
+        self.assertEqual(1, verdicts[0].index)
+        self.assertFalse(verdicts[0].all_pass)
+        self.assertEqual([], verdicts[0].failed_questions())
+
+    def test_parse_verdicts_rejects_unknown_verdict_value(self) -> None:
+        raw = (
+            '{"verdicts": [{"index": 0, "supports_view": "maybe", '
+            '"forward_looking": "pass", "asset_match": "pass"}]}'
+        )
+
+        with self.assertRaises(SchemaError):
+            parse_verdicts(raw)
+
+    def test_parse_arbitration_accepts_winner_and_null(self) -> None:
+        self.assertEqual(
+            (1, "published dial wins"),
+            parse_arbitration('{"winning_index": 1, "reasoning": "published dial wins"}'),
+        )
+        self.assertEqual(
+            (None, "two horizons"),
+            parse_arbitration('{"winning_index": null, "reasoning": "two horizons"}'),
+        )
+
+    def test_parse_arbitration_requires_reasoning(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_arbitration('{"winning_index": 0, "reasoning": ""}')
+
+    def test_call_parsed_uses_supplied_parser_and_engine_settings(self) -> None:
+        commands: list[list[str]] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout='{"winning_index": 0, "reasoning": "specific beats general"}',
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            prompt_path = Path(temp_dir) / "prompt.md"
+            prompt_path.write_text("Arbitrate.", encoding="utf-8")
+            result = call_parsed(
+                prompt_path,
+                {"sub_asset_class": "Cash"},
+                engine="codex",
+                effort="medium",
+                runner=runner,
+                parser=parse_arbitration,
+            )
+
+        self.assertEqual((0, "specific beats general"), result.payload)
+        self.assertIn('model_reasoning_effort="medium"', commands[0])
 
 
 def _valid_response() -> str:

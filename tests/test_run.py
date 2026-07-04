@@ -6,8 +6,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from types import SimpleNamespace
+
 from src.ingest import Chunk, IngestedSource, SourceRecord
-from src.run import analyze_source, resolve_engine_settings, _chunk_content, _html_chunk_text
+from src.run import (
+    analyze_source,
+    resolve_engine_settings,
+    _check_candidates,
+    _chunk_content,
+    _html_chunk_text,
+    _make_arbiter,
+)
+from src.schemas import CandidateCall
 
 
 def _pdf_source() -> SourceRecord:
@@ -165,6 +175,97 @@ class ResolveEngineSettingsTest(unittest.TestCase):
 
         self.assertEqual(["--model", "fable"], commands[0][2:4])
         self.assertEqual(["--effort", "high"], commands[0][4:6])
+
+
+class CheckerAndArbiterStepTest(unittest.TestCase):
+    def test_check_candidates_maps_verdicts_and_uses_engine_settings(self) -> None:
+        commands: list[list[str]] = []
+        verdicts_json = json.dumps(
+            {
+                "verdicts": [
+                    {
+                        "index": 0,
+                        "supports_view": "pass",
+                        "forward_looking": "unclear",
+                        "asset_match": "pass",
+                        "note": "thin stance",
+                    },
+                    # Out-of-range index must be ignored, not crash the run.
+                    {
+                        "index": 7,
+                        "supports_view": "pass",
+                        "forward_looking": "pass",
+                        "asset_match": "pass",
+                        "note": "",
+                    },
+                ]
+            }
+        )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout=verdicts_json, stderr="")
+
+        verdict_map, failure = _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=runner,
+        )
+
+        self.assertIsNone(failure)
+        self.assertEqual([0], list(verdict_map))
+        self.assertEqual("thin stance", verdict_map[0].note)
+        self.assertIn('model_reasoning_effort="high"', commands[0])
+
+    def test_check_candidates_engine_error_degrades_to_failure_record(self) -> None:
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="codex blew up")
+
+        verdict_map, failure = _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=runner,
+        )
+
+        self.assertEqual({}, verdict_map)
+        self.assertEqual("checker_error", failure.reason_code)
+        self.assertEqual("checker", failure.chunk_id)
+
+    def test_arbiter_closure_returns_decision_and_swallows_engine_errors(self) -> None:
+        group = [
+            SimpleNamespace(candidate=_call_candidate()),
+            SimpleNamespace(candidate=_call_candidate()),
+        ]
+
+        def good_runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                command, 0, stdout='{"winning_index": 1, "reasoning": "dial wins"}', stderr=""
+            )
+
+        arbiter = _make_arbiter(
+            "brain text", engine="codex", model=None, effort="medium", runner=good_runner
+        )
+        self.assertEqual((1, "dial wins"), arbiter(group))
+
+        def bad_runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="boom")
+
+        arbiter = _make_arbiter(
+            "brain text", engine="codex", model=None, effort="medium", runner=bad_runner
+        )
+        winner, reasoning = arbiter(group)
+        self.assertIsNone(winner)
+        self.assertIn("arbiter error", reasoning)
+
+
+def _call_candidate() -> CandidateCall:
+    return CandidateCall.from_mapping(json.loads(_candidate_json("p1-5"))["candidates"][0])
 
 
 class ChunkContentTest(unittest.TestCase):

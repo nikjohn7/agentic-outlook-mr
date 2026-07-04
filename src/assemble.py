@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import csv
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
-from src.confidence import ConfidenceResult, score_candidate
-from src.schemas import CandidateCall, SourceInfo
+from src.confidence import CHECKER_FAIL_REASONS, ConfidenceResult, score_candidate
+from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import Taxonomy
+
+
+# Given the conflicting scored candidates for one (source, leaf), returns the
+# winning index within the group (None = unresolved) and the reasoning.
+Arbiter = Callable[[list[ConfidenceResult]], tuple[int | None, str]]
 
 
 TARGET_OUTPUT_COLUMNS = (
@@ -110,14 +117,25 @@ def assemble_candidates(
     taxonomy: Taxonomy,
     snapshots: dict[tuple[str, str], str],
     page_counts: dict[str, int] | None = None,
+    verdicts: dict[int, CheckVerdict] | None = None,
+    arbiter: Arbiter | None = None,
 ) -> AssemblyResult:
-    """page_counts maps source_id -> PDF page count (absent for HTML sources)."""
+    """page_counts maps source_id -> PDF page count (absent for HTML sources).
+
+    verdicts maps candidate list index -> checker verdict; None means the
+    checker step is not in play (no caps), while a dict with a missing index
+    means the checker ran but produced no verdict for that candidate (capped).
+    arbiter resolves surviving view conflicts; without one they route to
+    failures as before.
+    """
+    checker_enabled = verdicts is not None
     scored: list[ConfidenceResult] = []
     failures: list[FailureRecord] = []
 
-    for candidate in candidates:
+    for index, candidate in enumerate(candidates):
         snapshot_text = snapshots.get((candidate.source_id, candidate.chunk_id), "")
         page_count = (page_counts or {}).get(candidate.source_id)
+        verdict = (verdicts or {}).get(index)
         try:
             scored.append(
                 score_candidate(
@@ -125,26 +143,42 @@ def assemble_candidates(
                     taxonomy=taxonomy,
                     snapshot_text=snapshot_text,
                     page_count=page_count,
+                    verdict=verdict,
+                    checker_enabled=checker_enabled,
                 )
             )
         except ValueError as exc:
-            failures.append(FailureRecord.from_candidate(str(exc), str(exc), candidate))
+            reason = str(exc)
+            message = reason
+            if verdict is not None and reason in CHECKER_FAIL_REASONS.values() and verdict.note:
+                message = verdict.note
+            failures.append(FailureRecord.from_candidate(reason, message, candidate))
 
     output_rows: list[dict[str, str]] = []
     for group in _group_scored(scored).values():
         views = {item.candidate.view for item in group}
+        arbiter_note = ""
         if len(views) > 1:
-            failures.extend(
-                FailureRecord.from_candidate(
-                    "unresolved_conflict",
-                    "multiple views survived validation for the same source and leaf",
-                    item.candidate,
+            winner, reasoning = _arbitrate(group, arbiter)
+            if winner is None:
+                message = "multiple views survived validation for the same source and leaf"
+                if reasoning:
+                    message += f"; arbiter: {reasoning}"
+                failures.extend(
+                    FailureRecord.from_candidate("unresolved_conflict", message, item.candidate)
+                    for item in group
                 )
+                continue
+            failures.extend(
+                FailureRecord.from_candidate("arbitrated_out", reasoning, item.candidate)
                 for item in group
+                if item is not winner
             )
-            continue
+            selected = winner
+            arbiter_note = reasoning
+        else:
+            selected = max(group, key=lambda item: item.confidence)
 
-        selected = max(group, key=lambda item: item.confidence)
         source = sources.get(selected.candidate.source_id)
         if source is None:
             failures.append(
@@ -155,13 +189,25 @@ def assemble_candidates(
                 )
             )
             continue
-        output_rows.append(_output_row(selected, source, taxonomy))
+        output_rows.append(_output_row(selected, source, taxonomy, arbiter_note=arbiter_note))
 
     return AssemblyResult(
         output_rows=output_rows,
         failures=failures,
         candidate_count=len(candidates),
     )
+
+
+def _arbitrate(
+    group: list[ConfidenceResult],
+    arbiter: Arbiter | None,
+) -> tuple[ConfidenceResult | None, str]:
+    if arbiter is None:
+        return None, ""
+    winning_index, reasoning = arbiter(group)
+    if winning_index is None or not 0 <= winning_index < len(group):
+        return None, reasoning
+    return group[winning_index], reasoning
 
 
 def write_run_outputs(
@@ -197,9 +243,22 @@ def _output_row(
     scored: ConfidenceResult,
     source: SourceInfo,
     taxonomy: Taxonomy,
+    *,
+    arbiter_note: str = "",
 ) -> dict[str, str]:
     candidate = scored.candidate
     lookup = taxonomy.output_fields_for(candidate.sub_asset_class)
+    commentary = _commentary(candidate)
+    if scored.checker_status == "unclear":
+        note = f" ({scored.checker_note})" if scored.checker_note else ""
+        commentary += f" Checker: unconfirmed{note}."
+    elif scored.checker_status == "missing":
+        commentary += " Checker: not run."
+    review_flag = scored.review_flag
+    if arbiter_note:
+        commentary += f" Arbiter: {arbiter_note}"
+        if review_flag == "none":
+            review_flag = "review"
     return {
         "Firm": source.firm,
         "Date": source.date,
@@ -210,10 +269,10 @@ def _output_row(
         "Canva Groupings": lookup["Canva Groupings"],
         "Asset Class": lookup["Asset Class"],
         "View": candidate.view,
-        "Full Commentary": _commentary(candidate),
+        "Full Commentary": commentary,
         "confidence": str(scored.confidence),
         "band": scored.band,
-        "review_flag": scored.review_flag,
+        "review_flag": review_flag,
     }
 
 
@@ -263,6 +322,16 @@ def _manifest_text(
         f"- chunk failures (no candidate): {len(chunk_failures)}",
         "",
     ]
+    reason_counts = Counter(
+        failure.reason_code for failure in [*result.failures, *chunk_failures]
+    )
+    if reason_counts:
+        lines.append("## Failure reasons")
+        lines.extend(
+            f"- {reason}: {count}"
+            for reason, count in sorted(reason_counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        )
+        lines.append("")
     if source_summaries:
         lines.append("## Sources processed")
         for summary in source_summaries:

@@ -6,7 +6,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-from src.schemas import CandidateCall
+from src.schemas import CandidateCall, CheckVerdict
 from src.taxonomy import Taxonomy
 
 
@@ -14,6 +14,21 @@ HARD_FAILURE_TAXONOMY = "taxonomy_no_match"
 HARD_FAILURE_QUOTE = "quote_not_found"
 HARD_FAILURE_VISUAL_LOCATOR = "visual_locator_missing"
 HARD_FAILURE_EVIDENCE = "evidence_check_failed"
+
+# A checker `fail` verdict is fatal: the second reader found the evidence does
+# not mean what the call claims. Reason codes are per failed question.
+CHECKER_FAIL_REASONS = {
+    "supports_view": "checker_sign_mismatch",
+    "forward_looking": "checker_not_forward_looking",
+    "asset_match": "checker_asset_mismatch",
+}
+
+# Without full checker confirmation a call cannot reach the High band: the
+# rubric arithmetic is unchanged (scores stay comparable across runs), but the
+# score is capped just under the High threshold, which also forces the
+# review flag. "High" therefore means "a second model confirmed the evidence
+# supports the call".
+CHECKER_UNCONFIRMED_CAP = 74
 
 # Read-quality floors: a PDF below MIN_PDF_CHARS_PER_PAGE is likely scanned or
 # image-only (its text layer — the quote-check corpus — is unreliable); an HTML
@@ -36,6 +51,11 @@ class ConfidenceResult:
     band: str
     review_flag: str
     evidence_check: EvidenceCheck
+    # "off" = checker not in play; "confirmed" = all verdicts pass;
+    # "unclear" = at least one verdict unclear; "missing" = checker ran for
+    # the run but produced no verdict for this candidate (call failed/skipped).
+    checker_status: str = "off"
+    checker_note: str = ""
 
 
 def normalize_quote_text(value: str) -> str:
@@ -83,11 +103,15 @@ def score_candidate(
     taxonomy: Taxonomy,
     snapshot_text: str,
     page_count: int | None = None,
+    verdict: CheckVerdict | None = None,
+    checker_enabled: bool = False,
 ) -> ConfidenceResult:
     """Return a deterministic score, or raise ValueError for hard failures.
 
     page_count is the source's PDF page count (None for HTML); it feeds the
-    read-quality signal.
+    read-quality signal. When checker_enabled, verdict is the second reader's
+    categorical answers: any `fail` is a hard failure, and anything short of
+    all-pass caps the score below the High band.
     """
     if candidate.taxonomy_match == "none" or not taxonomy.is_valid_label(candidate.sub_asset_class):
         raise ValueError(HARD_FAILURE_TAXONOMY)
@@ -96,12 +120,31 @@ def score_candidate(
     if not evidence_check.passed:
         raise ValueError(evidence_check.reason_code)
 
+    if checker_enabled and verdict is not None:
+        failed = verdict.failed_questions()
+        if failed:
+            raise ValueError(CHECKER_FAIL_REASONS[failed[0]])
+
     score = 0
     score += {"explicit": 30, "implied": 15, "none": 0}[candidate.call_language]
     score += 25
     score += {"exact": 20, "semantic": 10}[candidate.taxonomy_match]
     score += 5 if candidate.conflict else 15
     score += 10 if snapshot_read_quality(snapshot_text, page_count=page_count) else 0
+
+    checker_status = "off"
+    checker_note = ""
+    if checker_enabled:
+        if verdict is None:
+            checker_status = "missing"
+            checker_note = "no checker verdict for this candidate"
+        elif verdict.all_pass:
+            checker_status = "confirmed"
+        else:
+            checker_status = "unclear"
+            checker_note = verdict.note
+        if checker_status != "confirmed":
+            score = min(score, CHECKER_UNCONFIRMED_CAP)
 
     band = score_band(score)
     review_flag = review_flag_for(score, candidate)
@@ -111,6 +154,8 @@ def score_candidate(
         band=band,
         review_flag=review_flag,
         evidence_check=evidence_check,
+        checker_status=checker_status,
+        checker_note=checker_note,
     )
 
 
