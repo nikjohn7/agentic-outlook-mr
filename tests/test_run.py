@@ -16,6 +16,7 @@ from src.run import (
     _chunk_content,
     _html_chunk_text,
     _make_arbiter,
+    _resolve_groups,
 )
 from src.schemas import CandidateCall
 
@@ -107,6 +108,29 @@ class AnalyzeSourceTest(unittest.TestCase):
         self.assertIn("## Chunk p1-5", prompts[1])
         self.assertIn("Emerging Markets Equities=O[p.3]", memory)
 
+    def test_initial_memory_seeds_the_first_chunk_prompt(self) -> None:
+        prompts: list[str] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            prompts.append(prompt)
+            return subprocess.CompletedProcess(command, 0, stdout=_candidate_json("p1-5"), stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            ingested = _ingested_pdf(work_dir)
+            analyze_source(
+                ingested,
+                work_dir,
+                taxonomy_block="- Emerging Markets Equities",
+                brain_text="none",
+                engine="claude",
+                runner=runner,
+                initial_memory="\n## Companion document already analyzed\nEM=O[p.2]\n",
+            )
+
+        self.assertIn("Companion document already analyzed", prompts[0])
+        self.assertIn("EM=O[p.2]", prompts[0])
+
     def test_unparseable_chunk_becomes_a_chunk_failure(self) -> None:
         def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
             return subprocess.CompletedProcess(command, 0, stdout="not json at all", stderr="")
@@ -180,6 +204,7 @@ class ResolveEngineSettingsTest(unittest.TestCase):
 class CheckerAndArbiterStepTest(unittest.TestCase):
     def test_check_candidates_maps_verdicts_and_uses_engine_settings(self) -> None:
         commands: list[list[str]] = []
+        prompts: list[str] = []
         verdicts_json = json.dumps(
             {
                 "verdicts": [
@@ -204,11 +229,13 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
 
         def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
             commands.append(command)
+            prompts.append(prompt)
             return subprocess.CompletedProcess(command, 0, stdout=verdicts_json, stderr="")
 
         verdict_map, failure = _check_candidates(
             _pdf_source(),
             [_call_candidate()],
+            conventions="A two-sided path nets to N.",
             engine="codex",
             model=None,
             effort="high",
@@ -219,6 +246,9 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
         self.assertEqual([0], list(verdict_map))
         self.assertEqual("thin stance", verdict_map[0].note)
         self.assertIn('model_reasoning_effort="high"', commands[0])
+        # The house conventions were injected into the checker prompt.
+        self.assertIn("A two-sided path nets to N.", prompts[0])
+        self.assertNotIn("{{conventions}}", prompts[0])
 
     def test_check_candidates_engine_error_degrades_to_failure_record(self) -> None:
         def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
@@ -262,6 +292,80 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
         winner, reasoning = arbiter(group)
         self.assertIsNone(winner)
         self.assertIn("arbiter error", reasoning)
+
+
+class GroupResolutionTest(unittest.TestCase):
+    def _sources(self) -> list[SourceRecord]:
+        def record(source_id: str, title: str) -> SourceRecord:
+            return SourceRecord(
+                source_id=source_id,
+                firm="Schroders",
+                date="4/1/2026",
+                source=title,
+                url="https://example.test/x",
+                resolved_url="https://example.test/x",
+                source_type="html",
+            )
+
+        return [
+            record("schroders-review", "Quarterly Markets Review Q1"),
+            record("schroders-outlook", "Global Investment Outlook Q2"),
+        ]
+
+    def test_resolves_notes_and_drops_unknown_ids_with_warnings(self) -> None:
+        response = json.dumps(
+            {
+                "groups": [
+                    {
+                        "source_ids": ["schroders-review", "schroders-outlook", "ghost-doc"],
+                        "note": "combine the Schroders pair",
+                    }
+                ],
+                "unmatched_notes": ["also merge the Fidelity docs"],
+            }
+        )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(command, 0, stdout=response, stderr="")
+
+        groups, warnings = _resolve_groups(
+            self._sources(), "notes text", engine="codex", model=None, effort="low", runner=runner
+        )
+
+        self.assertEqual(1, len(groups))
+        self.assertEqual(["schroders-review", "schroders-outlook"], groups[0]["source_ids"])
+        self.assertEqual("group-1", groups[0]["group_id"])
+        self.assertTrue(any("ghost-doc" in warning for warning in warnings))
+        self.assertTrue(any("unmatched note" in warning for warning in warnings))
+
+    def test_note_resolving_to_one_source_is_ignored_with_warning(self) -> None:
+        response = json.dumps(
+            {
+                "groups": [{"source_ids": ["schroders-review", "ghost-doc"], "note": "pair up"}],
+                "unmatched_notes": [],
+            }
+        )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(command, 0, stdout=response, stderr="")
+
+        groups, warnings = _resolve_groups(
+            self._sources(), "notes text", engine="codex", model=None, effort="low", runner=runner
+        )
+
+        self.assertEqual([], groups)
+        self.assertTrue(any("did not resolve to two run sources" in w for w in warnings))
+
+    def test_resolver_engine_error_degrades_to_ungrouped_run(self) -> None:
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(command, 1, stdout="", stderr="boom")
+
+        groups, warnings = _resolve_groups(
+            self._sources(), "notes text", engine="codex", model=None, effort="low", runner=runner
+        )
+
+        self.assertEqual([], groups)
+        self.assertIn("proceeds ungrouped", warnings[0])
 
 
 def _call_candidate() -> CandidateCall:

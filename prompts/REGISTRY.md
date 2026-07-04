@@ -5,6 +5,27 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `conventions.md` — v1 (2026-07-05)
+
+Not a prompt: the shared normative-rules block, injected as `{{conventions}}`
+into `analyze_chunk.md`, `check_candidates.md`, and `arbitrate_conflict.md`
+(loaded at runtime by `run.py` `_conventions_text()`). Factored out of
+`brain.md` so the house rules — dialect→O/N/U mapping, published-level-wins,
+implied-call rules (incl. two-sided-path-nets-to-`N`), not-a-call boundaries,
+snapping defaults — have ONE edit point: when Markets Recon feedback changes a
+convention, extractor, checker, and arbiter update together, with no drift.
+`brain.md` keeps the worked examples and reasoning style (analyze-only).
+Rationale: the pilot-03 JPY failure — the extractor applied the netting
+convention, the convention-blind checker failed it as a sign mismatch.
+Checker independence is preserved: it still never sees the source and judges
+only the presented fields; it now judges them under the same law.
+
+### `analyze_chunk.md` — v1.2 (2026-07-05)
+
+v1.2: injects `{{conventions}}` (normative section before the calibration
+examples); `{{brain_examples}}` now carries worked examples + reasoning style
+only.
+
 ### `analyze_chunk.md` — v1.1 (2026-07-04)
 
 The one LLM step. Reads a single native chunk (PDF page range viewed as rendered
@@ -42,6 +63,15 @@ text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
 
+### `check_candidates.md` — v1.1 (2026-07-05)
+
+v1.1: injects `{{conventions}}` with the framing "never fail a candidate for
+following a convention; reserve `fail` for evidence that contradicts the view
+even after the conventions are applied", and `supports_view`'s `N` definition
+now includes a two-sided view netting to neutral (the quote legitimately
+shows both directions). Live smoke: the pilot-03 JPY candidate
+(`checker_sign_mismatch` under v1) passes 3-for-3 under v1.1.
+
 ### `check_candidates.md` — v1 (2026-07-04)
 
 The second-reader (checker) step: one call per source over all of that
@@ -57,6 +87,30 @@ so the call cannot reach High. Default engine codex @ high effort
 (`--checker-engine/--checker-model/--checker-effort`). Inputs (appended JSON):
 source_id, firm, source_title, candidates[] with echoed `index`.
 
+### `resolve_groups.md` — v1 (2026-07-05)
+
+The group-notes resolver: runs once at run start, only when `--group-notes
+<file>` supplies free-text analyst notes naming which sources to combine
+(e.g. a firm's review + outlook pair, which analysts output as ONE
+pipe-joined source). Translates note lines into `source_id` groups drawn
+strictly from the run's source list; anything it cannot confidently map goes
+to `unmatched_notes` — flagged in the manifest, never guessed. Deterministic
+guards in `run.py` `_resolve_groups` drop unknown/overlapping ids with
+warnings; the plan is frozen to `work/<run-id>/groups.json` and echoed in the
+manifest, and all downstream grouping (cross-doc rolling memory, group-keyed
+dedup/conflict, pipe-joined output rows) consumes the plan, not the notes.
+Resolver failure degrades to an ungrouped run. Default engine codex @ low
+effort (`--grouper-*` flags). Inputs (appended JSON): sources[] with
+source_id/firm/title/date; `{{group_notes}}` injected.
+
+### `arbitrate_conflict.md` — v1.1 (2026-07-05)
+
+v1.1: `{{conventions}}` replaces `{{brain_examples}}` (the rules ARE the
+conventions; worked examples stay analyze-only); scope extended to
+analyst-grouped source sets, with rule 3 gaining "within a grouped set, the
+forward-looking outlook document beats the retrospective review document"
+(pending client confirmation); per-candidate `source_id` added to inputs.
+
 ### `arbitrate_conflict.md` — v1 (2026-07-04)
 
 The conflict-arbiter step: called only when validated candidates give the same
@@ -68,6 +122,14 @@ reasoning appended to commentary; losers land in `failures.csv` as
 `arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
 confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
 Default engine codex @ medium effort (`--arbiter-*` flags).
+
+### `brain.md` — v1.2 (2026-07-05)
+
+v1.2: the normative rules moved to `conventions.md` (single edit point,
+shared with checker/arbiter); `brain.md` now carries only the worked examples
+(dialect translation, implied calls, not-a-call boundaries, snapping) and the
+`reasoning`-sentence style, still injected into `analyze_chunk.md` only via
+`{{brain_examples}}`. Content and blindness provenance unchanged from v1.1.
 
 ### `brain.md` — v1.1 (2026-07-04)
 

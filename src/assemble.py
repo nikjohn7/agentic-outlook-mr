@@ -43,6 +43,7 @@ FAILURE_COLUMNS = (
     "view",
     "taxonomy_match",
     "evidence_kind",
+    "evidence_quote",
     "locator",
     "reasoning",
 )
@@ -59,6 +60,10 @@ class FailureRecord:
     view: str = ""
     taxonomy_match: str = ""
     evidence_kind: str = ""
+    # The quote the model actually submitted: the single field needed to
+    # diagnose quote_not_found. Chunk-level failures (from_chunk) have no
+    # candidate, so it stays "".
+    evidence_quote: str = ""
     locator: str = ""
     reasoning: str = ""
 
@@ -76,6 +81,7 @@ class FailureRecord:
             view=candidate.view,
             taxonomy_match=candidate.taxonomy_match,
             evidence_kind=candidate.evidence_kind,
+            evidence_quote=candidate.evidence_quote,
             locator=candidate.locator,
             reasoning=candidate.reasoning,
         )
@@ -98,6 +104,7 @@ class FailureRecord:
             "view": self.view,
             "taxonomy_match": self.taxonomy_match,
             "evidence_kind": self.evidence_kind,
+            "evidence_quote": self.evidence_quote,
             "locator": self.locator,
             "reasoning": self.reasoning,
         }
@@ -119,6 +126,7 @@ def assemble_candidates(
     page_counts: dict[str, int] | None = None,
     verdicts: dict[int, CheckVerdict] | None = None,
     arbiter: Arbiter | None = None,
+    group_map: dict[str, str] | None = None,
 ) -> AssemblyResult:
     """page_counts maps source_id -> PDF page count (absent for HTML sources).
 
@@ -127,6 +135,9 @@ def assemble_candidates(
     means the checker ran but produced no verdict for that candidate (capped).
     arbiter resolves surviving view conflicts; without one they route to
     failures as before.
+    group_map maps source_id -> group_id for analyst-grouped source sets:
+    dedup/conflict then keys on the group, and grouped rows render the set as
+    one pipe-joined source entity (the analysts' own output convention).
     """
     checker_enabled = verdicts is not None
     scored: list[ConfidenceResult] = []
@@ -155,13 +166,14 @@ def assemble_candidates(
             failures.append(FailureRecord.from_candidate(reason, message, candidate))
 
     output_rows: list[dict[str, str]] = []
-    for group in _group_scored(scored).values():
+    for group in _group_scored(scored, group_map).values():
         views = {item.candidate.view for item in group}
         arbiter_note = ""
+        corroboration = ""
         if len(views) > 1:
             winner, reasoning = _arbitrate(group, arbiter)
             if winner is None:
-                message = "multiple views survived validation for the same source and leaf"
+                message = "multiple views survived validation for the same source/group and leaf"
                 if reasoning:
                     message += f"; arbiter: {reasoning}"
                 failures.extend(
@@ -178,6 +190,25 @@ def assemble_candidates(
             arbiter_note = reasoning
         else:
             selected = max(group, key=lambda item: item.confidence)
+            corroborators: list[str] = []
+            for item in group:
+                if item is selected:
+                    continue
+                failures.append(
+                    FailureRecord.from_candidate(
+                        "duplicate_same_view",
+                        f"same view already kept from {selected.candidate.locator}",
+                        item.candidate,
+                    )
+                )
+                if item.candidate.source_id != selected.candidate.source_id:
+                    dup_source = sources.get(item.candidate.source_id)
+                    title = dup_source.source if dup_source else item.candidate.source_id
+                    corroborators.append(f"{title} ({item.candidate.locator})")
+            if corroborators:
+                corroboration = (
+                    f"Corroborated by companion source: {'; '.join(corroborators)}."
+                )
 
         source = sources.get(selected.candidate.source_id)
         if source is None:
@@ -189,7 +220,19 @@ def assemble_candidates(
                 )
             )
             continue
-        output_rows.append(_output_row(selected, source, taxonomy, arbiter_note=arbiter_note))
+        display_source, member_count = _display_source(
+            selected.candidate.source_id, sources, group_map
+        )
+        output_rows.append(
+            _output_row(
+                selected,
+                display_source,
+                taxonomy,
+                arbiter_note=arbiter_note,
+                locator_source=source.source if member_count > 1 else "",
+                corroboration=corroboration,
+            )
+        )
 
     return AssemblyResult(
         output_rows=output_rows,
@@ -217,6 +260,7 @@ def write_run_outputs(
     source_summaries: list[dict[str, object]] | None = None,
     chunk_failures: list[FailureRecord] | None = None,
     run_config: dict[str, object] | None = None,
+    grouping: dict[str, object] | None = None,
 ) -> None:
     """Write the run's three review files.
 
@@ -224,7 +268,8 @@ def write_run_outputs(
     produced no candidate; they are recorded in failures.csv and counted
     separately in the manifest so the candidate reconciliation stays exact.
     run_config (engine/model/effort) is recorded in the manifest so a frozen
-    run states exactly what produced it.
+    run states exactly what produced it. grouping is the resolved group-notes
+    plan (groups + warnings) so the manifest shows exactly what was combined.
     """
     chunk_failures = chunk_failures or []
     run_dir = Path(output_dir)
@@ -235,8 +280,36 @@ def write_run_outputs(
         FAILURE_COLUMNS,
         [failure.to_row() for failure in [*result.failures, *chunk_failures]],
     )
-    manifest = _manifest_text(result, source_summaries or [], chunk_failures, run_config)
+    manifest = _manifest_text(result, source_summaries or [], chunk_failures, run_config, grouping)
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
+
+
+def _display_source(
+    source_id: str,
+    sources: dict[str, SourceInfo],
+    group_map: dict[str, str] | None,
+) -> tuple[SourceInfo, int]:
+    """Workbook display identity for a row: a grouped set renders as ONE
+    pipe-joined source entity (the analysts' own convention for combined
+    review+outlook pairs). Returns the display info and the member count."""
+    group_id = (group_map or {}).get(source_id)
+    if group_id is None:
+        return sources[source_id], 1
+    members = [
+        info for sid, info in sources.items() if (group_map or {}).get(sid) == group_id
+    ]
+    if len(members) <= 1:
+        return sources[source_id], 1
+    return (
+        SourceInfo(
+            source_id=group_id,
+            firm=members[0].firm,
+            date=" | ".join(member.date for member in members),
+            source=" | ".join(member.source for member in members),
+            url=" | ".join(member.url for member in members),
+        ),
+        len(members),
+    )
 
 
 def _output_row(
@@ -245,10 +318,14 @@ def _output_row(
     taxonomy: Taxonomy,
     *,
     arbiter_note: str = "",
+    locator_source: str = "",
+    corroboration: str = "",
 ) -> dict[str, str]:
     candidate = scored.candidate
     lookup = taxonomy.output_fields_for(candidate.sub_asset_class)
-    commentary = _commentary(candidate)
+    commentary = _commentary(candidate, locator_source=locator_source)
+    if corroboration:
+        commentary += f" {corroboration}"
     if scored.checker_status == "unclear":
         note = f" ({scored.checker_note})" if scored.checker_note else ""
         commentary += f" Checker: unconfirmed{note}."
@@ -276,19 +353,25 @@ def _output_row(
     }
 
 
-def _commentary(candidate: CandidateCall) -> str:
+def _commentary(candidate: CandidateCall, *, locator_source: str = "") -> str:
+    where = f"{candidate.locator} ({locator_source})" if locator_source else candidate.locator
     return (
         f"{candidate.reasoning} Evidence: {candidate.evidence_quote}. "
-        f"Locator: {candidate.locator}."
+        f"Locator: {where}."
     )
 
 
 def _group_scored(
     scored: list[ConfidenceResult],
+    group_map: dict[str, str] | None = None,
 ) -> dict[tuple[str, str], list[ConfidenceResult]]:
     groups: dict[tuple[str, str], list[ConfidenceResult]] = {}
     for item in scored:
-        key = (item.candidate.source_id, item.candidate.sub_asset_class)
+        source_id = item.candidate.source_id
+        key = (
+            (group_map or {}).get(source_id, source_id),
+            item.candidate.sub_asset_class,
+        )
         groups.setdefault(key, []).append(item)
     return groups
 
@@ -305,6 +388,7 @@ def _manifest_text(
     source_summaries: list[dict[str, object]],
     chunk_failures: list[FailureRecord],
     run_config: dict[str, object] | None = None,
+    grouping: dict[str, object] | None = None,
 ) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
@@ -312,6 +396,15 @@ def _manifest_text(
     if run_config:
         lines.append("## Run configuration")
         lines.extend(f"- {key}: {value}" for key, value in run_config.items() if value is not None)
+        lines.append("")
+    if grouping:
+        lines.append("## Grouping")
+        lines.append(f"- group notes: {grouping.get('notes_path')}")
+        for group in grouping.get("groups", []):
+            note = f" — note: {group['note']}" if group.get("note") else ""
+            lines.append(f"- {group['group_id']}: {', '.join(group['source_ids'])}{note}")
+        for warning in grouping.get("warnings", []):
+            lines.append(f"- warning: {warning}")
         lines.append("")
     lines += [
         "## Candidate reconciliation",

@@ -1,7 +1,8 @@
 # Arbitrate a conflicting allocation call
 
-Two or more validated candidates from the SAME source assign different views
-to the SAME sub-asset class. Decide which single candidate states the source's
+Two or more validated candidates from the same source — or the same
+analyst-grouped source set (e.g. a firm's review document paired with its
+outlook document) — assign different views to the SAME sub-asset class. Decide which single candidate states the source's
 actual current stance. You are applying the house's own publication
 conventions, not your market opinion. A deterministic layer downstream keeps
 the winner (always flagged for analyst review), records the losers with your
@@ -15,16 +16,18 @@ Decision rules, in order:
 2. **Specific beats general.** Evidence that names the sub-asset class
    directly beats evidence about a broader bucket it merely belongs to.
 3. **Current beats conditional.** The stated base-case positioning beats
-   scenario, hedge, or "if X then Y" commentary.
+   scenario, hedge, or "if X then Y" commentary. Within a grouped source set,
+   the forward-looking outlook document beats the retrospective review
+   document.
 4. **Same-direction duplicates are not conflicts** — if the difference is
    intensity, not sign, choose the clearer statement of the same stance.
 5. If, after these rules, the source genuinely holds both views at once
    (e.g. explicit different horizons with no primary stance), return
    `winning_index: null`.
 
-## Calibration conventions (style guidance only)
+## House conventions (normative)
 
-{{brain_examples}}
+{{conventions}}
 
 ## Output contract
 

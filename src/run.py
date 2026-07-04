@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from src.llm import (
     call as llm_call,
     call_parsed,
     parse_arbitration,
+    parse_groups,
     parse_verdicts,
 )
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
@@ -32,8 +34,10 @@ from src.taxonomy import load_taxonomy
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ANALYZE_PROMPT = PROJECT_ROOT / "prompts" / "analyze_chunk.md"
 BRAIN_PROMPT = PROJECT_ROOT / "prompts" / "brain.md"
+CONVENTIONS_FILE = PROJECT_ROOT / "prompts" / "conventions.md"
 CHECK_PROMPT = PROJECT_ROOT / "prompts" / "check_candidates.md"
 ARBITER_PROMPT = PROJECT_ROOT / "prompts" / "arbitrate_conflict.md"
+GROUPS_PROMPT = PROJECT_ROOT / "prompts" / "resolve_groups.md"
 
 # The chunk call can fail two ways worth catching per-chunk (so one bad chunk
 # never sinks the whole run): unparseable/contract-breaking output after the
@@ -54,25 +58,59 @@ def run_pipeline(
     arbiter_engine: str = "codex",
     arbiter_model: str | None = None,
     arbiter_effort: str = "medium",
+    group_notes_text: str | None = None,
+    group_notes_path: str | None = None,
+    grouper_engine: str = "codex",
+    grouper_model: str | None = None,
+    grouper_effort: str = "low",
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
     brain_text: str | None = None,
+    conventions_text: str | None = None,
 ):
     """Ingest each source, analyze every chunk, then check, score, and assemble.
 
-    Three LLM steps, each with its own engine/model/effort: analyze (the
+    Up to four LLM steps, each with its own engine/model/effort: analyze (the
     extraction workhorse), checker (second-reader verdicts per source batch),
-    and arbiter (conflict resolution, only called when views collide).
+    arbiter (conflict resolution, only called when views collide), and the
+    group resolver (only when analyst group notes are supplied — translates
+    free-text pairing notes into an explicit, saved grouping plan once, before
+    any analysis).
     """
     enforce_source_limit(sources)
     if checker_engine == "codex" and checker_model is None:
         checker_model = CODEX_MODEL
     if arbiter_engine == "codex" and arbiter_model is None:
         arbiter_model = CODEX_MODEL
+    if grouper_engine == "codex" and grouper_model is None:
+        grouper_model = CODEX_MODEL
     taxonomy = load_taxonomy()
     taxonomy_block = taxonomy.grouped_block()
     brain = brain_text if brain_text is not None else _brain_text()
+    conventions = conventions_text if conventions_text is not None else _conventions_text()
     work_dir = Path("work") / run_id
+
+    group_map: dict[str, str] = {}
+    grouping: dict[str, object] | None = None
+    if group_notes_text:
+        groups, group_warnings = _resolve_groups(
+            sources,
+            group_notes_text,
+            engine=grouper_engine,
+            model=grouper_model,
+            effort=grouper_effort,
+            runner=runner,
+        )
+        group_map = {
+            source_id: group["group_id"] for group in groups for source_id in group["source_ids"]
+        }
+        grouping = {
+            "notes_path": group_notes_path or "(inline)",
+            "groups": groups,
+            "warnings": group_warnings,
+        }
+        work_dir.mkdir(parents=True, exist_ok=True)
+        (work_dir / "groups.json").write_text(json.dumps(grouping, indent=2), encoding="utf-8")
 
     all_candidates: list[CandidateCall] = []
     verdicts: dict[int, CheckVerdict] = {}
@@ -81,6 +119,7 @@ def run_pipeline(
     page_counts: dict[str, int] = {}
     source_infos: dict[str, SourceInfo] = {}
     source_summaries: list[dict[str, object]] = []
+    group_ledgers: dict[str, str] = {}
 
     for source in sources:
         ingested = create_snapshot(source, work_dir)
@@ -97,17 +136,29 @@ def run_pipeline(
             url=source.url,
         )
 
+        group_id = group_map.get(source.source_id)
         candidates, failures = analyze_source(
             ingested,
             work_dir,
             taxonomy_block=taxonomy_block,
             brain_text=brain,
+            conventions_text=conventions,
             engine=engine,
             model=model,
             effort=effort,
             runner=runner,
             analyze_prompt=analyze_prompt,
+            initial_memory=group_ledgers.get(group_id, "") if group_id else "",
         )
+        if group_id:
+            memory_text = (work_dir / source.source_id / "memory.md").read_text(encoding="utf-8")
+            group_ledgers[group_id] = (
+                "\n## Companion document already analyzed in this grouped source set\n"
+                "Report this document's own stances normally — corroboration and\n"
+                "conflicts across the set are resolved downstream; mark `conflict:\n"
+                "true` where this document disagrees with the companion.\n\n"
+                f"{memory_text}\n"
+            )
         offset = len(all_candidates)
         all_candidates.extend(candidates)
         chunk_failures.extend(failures)
@@ -115,6 +166,7 @@ def run_pipeline(
             source_verdicts, checker_failure = _check_candidates(
                 source,
                 candidates,
+                conventions=conventions,
                 engine=checker_engine,
                 model=checker_model,
                 effort=checker_effort,
@@ -138,7 +190,7 @@ def run_pipeline(
         )
 
     arbiter = _make_arbiter(
-        brain,
+        conventions,
         engine=arbiter_engine,
         model=arbiter_model,
         effort=arbiter_effort,
@@ -152,20 +204,26 @@ def run_pipeline(
         page_counts=page_counts,
         verdicts=verdicts,
         arbiter=arbiter,
+        group_map=group_map or None,
     )
+    run_config = {
+        "engine": engine,
+        "model": model,
+        "effort": effort,
+        "checker": f"{checker_engine}/{checker_model}/{checker_effort}",
+        "arbiter": f"{arbiter_engine}/{arbiter_model}/{arbiter_effort}",
+    }
+    if group_notes_text:
+        run_config["grouper"] = f"{grouper_engine}/{grouper_model}/{grouper_effort}"
+        run_config["group notes"] = group_notes_path or "(inline)"
     run_dir = Path("runs") / run_id
     write_run_outputs(
         result,
         run_dir,
         source_summaries=source_summaries,
         chunk_failures=chunk_failures,
-        run_config={
-            "engine": engine,
-            "model": model,
-            "effort": effort,
-            "checker": f"{checker_engine}/{checker_model}/{checker_effort}",
-            "arbiter": f"{arbiter_engine}/{arbiter_model}/{arbiter_effort}",
-        },
+        run_config=run_config,
+        grouping=grouping,
     )
     return result, chunk_failures, run_dir
 
@@ -176,16 +234,22 @@ def analyze_source(
     *,
     taxonomy_block: str,
     brain_text: str,
+    conventions_text: str = "",
     engine: str,
     model: str | None = None,
     effort: str | None = None,
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
+    initial_memory: str = "",
 ) -> tuple[list[CandidateCall], list[FailureRecord]]:
-    """Analyze every chunk of one source with rolling memory between chunks."""
+    """Analyze every chunk of one source with rolling memory between chunks.
+
+    initial_memory seeds the rolling memory before the first chunk — used to
+    carry a grouped companion document's ledger into this document's read.
+    """
     source = ingested.source
     memory_path = Path(work_dir) / source.source_id / "memory.md"
-    memory_path.write_text(_memory_header(source), encoding="utf-8")
+    memory_path.write_text(_memory_header(source) + initial_memory, encoding="utf-8")
 
     candidates: list[CandidateCall] = []
     failures: list[FailureRecord] = []
@@ -193,6 +257,7 @@ def analyze_source(
         template_vars = {
             "taxonomy": taxonomy_block,
             "brain_examples": brain_text,
+            "conventions": conventions_text,
             "memory": memory_path.read_text(encoding="utf-8"),
             "chunk_content": _chunk_content(ingested, chunk),
         }
@@ -225,6 +290,7 @@ def _check_candidates(
     source,
     candidates: list[CandidateCall],
     *,
+    conventions: str = "",
     engine: str,
     model: str | None,
     effort: str | None,
@@ -263,6 +329,7 @@ def _check_candidates(
             model=model,
             effort=effort,
             runner=runner,
+            template_vars={"conventions": conventions},
             parser=parse_verdicts,
         )
     except CHUNK_CALL_ERRORS as exc:
@@ -279,7 +346,7 @@ def _check_candidates(
 
 
 def _make_arbiter(
-    brain_text: str,
+    conventions_text: str,
     *,
     engine: str,
     model: str | None,
@@ -289,8 +356,10 @@ def _make_arbiter(
     """Build the conflict arbiter callable handed to assemble_candidates.
 
     The arbiter sees the conflicting candidates' evidence (not their
-    deterministic confidence, which must not anchor it) plus the brain
+    deterministic confidence, which must not anchor it) plus the house
     conventions, and must name a winner or return null (-> unresolved).
+    Per-candidate source_id is included because a conflict group can span the
+    documents of an analyst-grouped source set.
     """
 
     def arbiter(group) -> tuple[int | None, str]:
@@ -301,6 +370,7 @@ def _make_arbiter(
             "candidates": [
                 {
                     "index": index,
+                    "source_id": item.candidate.source_id,
                     "view": item.candidate.view,
                     "call_language": item.candidate.call_language,
                     "evidence_kind": item.candidate.evidence_kind,
@@ -319,7 +389,7 @@ def _make_arbiter(
                 model=model,
                 effort=effort,
                 runner=runner,
-                template_vars={"brain_examples": brain_text},
+                template_vars={"conventions": conventions_text},
                 parser=parse_arbitration,
             )
         except CHUNK_CALL_ERRORS as exc:
@@ -327,6 +397,73 @@ def _make_arbiter(
         return result.payload
 
     return arbiter
+
+
+def _resolve_groups(
+    sources,
+    notes_text: str,
+    *,
+    engine: str,
+    model: str | None,
+    effort: str | None,
+    runner=None,
+) -> tuple[list[dict[str, object]], list[str]]:
+    """Resolve free-text analyst group notes into an explicit grouping plan.
+
+    The LLM only translates note lines into source_ids from this run; every
+    deterministic guard (unknown ids, overlapping groups, notes resolving to
+    fewer than two sources) lands in warnings so the manifest shows exactly
+    what was and wasn't grouped. A failed resolver call degrades to an
+    ungrouped run, never a crash.
+    """
+    inputs = {
+        "sources": [
+            {
+                "source_id": source.source_id,
+                "firm": source.firm,
+                "title": source.source,
+                "date": source.date,
+            }
+            for source in sources
+        ]
+    }
+    try:
+        result = call_parsed(
+            GROUPS_PROMPT,
+            inputs,
+            engine=engine,
+            model=model,
+            effort=effort,
+            runner=runner,
+            template_vars={"group_notes": notes_text},
+            parser=parse_groups,
+        )
+    except CHUNK_CALL_ERRORS as exc:
+        return [], [f"group-notes resolution failed; run proceeds ungrouped: {str(exc)[:200]}"]
+
+    raw_groups, unmatched = result.payload
+    known = {source.source_id for source in sources}
+    warnings = [f"unmatched note: {line}" for line in unmatched]
+    groups: list[dict[str, object]] = []
+    grouped_ids: set[str] = set()
+    for member_ids, note in raw_groups:
+        unknown = [member for member in member_ids if member not in known]
+        overlap = [member for member in member_ids if member in grouped_ids]
+        members = [
+            member for member in member_ids if member in known and member not in grouped_ids
+        ]
+        if unknown:
+            warnings.append(f"dropped unknown source ids {unknown} from note: {note}")
+        if overlap:
+            warnings.append(f"source(s) {overlap} already grouped; dropped from note: {note}")
+        if len(members) < 2:
+            warnings.append(f"note did not resolve to two run sources; ignored: {note}")
+            continue
+        grouped_ids.update(members)
+        groups.append(
+            {"group_id": f"group-{len(groups) + 1}", "source_ids": members, "note": note}
+        )
+    return groups, warnings
 
 
 def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
@@ -391,6 +528,12 @@ def _brain_text() -> str:
     if BRAIN_PROMPT.exists():
         return BRAIN_PROMPT.read_text(encoding="utf-8").strip()
     return "No calibration examples are available for this run."
+
+
+def _conventions_text() -> str:
+    if CONVENTIONS_FILE.exists():
+        return CONVENTIONS_FILE.read_text(encoding="utf-8").strip()
+    return "No house conventions are available for this run."
 
 
 def resolve_engine_settings(engine: str, model: str | None, effort: str | None) -> tuple[str, str]:
@@ -461,6 +604,26 @@ def main() -> int:
         default="medium",
         help="reasoning effort for the arbiter step (default medium)",
     )
+    parser.add_argument(
+        "--group-notes",
+        help="path to a free-text analyst notes file naming which sources to "
+        "combine; resolved once into work/<run-id>/groups.json before analysis",
+    )
+    parser.add_argument(
+        "--grouper-engine",
+        choices=("claude", "codex"),
+        default="codex",
+        help="engine for the group-notes resolver step (default codex)",
+    )
+    parser.add_argument(
+        "--grouper-model",
+        help="model for the group-notes resolver (required with --grouper-engine claude)",
+    )
+    parser.add_argument(
+        "--grouper-effort",
+        default="low",
+        help="reasoning effort for the group-notes resolver (default low)",
+    )
     parser.add_argument("--ingest-only", action="store_true")
     args = parser.parse_args()
 
@@ -473,6 +636,8 @@ def main() -> int:
             create_snapshot(source, work_dir)
         return 0
 
+    group_notes_text = None
+    grouper_model, grouper_effort = args.grouper_model, args.grouper_effort
     try:
         model, effort = resolve_engine_settings(args.engine, args.model, args.effort)
         checker_model, checker_effort = resolve_engine_settings(
@@ -481,13 +646,23 @@ def main() -> int:
         arbiter_model, arbiter_effort = resolve_engine_settings(
             args.arbiter_engine, args.arbiter_model, args.arbiter_effort
         )
-    except ValueError as exc:
+        if args.group_notes:
+            group_notes_text = Path(args.group_notes).read_text(encoding="utf-8")
+            grouper_model, grouper_effort = resolve_engine_settings(
+                args.grouper_engine, args.grouper_model, args.grouper_effort
+            )
+    except (ValueError, OSError) as exc:
         parser.error(str(exc))
 
+    grouper_line = (
+        f" | grouper={args.grouper_engine}/{grouper_model}/{grouper_effort}"
+        if group_notes_text
+        else ""
+    )
     print(
         f"run {args.run_id}: engine={args.engine} model={model} effort={effort} | "
         f"checker={args.checker_engine}/{checker_model}/{checker_effort} | "
-        f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort}"
+        f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort}{grouper_line}"
     )
     result, chunk_failures, run_dir = run_pipeline(
         sources=sources,
@@ -501,6 +676,11 @@ def main() -> int:
         arbiter_engine=args.arbiter_engine,
         arbiter_model=arbiter_model,
         arbiter_effort=arbiter_effort,
+        group_notes_text=group_notes_text,
+        group_notes_path=args.group_notes,
+        grouper_engine=args.grouper_engine,
+        grouper_model=grouper_model,
+        grouper_effort=grouper_effort,
     )
     kept = len(result.output_rows)
     failed = len(result.failures) + len(chunk_failures)

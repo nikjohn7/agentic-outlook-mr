@@ -11,6 +11,7 @@ from src.llm import (
     call,
     call_parsed,
     parse_arbitration,
+    parse_groups,
     parse_response,
     parse_verdicts,
 )
@@ -123,6 +124,24 @@ class StepParserTest(unittest.TestCase):
     def test_parse_arbitration_requires_reasoning(self) -> None:
         with self.assertRaises(ValueError):
             parse_arbitration('{"winning_index": 0, "reasoning": ""}')
+
+    def test_parse_groups_returns_groups_and_unmatched_notes(self) -> None:
+        raw = (
+            '{"groups": [{"source_ids": ["schroders-review", "schroders-outlook"], '
+            '"note": "combine the Schroders pair"}], '
+            '"unmatched_notes": ["also merge the Fidelity docs"]}'
+        )
+
+        groups, unmatched = parse_groups(raw)
+
+        self.assertEqual(
+            [(["schroders-review", "schroders-outlook"], "combine the Schroders pair")], groups
+        )
+        self.assertEqual(["also merge the Fidelity docs"], unmatched)
+
+    def test_parse_groups_rejects_single_member_groups(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_groups('{"groups": [{"source_ids": ["only-one"], "note": "n"}]}')
 
     def test_call_parsed_uses_supplied_parser_and_engine_settings(self) -> None:
         commands: list[list[str]] = []

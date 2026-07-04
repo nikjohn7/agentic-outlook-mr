@@ -30,6 +30,13 @@ leaves. The list is grouped only to help you navigate.
 
 {{taxonomy}}
 
+## House conventions (normative)
+
+Binding translation rules — apply them when deciding whether language is a
+call and which view it maps to. They are law, not style.
+
+{{conventions}}
+
 ## Calibration examples (style guidance only, never answers)
 
 These teach the style of judgment. They are never the answer for the source

@@ -186,6 +186,35 @@ def parse_verdicts(raw_response: str) -> list[CheckVerdict]:
     return [CheckVerdict.from_mapping(item) for item in verdicts_raw]
 
 
+def parse_groups(raw_response: str) -> tuple[list[tuple[list[str], str]], list[str]]:
+    """Parse the group resolver's response: {"groups": [...], "unmatched_notes": [...]}."""
+    payload = json.loads(_extract_json(raw_response))
+    if not isinstance(payload, dict):
+        raise ValueError("group resolver response must be a JSON object")
+    groups_raw = payload.get("groups")
+    if not isinstance(groups_raw, list):
+        raise ValueError("group resolver response must include a groups list")
+    groups: list[tuple[list[str], str]] = []
+    for item in groups_raw:
+        if not isinstance(item, dict):
+            raise ValueError("each group must be a JSON object")
+        source_ids = item.get("source_ids")
+        if (
+            not isinstance(source_ids, list)
+            or len(source_ids) < 2
+            or not all(isinstance(sid, str) and sid.strip() for sid in source_ids)
+        ):
+            raise ValueError("each group needs source_ids: at least two source-id strings")
+        note = item.get("note", "")
+        if not isinstance(note, str):
+            raise ValueError("group note must be a string")
+        groups.append((list(source_ids), note))
+    unmatched = payload.get("unmatched_notes", [])
+    if not isinstance(unmatched, list) or not all(isinstance(line, str) for line in unmatched):
+        raise ValueError("unmatched_notes must be a list of strings")
+    return groups, unmatched
+
+
 def parse_arbitration(raw_response: str) -> tuple[int | None, str]:
     """Parse the arbiter's response: {"winning_index": int|null, "reasoning": str}."""
     payload = json.loads(_extract_json(raw_response))

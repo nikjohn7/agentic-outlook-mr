@@ -6,13 +6,28 @@ NOT assign confidence, and do NOT fetch or open any source — judge only the
 candidate fields provided in the machine-readable inputs below. A deterministic
 layer downstream turns your verdicts into scores and review routing.
 
+## House conventions (normative)
+
+The extractor is REQUIRED to follow these conventions when translating a
+source's language into calls. Verify each candidate against its evidence AS
+READ UNDER these conventions — never fail a candidate for following one (for
+example, a two-sided path netting to `N` is a correct `N`, not a sign
+mismatch, when the quote shows both directions). Reserve `fail` for evidence
+that contradicts the claimed view even after the conventions are applied.
+Your independence is unchanged: you still judge only the fields presented,
+never the source itself.
+
+{{conventions}}
+
 For each candidate, answer three independent questions. Each answer is exactly
 one of `pass`, `unclear`, `fail`:
 
 1. **supports_view** — does `evidence_quote` actually support the claimed
    `view` sign? `O` = overweight/favor/prefer/add; `U` =
    underweight/reduce/avoid/cautious; `N` = explicitly neutral/marketweight/
-   balanced; `UNCERTAIN` = the quote itself is ambiguous or self-conflicting
+   balanced, **or** a two-sided view that nets to neutral under the house
+   conventions (the quote then legitimately shows both directions);
+   `UNCERTAIN` = the quote itself is ambiguous or self-conflicting
    about the stance.
    - `fail` — the evidence points the other way, or expresses no direction at
      all for this view.

@@ -5,7 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.assemble import OUTPUT_COLUMNS, assemble_candidates, write_run_outputs
+from src.assemble import (
+    FAILURE_COLUMNS,
+    OUTPUT_COLUMNS,
+    FailureRecord,
+    assemble_candidates,
+    write_run_outputs,
+)
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import Taxonomy
 
@@ -71,6 +77,34 @@ class AssembleTest(unittest.TestCase):
         self.assertEqual("none", output_rows[0]["review_flag"])
         self.assertEqual("taxonomy_no_match", failure_rows[0]["reason_code"])
         self.assertIn("count check: pass", manifest)
+
+    def test_failure_columns_place_evidence_quote_after_evidence_kind(self) -> None:
+        index = FAILURE_COLUMNS.index("evidence_kind")
+        self.assertEqual("evidence_quote", FAILURE_COLUMNS[index + 1])
+
+    def test_failures_csv_records_candidate_evidence_quote(self) -> None:
+        # A candidate-level failure keeps the quote the model submitted (needed
+        # to diagnose quote_not_found); a chunk-level failure leaves it empty.
+        candidates = [_candidate(sub_asset_class="Not A Leaf", evidence_quote="a submitted quote")]
+        result = assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={},
+        )
+        chunk_failure = FailureRecord.from_chunk(
+            "json_parse_error", "bad json", "source-1", "p6-10"
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir, chunk_failures=[chunk_failure])
+            failure_rows = _read_csv(Path(temp_dir) / "failures.csv")
+
+        self.assertIn("evidence_quote", failure_rows[0])
+        candidate_row = next(r for r in failure_rows if r["reason_code"] == "taxonomy_no_match")
+        chunk_row = next(r for r in failure_rows if r["reason_code"] == "json_parse_error")
+        self.assertEqual("a submitted quote", candidate_row["evidence_quote"])
+        self.assertEqual("", chunk_row["evidence_quote"])
 
     def test_conflicting_duplicate_views_route_to_failures(self) -> None:
         candidates = [_candidate(view="O"), _candidate(view="U")]
@@ -175,6 +209,103 @@ class CheckerAndArbiterAssemblyTest(unittest.TestCase):
             {"unresolved_conflict"}, {failure.reason_code for failure in result.failures}
         )
         self.assertIn("two explicit horizons", result.failures[0].message)
+
+
+class GroupedAssemblyTest(unittest.TestCase):
+    GROUP_MAP = {"source-1": "group-1", "source-2": "group-1"}
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1",
+                firm="Schroders",
+                date="3/10/2026",
+                source="Quarterly Markets Review Q1",
+                url="https://example.test/review",
+            ),
+            "source-2": SourceInfo(
+                source_id="source-2",
+                firm="Schroders",
+                date="4/2/2026",
+                source="Global Investment Outlook Q2",
+                url="https://example.test/outlook",
+            ),
+        }
+        snapshot = "EM equities are favored in the outlook. " + "Context. " * 30
+        cls.snapshots = {
+            ("source-1", "p1-5"): snapshot,
+            ("source-2", "p1-5"): snapshot,
+        }
+        cls.page_counts = {"source-1": 1, "source-2": 1}
+
+    def test_same_view_across_grouped_docs_keeps_one_corroborated_row(self) -> None:
+        candidates = [_candidate(), _candidate(source_id="source-2", locator="p.7")]
+
+        result = assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots=self.snapshots,
+            page_counts=self.page_counts,
+            group_map=self.GROUP_MAP,
+        )
+
+        self.assertEqual(1, len(result.output_rows))
+        row = result.output_rows[0]
+        self.assertEqual(
+            "Quarterly Markets Review Q1 | Global Investment Outlook Q2", row["Source"]
+        )
+        self.assertEqual("3/10/2026 | 4/2/2026", row["Date"])
+        self.assertIn("Locator: p.3 (Quarterly Markets Review Q1).", row["Full Commentary"])
+        self.assertIn(
+            "Corroborated by companion source: Global Investment Outlook Q2 (p.7).",
+            row["Full Commentary"],
+        )
+        self.assertEqual(["duplicate_same_view"], [f.reason_code for f in result.failures])
+        # Reconciliation stays exact: every candidate is either kept or recorded.
+        self.assertEqual(
+            result.candidate_count, len(result.output_rows) + len(result.failures)
+        )
+
+    def test_conflicting_views_across_grouped_docs_route_to_the_arbiter(self) -> None:
+        candidates = [
+            _candidate(view="O"),
+            _candidate(source_id="source-2", view="U", locator="p.7"),
+        ]
+
+        result = assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots=self.snapshots,
+            page_counts=self.page_counts,
+            group_map=self.GROUP_MAP,
+            arbiter=lambda group: (1, "outlook document beats review document"),
+        )
+
+        self.assertEqual(1, len(result.output_rows))
+        row = result.output_rows[0]
+        self.assertEqual("U", row["View"])
+        self.assertIn(" | ", row["Source"])
+        self.assertEqual("review", row["review_flag"])
+        self.assertIn("Arbiter: outlook document beats review document", row["Full Commentary"])
+        self.assertEqual(["arbitrated_out"], [f.reason_code for f in result.failures])
+
+    def test_ungrouped_sources_are_untouched_by_group_map(self) -> None:
+        result = assemble_candidates(
+            [_candidate()],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots=self.snapshots,
+            page_counts=self.page_counts,
+            group_map={"other-source": "group-9"},
+        )
+
+        row = result.output_rows[0]
+        self.assertEqual("Quarterly Markets Review Q1", row["Source"])
+        self.assertNotIn("(Quarterly", row["Full Commentary"])
 
 
 def _verdict(**overrides: object) -> CheckVerdict:
