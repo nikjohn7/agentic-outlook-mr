@@ -312,6 +312,7 @@ def _pilot_local_pdf_for(firm: str) -> Path | None:
         "alliancebernstein": PREV_EXCEL_DIR / "alliance-bernstein.pdf",
         "jpmorganassetmanagement": PREV_EXCEL_DIR / "jp-morgan.pdf",
         "pimco": PREV_EXCEL_DIR / "PIMCO.pdf",
+        "schroders": PREV_EXCEL_DIR / "Quarterly markets review - Q1 2026.pdf",
     }
     path = mapping.get(normalized)
     return path if path and path.exists() else None
