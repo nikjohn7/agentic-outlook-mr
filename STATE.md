@@ -45,7 +45,7 @@ prompts are indexed in `prompts/REGISTRY.md`. Blind pilots `pilot-01`,
 is the first with the checker + arbiter steps active) are frozen in `runs/`
 awaiting user review; `POC_PLAN.md` locks the 3-phase build order and
 LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`, `playwright` (+ chromium). 76 unittests pass.
+`trafilatura`, `htmldate`, `playwright` (+ chromium). 77 unittests pass.
 
 ## Recent Changes
 
@@ -140,10 +140,14 @@ LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   whether the softer key-token check should also cover `prose` evidence when
   the cited page's snapshot is detected as scrambled (column-merge/rotated
   text).
-- Grouping live test (pilot-04): user to supply the second Schroders doc (the
-  GT pairs the pilot's Q1 review with an outlook piece) plus a group-notes
-  line. New client questions: which Date/URL a combined pipe-joined row
-  should carry, and confirm the outlook-beats-review arbiter rule.
+- Grouping live test (pilot-04) is staged: pilot.csv gained the second
+  Schroders doc ("Our multi-asset investment views – March 2026", 3/20/2026,
+  user-downloaded PDF in `prev-excel/`; the pilot firm→PDF mapping now
+  disambiguates on title), notes at `prev-excel/group-notes.md`; a live
+  resolver smoke grouped the pair with no warnings. Run blind in a fresh
+  session with `--group-notes prev-excel/group-notes.md`. Client questions:
+  which Date/URL a combined pipe-joined row should carry, and confirm the
+  outlook-beats-review arbiter rule.
 - Disputed ground-truth calls (7: BMO Cash/Quality/EM Debt/CAD prose-vs-dial,
   Barings Hedge Funds/EM Equities/TIPs) and possibly-missing rows (3: BMO
   Growth and Materials, Barings US Small Cap) were sent to the Markets Recon

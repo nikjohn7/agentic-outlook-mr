@@ -86,7 +86,7 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
     rows = _read_csv(path)
     sources: list[SourceRecord] = []
     for row in rows:
-        local_path = _pilot_local_pdf_for(row["Firm"])
+        local_path = _pilot_local_pdf_for(row["Firm"], row["Source"])
         url = row["MR Link"]
         sources.append(
             SourceRecord(
@@ -306,16 +306,33 @@ def _read_csv(path: str | Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _pilot_local_pdf_for(firm: str) -> Path | None:
-    normalized = re.sub(r"[^a-z0-9]+", "", firm.lower())
-    mapping = {
+def _pilot_local_pdf_for(firm: str, source: str = "") -> Path | None:
+    """Pilot rows map to local PDFs by firm; a firm with more than one pilot
+    doc (the Schroders review + outlook pair) disambiguates on the title."""
+    firm_key = _normalize_lookup_key(firm)
+    by_firm_and_source = {
+        (
+            "schroders",
+            _normalize_lookup_key("Quarterly markets review - Q1 2026"),
+        ): PREV_EXCEL_DIR / "Quarterly markets review - Q1 2026.pdf",
+        (
+            "schroders",
+            _normalize_lookup_key("Our multi-asset investment views – March 2026"),
+        ): PREV_EXCEL_DIR / "Our multi-asset investment views – March 2026.pdf",
+    }
+    by_firm = {
         "alliancebernstein": PREV_EXCEL_DIR / "alliance-bernstein.pdf",
         "jpmorganassetmanagement": PREV_EXCEL_DIR / "jp-morgan.pdf",
         "pimco": PREV_EXCEL_DIR / "PIMCO.pdf",
-        "schroders": PREV_EXCEL_DIR / "Quarterly markets review - Q1 2026.pdf",
     }
-    path = mapping.get(normalized)
+    path = by_firm_and_source.get((firm_key, _normalize_lookup_key(source))) or by_firm.get(
+        firm_key
+    )
     return path if path and path.exists() else None
+
+
+def _normalize_lookup_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
 def _copy_pdf(source: SourceRecord, output_dir: Path) -> Path:

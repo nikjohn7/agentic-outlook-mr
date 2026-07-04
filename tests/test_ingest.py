@@ -61,9 +61,22 @@ class IngestTest(unittest.TestCase):
     def test_source_limit_is_enforced(self) -> None:
         sources = load_pilot_sources()
 
-        enforce_source_limit(sources, limit=5)
+        enforce_source_limit(sources, limit=6)
         with self.assertRaises(ValueError):
-            enforce_source_limit(sources, limit=4)
+            enforce_source_limit(sources, limit=5)
+
+    def test_pilot_schroders_pair_maps_to_distinct_local_pdfs(self) -> None:
+        schroders = [source for source in load_pilot_sources() if source.firm == "Schroders"]
+
+        self.assertEqual(2, len(schroders))
+        self.assertEqual(
+            {
+                "Quarterly markets review - Q1 2026.pdf",
+                "Our multi-asset investment views – March 2026.pdf",
+            },
+            {source.local_path.name for source in schroders},
+        )
+        self.assertEqual({"pdf"}, {source.source_type for source in schroders})
 
     def test_detect_pdf_from_path_or_url(self) -> None:
         self.assertEqual("pdf", detect_source_type("https://example.com/a.pdf"))
