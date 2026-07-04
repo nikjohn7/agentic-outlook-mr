@@ -38,6 +38,31 @@ LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Recent Changes
 
+- 2026-07-04: Made model and reasoning effort explicit per run. `run.py` gained
+  required `--model`/`--effort` flags (validated in `resolve_engine_settings`,
+  threaded through `run_pipeline`/`analyze_source` into `llm.py`, which passes
+  `--model`/`--effort` to `claude -p` and `-m`/`-c model_reasoning_effort` to
+  `codex exec`). Codex is pinned to `gpt-5.5` (`CODEX_MODEL`); claude accepts
+  an alias or full name and no longer silently inherits the CLI settings
+  default. The manifest records a Run configuration section
+  (engine/model/effort). 9 new tests; 41 total pass.
+- 2026-07-04: Built `prompts/brain.md` (now v1.1, ~1.4k tokens) from the
+  user's five-source ground truth in `ground-truth/ground-truth.csv` (Schwab,
+  CBRE IM, Cantor Fitzgerald, BMO GAM, Barings — no pilot-source overlap, so
+  blindness holds). All 69 GT rows validated against the locked taxonomy;
+  every row checked against its source (3 live pages; CBRE PDF + a
+  user-supplied BMO print-to-PDF saved in `ground-truth/`). Encodes
+  house-scale→view translation (incl. v1.1 published-level-wins: a printed
+  dial/score/tier is the call; prose tone and change verbs never override
+  it), implied-call rules, not-a-call boundaries, snapping defaults, and
+  `reasoning` style. Fixed the Cantor block of the GT CSV in place (its Full
+  Commentary column had been sorted independently of its rows; re-paired and
+  keyword-verified, views untouched). Wrote
+  `ground-truth/review-notes-for-markets-recon.md` for the client: 7 disputed
+  calls (4 BMO rows where prose tone was used over printed Neutral dials —
+  Cash, Quality, EM Debt, CAD; 3 Barings rows), 3 possibly missing rows
+  (BMO Growth/Materials, Barings US Small Cap), minor number slips. Registry
+  updated; 32 tests pass.
 - 2026-07-04: Wired the Phase 2 analyze path (still blind — not run live).
   `run.py` now does ingest → per-chunk `analyze_chunk.md` call with rolling
   `memory.md` → assemble into `runs/<run-id>/{output,failures,manifest}`.
@@ -93,13 +118,18 @@ LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Next / Open
 
-- Phase 2 remaining: build `prompts/brain.md` in a **separate session** (needs
-  the user's saved ground truth, pilot sources excluded), then run the blind
-  pilot in another fresh session (`python -m src.run --sources pilot --run-id
-  <id> --engine <claude|codex>`), freeze `runs/<id>/output.csv`, and evaluate
-  against held-back originals. The analyze path itself is wired and unit-tested
-  but has never been run live — first live action of the pilot session is a
-  single-chunk sanity call.
+- Phase 2 remaining: run the blind pilot in a fresh session (`python -m
+  src.run --sources pilot --run-id <id> --engine claude --model <alias>
+  --effort <level>`; for codex omit `--model`), freeze `runs/<id>/output.csv`,
+  and evaluate against held-back originals. The analyze path is wired and
+  unit-tested but has never been run live — first live action of the pilot
+  session is a single-chunk sanity call.
+- Disputed ground-truth calls (7: BMO Cash/Quality/EM Debt/CAD prose-vs-dial,
+  Barings Hedge Funds/EM Equities/TIPs) and possibly-missing rows (3: BMO
+  Growth and Materials, Barings US Small Cap) were sent to the Markets Recon
+  team as review notes (drafted 2026-07-04, kept outside the repo); update
+  the GT CSV and, if conventions change, `prompts/brain.md` when they
+  respond.
 - Reconcile source count with client (user says 38, workbook CSV has 37) and
   pick an output date-format policy (see `POC_PLAN.md` open items).
 - Open questions tracked in `CLAUDE.md` (View legend confirmation, ground-truth
