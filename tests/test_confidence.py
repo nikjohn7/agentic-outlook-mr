@@ -34,6 +34,44 @@ class ConfidenceTest(unittest.TestCase):
         self.assertFalse(check.passed)
         self.assertEqual("quote_not_found", check.reason_code)
 
+    def test_prose_quote_matches_across_linebreak_hyphen_join(self) -> None:
+        # The PDF line-broke "AI-related", so the snapshot normalizes to
+        # "AIrelated"; a quote of the rendered page keeps the hyphen. Match.
+        candidate = _candidate(evidence_quote="AI-related spending is set to move up a gear")
+        snapshot = "We think that as AI-\nrelated spending is set to move up a gear this year."
+
+        self.assertTrue(evidence_passes(candidate, snapshot).passed)
+
+    def test_prose_quote_matches_when_snapshot_keeps_intra_word_hyphen(self) -> None:
+        # Reverse direction: snapshot keeps the hyphen, the quote omits it.
+        candidate = _candidate(evidence_quote="AIrelated spending is set to move up a gear")
+        snapshot = "We think that AI-related spending is set to move up a gear this year."
+
+        self.assertTrue(evidence_passes(candidate, snapshot).passed)
+
+    def test_prose_quote_matches_across_dash_variants(self) -> None:
+        # En dash and em dash fold to a plain hyphen (then to nothing intra-word).
+        en_dash = _candidate(evidence_quote="the risk-reward balance favors equities")
+        em_dash = _candidate(evidence_quote="a long-term overweight stance")
+
+        self.assertTrue(
+            evidence_passes(en_dash, "In our view the risk–reward balance favors equities.").passed
+        )
+        self.assertTrue(
+            evidence_passes(em_dash, "We hold a long—term overweight stance today.").passed
+        )
+
+    def test_prose_paraphrase_or_reorder_still_fails(self) -> None:
+        # Only typography is folded: reordered/stitched wording must STILL fail.
+        candidate = _candidate(evidence_quote="emerging market equities are overweight")
+
+        check = evidence_passes(
+            candidate, "We are overweight emerging market equities for the second half."
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+
     def test_semantic_implied_call_scores_high_at_threshold(self) -> None:
         candidate = _candidate(taxonomy_match="semantic", call_language="implied")
 

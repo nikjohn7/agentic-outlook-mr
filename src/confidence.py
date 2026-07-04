@@ -58,8 +58,24 @@ class ConfidenceResult:
     checker_note: str = ""
 
 
+# Dash-like characters (typographic hyphens, en/em/figure dash, horizontal bar,
+# minus sign) are folded to a plain hyphen so line-break joining and intra-word
+# removal treat them uniformly.
+_DASH_VARIANTS = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
+
+
 def normalize_quote_text(value: str) -> str:
-    """Normalize source and quote text before deterministic quote matching."""
+    """Normalize source and quote text before deterministic quote matching.
+
+    Folds typographic and PDF-extraction seams SYMMETRICALLY on both quote and
+    snapshot so they cannot decide a match: curly quotes, dash variants, the
+    soft/line-break hyphen, and intra-word hyphens (a hyphen at a line break is
+    joined into the word, so a hyphen's presence in the snapshot is unreliable;
+    "AI-related" and "AIrelated" must compare equal in either direction). Exotic
+    spaces (NBSP etc.) are already handled by NFKC and the whitespace collapse
+    below, so they are not repeated here. Word content and order are untouched,
+    so stitched, reordered, or paraphrased quotes still fail.
+    """
     text = unicodedata.normalize("NFKC", value)
     text = text.translate(
         str.maketrans(
@@ -68,11 +84,14 @@ def normalize_quote_text(value: str) -> str:
                 "\u2019": "'",
                 "\u201c": '"',
                 "\u201d": '"',
+                "\u00ad": None,  # soft hyphen: a discretionary, invisible break
             }
         )
     )
-    text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)
+    text = re.sub(f"[{_DASH_VARIANTS}]", "-", text)
+    text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)  # hyphen consumed by a line break
     text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"(?<=\w)-(?=\w)", "", text)  # intra-word hyphens are unreliable in extractions
     return text.strip()
 
 
