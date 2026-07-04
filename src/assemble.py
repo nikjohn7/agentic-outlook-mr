@@ -267,6 +267,8 @@ def _manifest_text(
         lines.append("## Sources processed")
         for summary in source_summaries:
             flag_text = " [visual_heavy]" if summary.get("visual_heavy") else ""
+            if summary.get("printed_pdf"):
+                flag_text += " [printed-to-pdf]"
             pages = summary.get("page_count")
             chunk_count = summary.get("chunk_count", 0)
             size = f"{pages}p / {chunk_count} chunks" if pages else f"{chunk_count} chunks"

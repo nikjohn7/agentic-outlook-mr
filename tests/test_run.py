@@ -181,6 +181,31 @@ class ChunkContentTest(unittest.TestCase):
             chunk = Chunk(chunk_id="char:2-5", locator="char:2-5", source_path=snapshot)
             self.assertEqual("CDE", _html_chunk_text(chunk))
 
+    def test_printed_html_chunk_reads_like_a_pdf_with_capture_note(self) -> None:
+        source = SourceRecord(
+            source_id="aberdeen-outlook",
+            firm="Aberdeen Investments",
+            date="6/1/2026",
+            source="EM Outlook",
+            url="https://example.test/outlook",
+            resolved_url="https://example.test/outlook",
+            source_type="html",
+        )
+        printed_path = Path("/tmp/printed.pdf")
+        ingested = IngestedSource(
+            source=source,
+            snapshot_text_path=Path("/tmp/snapshot.txt"),
+            native_source_path=printed_path,
+            chunks=[Chunk(chunk_id="p1-3", locator="p.1-3", source_path=printed_path)],
+            page_count=3,
+            printed_pdf=True,
+        )
+        content = _chunk_content(ingested, ingested.chunks[0])
+        self.assertIn("pages 1-3", content)
+        self.assertIn("print-to-PDF capture", content)
+        self.assertIn("https://example.test/outlook", content)
+        self.assertIn("rendered pages", content)
+
 
 if __name__ == "__main__":
     unittest.main()

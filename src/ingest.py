@@ -27,11 +27,28 @@ MAX_SOURCES_PER_RUN = 20
 # Graphics in HTML are invisible to every text path we have (trafilatura text,
 # raw markup, markdown fetch), so a page that carries its views in charts or
 # infographics can silently under-report calls. Content graphics (<img>,
-# <canvas>, <figure>) at or above this count flag the source `visual_heavy` for
-# analyst awareness; <svg> is counted but excluded from the flag because it is
-# overwhelmingly icons/logos.
+# <canvas>, <figure>) at or above this count flag the source `visual_heavy`;
+# <svg> is counted but excluded from the flag because it is overwhelmingly
+# icons/logos. A visual_heavy source is printed to PDF with a headless browser
+# and then flows through the PDF path (rendered pages, page locators, per-page
+# text snapshot) so its graphics are readable, not just its extracted text.
 VISUAL_MARKUP_TAGS = ("img", "svg", "canvas", "figure")
 VISUAL_HEAVY_IMAGE_THRESHOLD = 5
+
+PRINTED_PDF_NAME = "printed.pdf"
+PRINT_NAVIGATION_TIMEOUT_MS = 60_000
+PRINT_NETWORK_IDLE_TIMEOUT_MS = 15_000
+
+# Cookie banners and "professional investor" gates are position:fixed, so
+# chromium repeats them over the content of every printed page. Before
+# printing, buttons matching this pattern are clicked (best-effort, stacked
+# dialogs handled by looping) to clear such overlays.
+CONSENT_BUTTON_PATTERN = re.compile(
+    r"^\s*(accept( all)?( cookies)?|i agree|agree( and continue)?|"
+    r"i accept|got it|continue|confirm|ok)\s*$",
+    re.IGNORECASE,
+)
+MAX_CONSENT_DIALOGS = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,9 +76,10 @@ class IngestedSource:
     snapshot_text_path: Path
     native_source_path: Path
     chunks: list[Chunk]
-    page_count: int | None = None  # PDF page count; None for HTML
+    page_count: int | None = None  # PDF page count; None for text-path HTML
     visual_markup: dict[str, int] | None = None  # HTML tag counts; None for PDF
     visual_heavy: bool = False  # HTML likely carries views in graphics the text paths cannot see
+    printed_pdf: bool = False  # visual_heavy HTML captured as print-to-PDF and analyzed as a PDF
 
 
 def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
@@ -141,13 +159,20 @@ def detect_source_type(locator: str) -> str:
     return "pdf" if path.lower().endswith(".pdf") else "html"
 
 
-def create_snapshot(source: SourceRecord, work_dir: str | Path) -> IngestedSource:
+def create_snapshot(
+    source: SourceRecord,
+    work_dir: str | Path,
+    *,
+    printer=None,
+) -> IngestedSource:
+    """printer overrides the headless-browser print-to-PDF step (tests)."""
     output_dir = Path(work_dir) / source.source_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
     page_count: int | None = None
     visual_markup: dict[str, int] | None = None
     visual_heavy = False
+    printed_pdf = False
     if source.source_type == "pdf":
         native_path = _copy_pdf(source, output_dir)
         snapshot_text, page_count = _extract_pdf_text(native_path)
@@ -155,15 +180,24 @@ def create_snapshot(source: SourceRecord, work_dir: str | Path) -> IngestedSourc
         snapshot_path.write_text(snapshot_text, encoding="utf-8")
         chunks = _pdf_chunks(native_path, page_count)
     else:
-        native_path = output_dir / "snapshot.html"
+        html_path = output_dir / "snapshot.html"
         html = _fetch_html(source.resolved_url)
-        native_path.write_text(html, encoding="utf-8")
+        html_path.write_text(html, encoding="utf-8")
         visual_markup = count_visual_markup(html)
         visual_heavy = is_visual_heavy(visual_markup)
-        text = trafilatura.extract(html, include_tables=True) or ""
         snapshot_path = output_dir / "snapshot.txt"
-        snapshot_path.write_text(text, encoding="utf-8")
-        chunks = _html_chunks(snapshot_path, len(text))
+        if visual_heavy:
+            native_path = output_dir / PRINTED_PDF_NAME
+            (printer or print_url_to_pdf)(source.resolved_url, native_path)
+            snapshot_text, page_count = _extract_pdf_text(native_path)
+            snapshot_path.write_text(snapshot_text, encoding="utf-8")
+            chunks = _pdf_chunks(native_path, page_count)
+            printed_pdf = True
+        else:
+            native_path = html_path
+            text = trafilatura.extract(html, include_tables=True) or ""
+            snapshot_path.write_text(text, encoding="utf-8")
+            chunks = _html_chunks(snapshot_path, len(text))
 
     (output_dir / "chunks.json").write_text(
         json.dumps([_chunk_to_dict(chunk) for chunk in chunks], indent=2),
@@ -177,6 +211,7 @@ def create_snapshot(source: SourceRecord, work_dir: str | Path) -> IngestedSourc
                 "page_count": page_count,
                 "visual_markup": visual_markup,
                 "visual_heavy": visual_heavy,
+                "printed_pdf": printed_pdf,
             },
             indent=2,
         ),
@@ -190,7 +225,59 @@ def create_snapshot(source: SourceRecord, work_dir: str | Path) -> IngestedSourc
         page_count=page_count,
         visual_markup=visual_markup,
         visual_heavy=visual_heavy,
+        printed_pdf=printed_pdf,
     )
+
+
+def print_url_to_pdf(url: str, output_path: Path) -> None:
+    """Capture a rendered web page as a paginated PDF via headless chromium.
+
+    Screen CSS is emulated (print stylesheets often hide the page's graphics),
+    consent/investor-gate overlays are dismissed so they don't mask every
+    printed page, the page is scrolled once so lazy-loaded images actually
+    load, and the network-idle wait is best-effort (analytics beacons keep
+    some pages from ever going idle).
+    """
+    from playwright.sync_api import Error as PlaywrightError
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(url, wait_until="load", timeout=PRINT_NAVIGATION_TIMEOUT_MS)
+            try:
+                page.wait_for_load_state(
+                    "networkidle", timeout=PRINT_NETWORK_IDLE_TIMEOUT_MS
+                )
+            except PlaywrightTimeoutError:
+                pass
+            for _ in range(MAX_CONSENT_DIALOGS):
+                try:
+                    page.get_by_role("button", name=CONSENT_BUTTON_PATTERN).first.click(
+                        timeout=2_000
+                    )
+                    page.wait_for_timeout(500)
+                except PlaywrightError:
+                    break
+            # Scroll slowly enough for lazy images AND scroll-triggered JS
+            # charts to render, then let chart animations finish before
+            # printing (a fast pass leaves chart bodies blank in the PDF).
+            page.evaluate(
+                """async () => {
+                    for (let y = 0; y < document.body.scrollHeight; y += 600) {
+                        window.scrollTo(0, y);
+                        await new Promise((resolve) => setTimeout(resolve, 250));
+                    }
+                    window.scrollTo(0, 0);
+                }"""
+            )
+            page.wait_for_timeout(2_000)
+            page.emulate_media(media="screen")
+            page.pdf(path=str(output_path), format="A4", print_background=True)
+        finally:
+            browser.close()
 
 
 def count_visual_markup(html: str) -> dict[str, int]:

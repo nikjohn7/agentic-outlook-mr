@@ -92,6 +92,7 @@ def run_pipeline(
                 "chunk_count": len(ingested.chunks),
                 "candidates": len(candidates),
                 "visual_heavy": ingested.visual_heavy,
+                "printed_pdf": ingested.printed_pdf,
             }
         )
 
@@ -166,11 +167,18 @@ def analyze_source(
 
 def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
     """Render the chunk the model must read: native PDF pages, or HTML text."""
-    if ingested.source.source_type == "pdf":
+    if ingested.source.source_type == "pdf" or ingested.printed_pdf:
         pages = chunk.locator.replace("p.", "")
+        capture_note = (
+            f"(This PDF is a print-to-PDF capture of the web page at "
+            f"{ingested.source.resolved_url}; use its page numbers as locators.)\n\n"
+            if ingested.printed_pdf
+            else ""
+        )
         return (
             f"This chunk is pages {pages} of the PDF file at:\n"
             f"`{chunk.source_path}`\n\n"
+            f"{capture_note}"
             "Open and read those pages as rendered pages — view them so you see "
             "tables, positioning/view grids, arrows, and dial gauges as printed, not "
             "only the extracted text. Cite what you actually see on the page."

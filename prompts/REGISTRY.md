@@ -5,7 +5,7 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
-### `analyze_chunk.md` — v1 (2026-07-04)
+### `analyze_chunk.md` — v1.1 (2026-07-04)
 
 The one LLM step. Reads a single native chunk (PDF page range viewed as rendered
 pages, or HTML extracted text), finds allocation calls, snaps each to a locked
@@ -34,6 +34,13 @@ parent→child fan-out), semantic snapping with `taxonomy_match` recorded,
 `taxonomy_match: none` is emitted (routed to review) not dropped, `UNCERTAIN`
 means source ambiguity only, and table/visual evidence needs a specific
 table/figure locator.
+
+v1.1 (post-pilot-01): text inside a designed layout artifact (callout box,
+sidebar, banner, stat panel, infographic column) must be tagged
+`evidence_kind: visual`, not `prose`, even when it is full sentences — the
+text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
+rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
+gets the key-token-on-page check instead.
 
 ### `brain.md` — v1.1 (2026-07-04)
 

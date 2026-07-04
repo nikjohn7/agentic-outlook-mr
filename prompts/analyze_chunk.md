@@ -68,6 +68,8 @@ leave little room, we are trimming risk"). If it is neither, it is not a call.
 **Evidence.**
 - `evidence_kind: prose` — quote the supporting sentence(s) **verbatim** from
   the document text in `evidence_quote`. Copy exactly; do not paraphrase.
+  Use `prose` **only for text in the main reading flow** — running paragraphs
+  and ordinary body text.
 - `evidence_kind: table` — the call comes from a table. In `evidence_quote`
   give the row/column labels and cell value you read (e.g. "US Duration —
   Underweight"). The `locator` must name the specific table.
@@ -75,6 +77,12 @@ leave little room, we are trimming risk"). If it is neither, it is not a call.
   infographic. In `evidence_quote` describe what you see (e.g. "Inflation dial
   needle between Target and Overshoot"). The `locator` must name the specific
   figure.
+- **Text inside a designed layout artifact is `visual`, not `prose`.** A
+  callout box, sidebar, banner, stat panel, or infographic column counts as
+  `visual` even when it contains full sentences: quote the text you see, and
+  name the box or panel in the `locator`. (Plain text extraction scrambles
+  boxed and multi-column layouts, so verbatim matching is only reliable for
+  main body text — misfiling box text as `prose` gets a correct call rejected.)
 
 **Locator.**
 - prose/PDF: `p.N` (the page the quote is on).

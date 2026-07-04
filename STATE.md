@@ -15,12 +15,15 @@ Haiku/Sonnet/Opus tiers are reserved for judgment-heavy extraction and review.
 The deterministic spine is `src/taxonomy.py` (exact 396-leaf validation +
 `grouped_block()` for prompt injection), `src/schemas.py` (LLM candidate
 contract), `src/confidence.py` (quote/table/visual evidence checks + rubric
-scoring), `src/assemble.py` (`output.csv`/`failures.csv`/`manifest.md`),
+scoring, incl. per-source read-quality floors: PDF chars/page, HTML snapshot
+length), `src/assemble.py` (`output.csv`/`failures.csv`/`manifest.md`),
 `src/ingest.py` (thin pilot/source loading, snapshots, chunk boundaries,
-visual-heavy detection), and `src/llm.py` (swappable headless `claude -p` /
-`codex exec`, with `{{name}}` template-var injection). Output rows are the 10
-workbook columns plus `confidence`, `band`, and `review_flag`; one-hot columns
-are intentionally omitted.
+visual-heavy detection, Playwright print-to-PDF capture of visual-heavy HTML),
+and `src/llm.py` (swappable headless `claude -p` / `codex exec`, with
+`{{name}}` template-var injection). Output rows are the 10 workbook columns
+plus `confidence`, `band`, and `review_flag`; one-hot columns are
+intentionally omitted. A `.claude/settings.json` hook blocks git commits
+containing Claude/Anthropic self-attribution — commit messages stay plain.
 
 The Phase 2 analyze path is now wired end-to-end (not yet run live on the
 pilot). `src/run.py` ingests each source, then for every chunk fills the
@@ -34,10 +37,43 @@ unseen-figures rules, JSON contract) and indexed in `prompts/REGISTRY.md`.
 parsed; the first milestone is a blind pilot on 5 sources in
 `prev-excel/pilot.csv`; `POC_PLAN.md` locks the 3-phase build order and
 LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`. 32 unittests pass.
+`trafilatura`, `htmldate`, `playwright` (+ chromium). 44 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-04: Applied both post-pilot-01 fixes. (1) `analyze_chunk.md` v1.1:
+  text inside a designed layout artifact (callout box, sidebar, banner, stat
+  panel, infographic column) must be tagged `evidence_kind: visual`, not
+  `prose`, so it gets the key-token-on-page check instead of the hard verbatim
+  check that rejected 12 correct pilot calls. (2) `visual_heavy` HTML sources
+  are now printed to PDF at ingest (`print_url_to_pdf` in `src/ingest.py`:
+  headless chromium, screen-CSS emulation, consent/investor-gate overlay
+  dismissal, slow scroll + settle wait so lazy images and scroll-triggered JS
+  charts finish rendering) and flow through the native PDF path — page chunks,
+  `p.N` locators, per-page pdfplumber snapshot; `printed_pdf` recorded in
+  `IngestedSource`, `ingest_meta.json`, and the run manifest, and the chunk
+  prompt names the capture's origin URL. Live-verified on Aberdeen: 10-page
+  capture with all three JS charts fully rendered (a fast scroll left chart
+  bodies blank; the consent modal otherwise masked every printed page).
+  Playwright + chromium added to the venv; chromium-printed fixture at
+  `tests/fixtures/printed_page.pdf`; 44 tests pass. PDF rasterization was
+  explicitly skipped — Phase 1 proved both engines already read PDFs visually.
+- 2026-07-04: Ran the first live blind pilot (`pilot-01`, claude/opus/medium)
+  after a passing single-chunk sanity call (JPM PDF, 4 candidates, 0 failures).
+  All 5 sources ingested; 24 candidates → 11 kept, 13 failed, 0 chunk failures
+  (count reconciles). Frozen at `runs/pilot-01/`. Kept calls are well-formed
+  with verbatim prose or forecast-table evidence. **All 13 failures are
+  `quote_not_found`, and ~12 are false negatives from a native-read-vs-snapshot
+  gap:** the model reads rendered PDF pages, but the deterministic verbatim
+  check runs against the pdfplumber text snapshot, which scrambles/column-merges
+  infographic and callout-box text. PIMCO (a 2-page infographic) lost all 10
+  candidates this way — its box phrases exist on the page but not as contiguous
+  strings in the snapshot (key tokens confirmed present); AllianceBernstein lost
+  2 'Central Narrative' box calls. Only ~1 (JPM stitched-fragment quote) is a
+  true rejection. Remediation for the next blind run: have the model classify
+  densely-laid-out box/infographic prose as `evidence_kind: visual` so it gets
+  the softer key-token-on-page check (which recovers all 10 PIMCO calls) instead
+  of the hard verbatim check. Run not hand-edited; tuning happens between runs.
 - 2026-07-04: Made model and reasoning effort explicit per run. `run.py` gained
   required `--model`/`--effort` flags (validated in `resolve_engine_settings`,
   threaded through `run_pipeline`/`analyze_source` into `llm.py`, which passes
@@ -90,40 +126,16 @@ LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   dial needle positions (matching claude and manual reading). Engine routing
   is therefore unconstrained by source type. Codex writes rendered pages to
   `tmp/` in the workdir (gitignored).
-- 2026-07-03: Added a `.claude/settings.json` hook blocking git commits with
-  Claude/Anthropic self-attribution (co-author lines, "Generated with...",
-  anthropic.com/claude.ai links) while allowing genuine mentions like
-  `CLAUDE.md`; needs a `/hooks` reload or restart to take effect.
-- 2026-07-03: Added HTML visual-heavy detection to `src/ingest.py`:
-  `count_visual_markup`/`is_visual_heavy` count content graphics (img/canvas/
-  figure; svg excluded as icon noise) in raw HTML, flag sources at ≥5, and
-  persist per-source `ingest_meta.json` (source type, page count, visual
-  counts, flag); `POC_PLAN.md` gains the matching ingest/prompt rules and a v2
-  backlog item for headless-browser screenshots of visual-heavy pages. On the
-  pilot: Aberdeen flags, Schroders does not.
-- 2026-07-03: Made the rubric's 10-point read-quality signal real:
-  `snapshot_read_quality` in `src/confidence.py` (PDF ≥200 chars/page to catch
-  scanned/image-only text layers; HTML ≥1,000 chars to catch blocked/empty
-  fetches), `page_count` threaded through `IngestedSource` and
-  `assemble_candidates`; previously the signal was always 10.
-- 2026-07-03: Revised `POC_PLAN.md` after design review — LLM-native ingestion
-  (native PDF/HTML reading; parsing libs demoted to snapshot layer), concrete
-  headless `llm.py` spec with JSON repair-retry, `failures.csv` split
-  (`UNCERTAIN` reserved for source ambiguity; pipeline failures get reason
-  codes), contract updates (`taxonomy_match: exact|semantic|none`,
-  `evidence_kind: prose|table|visual`, table/figure-specific locators for
-  visual evidence), granularity rule + full in-prompt taxonomy, quote-check
-  normalization spec, eval recall/abstain metrics, and session-separated
-  brain-building for pilot blindness.
 
 ## Next / Open
 
-- Phase 2 remaining: run the blind pilot in a fresh session (`python -m
-  src.run --sources pilot --run-id <id> --engine claude --model <alias>
-  --effort <level>`; for codex omit `--model`), freeze `runs/<id>/output.csv`,
-  and evaluate against held-back originals. The analyze path is wired and
-  unit-tested but has never been run live — first live action of the pilot
-  session is a single-chunk sanity call.
+- Phase 2 evaluation: `pilot-01` is frozen and awaits the user's blind review
+  against held-back originals (per-call view/leaf/citation). Both post-pilot
+  fixes (`evidence_kind: visual` for box text; print-to-PDF for visual-heavy
+  HTML) are applied and the next blind run (`pilot-02`) can go whenever the
+  user is ready. Still open: whether the softer key-token check should also
+  cover `prose` evidence when the cited page's snapshot is detected as
+  scrambled (column-merge/rotated text).
 - Disputed ground-truth calls (7: BMO Cash/Quality/EM Debt/CAD prose-vs-dial,
   Barings Hedge Funds/EM Equities/TIPs) and possibly-missing rows (3: BMO
   Growth and Materials, Barings US Small Cap) were sent to the Markets Recon
