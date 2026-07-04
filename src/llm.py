@@ -14,18 +14,40 @@ from src.schemas import CandidateCall, SchemaError
 Runner = Callable[[list[str], str], subprocess.CompletedProcess[str]]
 
 
+# Codex runs are pinned to one model; only reasoning effort varies per task.
+CODEX_MODEL = "gpt-5.5"
+
+
 @dataclass(frozen=True, slots=True)
 class EngineConfig:
     name: str
     command_prefix: tuple[str, ...]
+    efforts: tuple[str, ...]
 
-    def command(self, prompt: str) -> list[str]:
-        return [*self.command_prefix, prompt]
+    def command(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+    ) -> list[str]:
+        args = list(self.command_prefix)
+        if self.name == "codex":
+            args += ["-m", CODEX_MODEL]
+            if effort is not None:
+                args += ["-c", f'model_reasoning_effort="{effort}"']
+        else:
+            if model is not None:
+                args += ["--model", model]
+            if effort is not None:
+                args += ["--effort", effort]
+        args.append(prompt)
+        return args
 
 
 ENGINE_CONFIGS = {
-    "claude": EngineConfig("claude", ("claude", "-p")),
-    "codex": EngineConfig("codex", ("codex", "exec")),
+    "claude": EngineConfig("claude", ("claude", "-p"), ("low", "medium", "high", "xhigh", "max")),
+    "codex": EngineConfig("codex", ("codex", "exec"), ("minimal", "low", "medium", "high", "xhigh")),
 }
 
 
@@ -47,6 +69,8 @@ def call(
     inputs: dict[str, Any],
     *,
     engine: str,
+    model: str | None = None,
+    effort: str | None = None,
     max_repair_attempts: int = 2,
     runner: Runner | None = None,
     template_vars: dict[str, Any] | None = None,
@@ -58,11 +82,21 @@ def call(
     (locked taxonomy, few-shot brain, rolling memory, the chunk itself) that
     should read as prose rather than escaped JSON. The API port fills the same
     placeholders in the same prompt file.
+
+    model/effort select the underlying model and its reasoning effort. Codex is
+    pinned to CODEX_MODEL (passing anything else raises); claude accepts an
+    alias or full model name. When omitted, the engine CLI's own default
+    applies (the run CLI never omits them; tests may).
     """
     config = ENGINE_CONFIGS.get(engine)
     if config is None:
         valid = ", ".join(sorted(ENGINE_CONFIGS))
         raise ValueError(f"unknown LLM engine {engine!r}; expected one of {valid}")
+    if engine == "codex" and model not in (None, CODEX_MODEL):
+        raise ValueError(f"codex runs are pinned to {CODEX_MODEL}; got {model!r}")
+    if effort is not None and effort not in config.efforts:
+        valid = ", ".join(config.efforts)
+        raise ValueError(f"unknown {engine} effort {effort!r}; expected one of {valid}")
 
     prompt_path = Path(prompt_file)
     base_prompt = _fill_template(prompt_path.read_text(encoding="utf-8"), template_vars)
@@ -72,7 +106,7 @@ def call(
     raw_response = ""
 
     for attempt in range(1, max_repair_attempts + 2):
-        completed = runner(config.command(prompt), prompt)
+        completed = runner(config.command(prompt, model=model, effort=effort), prompt)
         if completed.returncode != 0:
             raise RuntimeError(completed.stderr.strip() or f"{engine} exited with non-zero status")
         raw_response = completed.stdout

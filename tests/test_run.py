@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from src.ingest import Chunk, IngestedSource, SourceRecord
-from src.run import analyze_source, _chunk_content, _html_chunk_text
+from src.run import analyze_source, resolve_engine_settings, _chunk_content, _html_chunk_text
 
 
 def _pdf_source() -> SourceRecord:
@@ -118,6 +118,53 @@ class AnalyzeSourceTest(unittest.TestCase):
         self.assertEqual(2, len(failures))
         self.assertEqual({"json_parse_error"}, {f.reason_code for f in failures})
         self.assertIn("json_parse_error; chunk skipped", memory)
+
+
+class ResolveEngineSettingsTest(unittest.TestCase):
+    def test_claude_requires_an_explicit_model(self) -> None:
+        with self.assertRaises(ValueError):
+            resolve_engine_settings("claude", None, "high")
+
+    def test_claude_passes_model_and_effort_through(self) -> None:
+        self.assertEqual(("fable", "max"), resolve_engine_settings("claude", "fable", "max"))
+
+    def test_codex_pins_model_and_rejects_overrides(self) -> None:
+        self.assertEqual(("gpt-5.5", "high"), resolve_engine_settings("codex", None, "high"))
+        self.assertEqual(("gpt-5.5", "low"), resolve_engine_settings("codex", "gpt-5.5", "low"))
+        with self.assertRaises(ValueError):
+            resolve_engine_settings("codex", "o3", "high")
+
+    def test_effort_is_required_and_validated_per_engine(self) -> None:
+        with self.assertRaises(ValueError):
+            resolve_engine_settings("claude", "fable", None)
+        with self.assertRaises(ValueError):
+            resolve_engine_settings("claude", "fable", "minimal")
+        with self.assertRaises(ValueError):
+            resolve_engine_settings("codex", None, "max")
+
+    def test_model_and_effort_reach_the_engine_command(self) -> None:
+        commands: list[list[str]] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout=_candidate_json("p1-5"), stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            ingested = _ingested_pdf(work_dir)
+            analyze_source(
+                ingested,
+                work_dir,
+                taxonomy_block="- Emerging Markets Equities",
+                brain_text="none",
+                engine="claude",
+                model="fable",
+                effort="high",
+                runner=runner,
+            )
+
+        self.assertEqual(["--model", "fable"], commands[0][2:4])
+        self.assertEqual(["--effort", "high"], commands[0][4:6])
 
 
 class ChunkContentTest(unittest.TestCase):

@@ -170,12 +170,15 @@ def write_run_outputs(
     *,
     source_summaries: list[dict[str, object]] | None = None,
     chunk_failures: list[FailureRecord] | None = None,
+    run_config: dict[str, object] | None = None,
 ) -> None:
     """Write the run's three review files.
 
     chunk_failures are whole-chunk failures (e.g. unparseable model output) that
     produced no candidate; they are recorded in failures.csv and counted
     separately in the manifest so the candidate reconciliation stays exact.
+    run_config (engine/model/effort) is recorded in the manifest so a frozen
+    run states exactly what produced it.
     """
     chunk_failures = chunk_failures or []
     run_dir = Path(output_dir)
@@ -186,7 +189,7 @@ def write_run_outputs(
         FAILURE_COLUMNS,
         [failure.to_row() for failure in [*result.failures, *chunk_failures]],
     )
-    manifest = _manifest_text(result, source_summaries or [], chunk_failures)
+    manifest = _manifest_text(result, source_summaries or [], chunk_failures, run_config)
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
 
 
@@ -242,12 +245,16 @@ def _manifest_text(
     result: AssemblyResult,
     source_summaries: list[dict[str, object]],
     chunk_failures: list[FailureRecord],
+    run_config: dict[str, object] | None = None,
 ) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
-    lines = [
-        "# Run Manifest",
-        "",
+    lines = ["# Run Manifest", ""]
+    if run_config:
+        lines.append("## Run configuration")
+        lines.extend(f"- {key}: {value}" for key, value in run_config.items() if value is not None)
+        lines.append("")
+    lines += [
         "## Candidate reconciliation",
         f"- candidates: {result.candidate_count}",
         f"- kept: {kept}",

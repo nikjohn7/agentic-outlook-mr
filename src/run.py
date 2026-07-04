@@ -16,7 +16,7 @@ from src.ingest import (
     load_pilot_sources,
     load_target_sources,
 )
-from src.llm import LLMParseError, call as llm_call
+from src.llm import CODEX_MODEL, ENGINE_CONFIGS, LLMParseError, call as llm_call
 from src.schemas import CandidateCall, SourceInfo
 from src.taxonomy import load_taxonomy
 
@@ -36,6 +36,8 @@ def run_pipeline(
     sources: list,
     run_id: str,
     engine: str,
+    model: str | None = None,
+    effort: str | None = None,
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
     brain_text: str | None = None,
@@ -75,6 +77,8 @@ def run_pipeline(
             taxonomy_block=taxonomy_block,
             brain_text=brain,
             engine=engine,
+            model=model,
+            effort=effort,
             runner=runner,
             analyze_prompt=analyze_prompt,
         )
@@ -104,6 +108,7 @@ def run_pipeline(
         run_dir,
         source_summaries=source_summaries,
         chunk_failures=chunk_failures,
+        run_config={"engine": engine, "model": model, "effort": effort},
     )
     return result, chunk_failures, run_dir
 
@@ -115,6 +120,8 @@ def analyze_source(
     taxonomy_block: str,
     brain_text: str,
     engine: str,
+    model: str | None = None,
+    effort: str | None = None,
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
 ) -> tuple[list[CandidateCall], list[FailureRecord]]:
@@ -138,6 +145,8 @@ def analyze_source(
                 analyze_prompt,
                 inputs,
                 engine=engine,
+                model=model,
+                effort=effort,
                 runner=runner,
                 template_vars=template_vars,
             )
@@ -212,11 +221,44 @@ def _brain_text() -> str:
     return "No calibration examples are available for this run."
 
 
+def resolve_engine_settings(engine: str, model: str | None, effort: str | None) -> tuple[str, str]:
+    """Validate and resolve the per-run model/effort so every run states them.
+
+    claude: model is required (alias like ``fable``/``opus``/``sonnet`` or a
+    full name) so a run never silently inherits the CLI's settings default.
+    codex: model is pinned to CODEX_MODEL; passing anything else is an error.
+    effort is required for both engines and must be a level the engine accepts.
+    """
+    if engine == "codex":
+        if model not in (None, CODEX_MODEL):
+            raise ValueError(f"--engine codex is pinned to {CODEX_MODEL}; drop --model")
+        model = CODEX_MODEL
+    elif not model:
+        raise ValueError("--model is required with --engine claude (e.g. fable, opus, sonnet)")
+
+    efforts = ENGINE_CONFIGS[engine].efforts
+    if not effort:
+        raise ValueError(f"--effort is required; {engine} accepts: {', '.join(efforts)}")
+    if effort not in efforts:
+        raise ValueError(f"unknown {engine} effort {effort!r}; accepts: {', '.join(efforts)}")
+    return model, effort
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Markets Recon POC runner")
     parser.add_argument("--sources", choices=("pilot", "target"), default="pilot")
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--engine", choices=("claude", "codex"), default="claude")
+    parser.add_argument(
+        "--model",
+        help="model for the run: required with --engine claude; pinned to "
+        f"{CODEX_MODEL} with --engine codex (omit it)",
+    )
+    parser.add_argument(
+        "--effort",
+        help="reasoning effort for the run (required): claude low|medium|high|xhigh|max; "
+        "codex minimal|low|medium|high|xhigh",
+    )
     parser.add_argument("--ingest-only", action="store_true")
     args = parser.parse_args()
 
@@ -229,10 +271,18 @@ def main() -> int:
             create_snapshot(source, work_dir)
         return 0
 
+    try:
+        model, effort = resolve_engine_settings(args.engine, args.model, args.effort)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    print(f"run {args.run_id}: engine={args.engine} model={model} effort={effort}")
     result, chunk_failures, run_dir = run_pipeline(
         sources=sources,
         run_id=args.run_id,
         engine=args.engine,
+        model=model,
+        effort=effort,
     )
     kept = len(result.output_rows)
     failed = len(result.failures) + len(chunk_failures)

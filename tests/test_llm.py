@@ -5,13 +5,32 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.llm import ENGINE_CONFIGS, call, parse_response
+from src.llm import CODEX_MODEL, ENGINE_CONFIGS, call, parse_response
 
 
 class LLMTest(unittest.TestCase):
     def test_engines_are_configured_for_swapping(self) -> None:
         self.assertEqual(("claude", "-p"), ENGINE_CONFIGS["claude"].command_prefix)
         self.assertEqual(("codex", "exec"), ENGINE_CONFIGS["codex"].command_prefix)
+
+    def test_claude_command_carries_model_and_effort(self) -> None:
+        command = ENGINE_CONFIGS["claude"].command("go", model="fable", effort="high")
+        self.assertEqual(["claude", "-p", "--model", "fable", "--effort", "high", "go"], command)
+
+    def test_codex_command_pins_model_and_sets_reasoning_effort(self) -> None:
+        command = ENGINE_CONFIGS["codex"].command("go", effort="high")
+        self.assertEqual(
+            ["codex", "exec", "-m", CODEX_MODEL, "-c", 'model_reasoning_effort="high"', "go"],
+            command,
+        )
+
+    def test_call_rejects_codex_model_override(self) -> None:
+        with self.assertRaises(ValueError):
+            call("unused.md", {}, engine="codex", model="o3", runner=lambda c, p: None)
+
+    def test_call_rejects_unknown_effort(self) -> None:
+        with self.assertRaises(ValueError):
+            call("unused.md", {}, engine="claude", effort="ultra", runner=lambda c, p: None)
 
     def test_parse_response_accepts_fenced_json(self) -> None:
         candidates, summary = parse_response(f"```json\n{_valid_response()}\n```")
