@@ -11,6 +11,7 @@ from src.ingest import (
     SourceRecord,
     count_visual_markup,
     create_snapshot,
+    detect_scrambled_page,
     detect_source_type,
     enforce_source_limit,
     is_visual_heavy,
@@ -20,7 +21,8 @@ from src.ingest import (
 )
 
 
-FIXTURE_PRINTED_PDF = Path(__file__).parent / "fixtures" / "printed_page.pdf"
+FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURE_PRINTED_PDF = FIXTURES / "printed_page.pdf"
 
 
 def _html_source() -> SourceRecord:
@@ -94,6 +96,54 @@ class IngestTest(unittest.TestCase):
     def test_visual_heavy_flag_ignores_svg_icons(self) -> None:
         self.assertTrue(is_visual_heavy({"img": 4, "svg": 0, "canvas": 0, "figure": 1}))
         self.assertFalse(is_visual_heavy({"img": 3, "svg": 40, "canvas": 0, "figure": 0}))
+
+
+def _load_word_fixture(name: str) -> tuple[list[dict[str, object]], float, float]:
+    data = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    return data["words"], data["page_width"], data["page_height"]
+
+
+def _single_column_words() -> list[dict[str, object]]:
+    # 30 lines that each span the page center — no interior gutter.
+    return [
+        {"x0": 50.0, "x1": 500.0, "top": 40.0 + row * 15, "bottom": 52.0 + row * 15}
+        for row in range(30)
+    ]
+
+
+def _two_column_words() -> list[dict[str, object]]:
+    # A left and a right column with an empty gutter across the page center.
+    words: list[dict[str, object]] = []
+    for row in range(30):
+        top = 40.0 + row * 15
+        words.append({"x0": 50.0, "x1": 250.0, "top": top, "bottom": top + 12})
+        words.append({"x0": 330.0, "x1": 530.0, "top": top, "bottom": top + 12})
+    return words
+
+
+class ScrambleDetectorTest(unittest.TestCase):
+    def test_flags_column_interleaved_jpm_page(self) -> None:
+        # Real word boxes extracted from JPM pilot-04 p.2 (two-column layout that
+        # pdfplumber interleaves line-by-line — the quote_not_found failure).
+        words, width, height = _load_word_fixture("jpm_scrambled_p2_words.json")
+
+        self.assertTrue(detect_scrambled_page(words, width, height))
+
+    def test_does_not_flag_clean_single_column_ab_page(self) -> None:
+        # Real word boxes from AB pilot-04 p.7 — clean single-column prose (its
+        # own failure was a stitched quote, which must stay a failure).
+        words, width, height = _load_word_fixture("ab_clean_p7_words.json")
+
+        self.assertFalse(detect_scrambled_page(words, width, height))
+
+    def test_flags_synthetic_two_column_layout(self) -> None:
+        self.assertTrue(detect_scrambled_page(_two_column_words(), 595.0, 842.0))
+
+    def test_does_not_flag_synthetic_single_column_layout(self) -> None:
+        self.assertFalse(detect_scrambled_page(_single_column_words(), 595.0, 842.0))
+
+    def test_too_little_text_is_not_flagged(self) -> None:
+        self.assertFalse(detect_scrambled_page(_two_column_words()[:10], 595.0, 842.0))
 
 
 class PrintToPdfIngestTest(unittest.TestCase):

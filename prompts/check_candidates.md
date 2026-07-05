@@ -52,6 +52,13 @@ one of `pass`, `unclear`, `fail`:
      subject differently.
 
 Rules:
+- An `evidence_quote` containing ` ... ` is an **elided quote**: two or three
+  verbatim passages the extractor joined because the support is split across
+  the document (each passage has already been verified verbatim). Read the
+  stitched spans **together** and judge whether, taken as one body of
+  evidence, they fairly support the claimed `view` (e.g. an up-leg span plus a
+  down-leg span legitimately netting to `N`). Do not fail a call merely because
+  the evidence arrives in spans.
 - Judge each candidate on its own; verdicts must not depend on other
   candidates in the batch.
 - `pass` requires positive support, not absence of doubt about a vague quote —

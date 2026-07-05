@@ -50,6 +50,26 @@ CONSENT_BUTTON_PATTERN = re.compile(
 )
 MAX_CONSENT_DIALOGS = 3
 
+# Scrambled-page detection. pdfplumber reads a page row by row, so a
+# multi-column layout is emitted with the columns interleaved line-by-line
+# ("left-clause right-clause left-clause right-clause..."). No contiguous quote
+# of the rendered page then survives a verbatim check against the snapshot,
+# even though the model (which reads the rendered page) quoted it correctly.
+# We flag such pages deterministically by their defining physical property: a
+# persistent, near-empty vertical gutter that runs the full body height with
+# substantial text on both sides. Line length alone does NOT work — a wide
+# single-column page has long lines too (AB pilot pages run longer than the JPM
+# two-column page), so only the gutter distinguishes them.
+SCRAMBLE_BODY_TOP_FRAC = 0.10  # ignore header band when measuring the gutter
+SCRAMBLE_BODY_BOTTOM_FRAC = 0.92  # ignore footer band
+SCRAMBLE_MIN_BODY_WORDS = 20  # too little text to judge column structure
+SCRAMBLE_Y_ROWS = 40  # vertical resolution of the gutter coverage probe
+SCRAMBLE_X_BINS = 100  # horizontal resolution of the interior gutter scan
+SCRAMBLE_INTERIOR_MIN = 0.30  # a column gutter sits in the page interior,
+SCRAMBLE_INTERIOR_MAX = 0.70  # not in the outer margins
+SCRAMBLE_MIN_SIDE_WORDS = 15  # each column must carry real text, not a sliver
+SCRAMBLE_COVERAGE_MAX = 0.12  # gutter is empty across ~all body rows
+
 
 @dataclass(frozen=True, slots=True)
 class SourceRecord:
@@ -80,6 +100,7 @@ class IngestedSource:
     visual_markup: dict[str, int] | None = None  # HTML tag counts; None for PDF
     visual_heavy: bool = False  # HTML likely carries views in graphics the text paths cannot see
     printed_pdf: bool = False  # visual_heavy HTML captured as print-to-PDF and analyzed as a PDF
+    scrambled_pages: tuple[int, ...] = ()  # 1-indexed pages whose text layer is column-interleaved
 
 
 def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
@@ -173,9 +194,10 @@ def create_snapshot(
     visual_markup: dict[str, int] | None = None
     visual_heavy = False
     printed_pdf = False
+    scrambled_pages: tuple[int, ...] = ()
     if source.source_type == "pdf":
         native_path = _copy_pdf(source, output_dir)
-        snapshot_text, page_count = _extract_pdf_text(native_path)
+        snapshot_text, page_count, scrambled_pages = _extract_pdf_text(native_path)
         snapshot_path = output_dir / "snapshot.txt"
         snapshot_path.write_text(snapshot_text, encoding="utf-8")
         chunks = _pdf_chunks(native_path, page_count)
@@ -189,7 +211,7 @@ def create_snapshot(
         if visual_heavy:
             native_path = output_dir / PRINTED_PDF_NAME
             (printer or print_url_to_pdf)(source.resolved_url, native_path)
-            snapshot_text, page_count = _extract_pdf_text(native_path)
+            snapshot_text, page_count, scrambled_pages = _extract_pdf_text(native_path)
             snapshot_path.write_text(snapshot_text, encoding="utf-8")
             chunks = _pdf_chunks(native_path, page_count)
             printed_pdf = True
@@ -212,6 +234,7 @@ def create_snapshot(
                 "visual_markup": visual_markup,
                 "visual_heavy": visual_heavy,
                 "printed_pdf": printed_pdf,
+                "scrambled_pages": list(scrambled_pages),
             },
             indent=2,
         ),
@@ -226,6 +249,7 @@ def create_snapshot(
         visual_markup=visual_markup,
         visual_heavy=visual_heavy,
         printed_pdf=printed_pdf,
+        scrambled_pages=scrambled_pages,
     )
 
 
@@ -343,9 +367,71 @@ def _copy_pdf(source: SourceRecord, output_dir: Path) -> Path:
     return target
 
 
-def _extract_pdf_text(path: Path) -> tuple[str, int]:
+def _extract_pdf_text(path: Path) -> tuple[str, int, tuple[int, ...]]:
     with pdfplumber.open(path) as pdf:
-        return "\n\n".join(page.extract_text() or "" for page in pdf.pages), len(pdf.pages)
+        text_parts: list[str] = []
+        scrambled: list[int] = []
+        for page_number, page in enumerate(pdf.pages, start=1):
+            text_parts.append(page.extract_text() or "")
+            if detect_scrambled_page(
+                page.extract_words(use_text_flow=False),
+                float(page.width),
+                float(page.height),
+            ):
+                scrambled.append(page_number)
+        return "\n\n".join(text_parts), len(pdf.pages), tuple(scrambled)
+
+
+def detect_scrambled_page(
+    words: list[dict[str, object]],
+    page_width: float,
+    page_height: float,
+) -> bool:
+    """Return True when a PDF page's extracted text is column-interleaved.
+
+    Deterministic and model-free. `words` is a pdfplumber ``extract_words``
+    list (each a mapping with ``x0``/``x1``/``top``/``bottom``). We look only
+    for the physical signature of a multi-column page: a near-empty vertical
+    band in the page interior that separates two well-populated columns across
+    the full body height. A single-column page — however wide its lines — has
+    text crossing every interior x, so it never trips this.
+    """
+    body = [
+        word
+        for word in words
+        if SCRAMBLE_BODY_TOP_FRAC * page_height
+        < float(word["top"])
+        < SCRAMBLE_BODY_BOTTOM_FRAC * page_height
+    ]
+    if len(body) < SCRAMBLE_MIN_BODY_WORDS or page_width <= 0:
+        return False
+    y_top = min(float(word["top"]) for word in body)
+    y_bottom = max(float(word["bottom"]) for word in body)
+    y_span = y_bottom - y_top
+    if y_span <= 0:
+        return False
+
+    for column_bin in range(SCRAMBLE_X_BINS):
+        x = (column_bin + 0.5) / SCRAMBLE_X_BINS * page_width
+        if not (SCRAMBLE_INTERIOR_MIN * page_width < x < SCRAMBLE_INTERIOR_MAX * page_width):
+            continue
+        left = right = 0
+        covered_rows: set[int] = set()
+        for word in body:
+            if float(word["x1"]) < x:
+                left += 1
+            elif float(word["x0"]) > x:
+                right += 1
+            else:  # this word straddles x, so the gutter is not empty at this row
+                row = int((float(word["top"]) - y_top) / y_span * SCRAMBLE_Y_ROWS)
+                covered_rows.add(min(SCRAMBLE_Y_ROWS - 1, row))
+        if (
+            left >= SCRAMBLE_MIN_SIDE_WORDS
+            and right >= SCRAMBLE_MIN_SIDE_WORDS
+            and len(covered_rows) / SCRAMBLE_Y_ROWS <= SCRAMBLE_COVERAGE_MAX
+        ):
+            return True
+    return False
 
 
 def _pdf_chunks(

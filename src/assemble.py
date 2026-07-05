@@ -124,11 +124,16 @@ def assemble_candidates(
     taxonomy: Taxonomy,
     snapshots: dict[tuple[str, str], str],
     page_counts: dict[str, int] | None = None,
+    scrambled_pages: dict[str, set[int]] | None = None,
     verdicts: dict[int, CheckVerdict] | None = None,
     arbiter: Arbiter | None = None,
     group_map: dict[str, str] | None = None,
 ) -> AssemblyResult:
     """page_counts maps source_id -> PDF page count (absent for HTML sources).
+
+    scrambled_pages maps source_id -> the set of column-interleaved page numbers
+    (see src/ingest.detect_scrambled_page); a prose call citing one of them uses
+    the degraded key-token check, capping confidence and forcing review.
 
     verdicts maps candidate list index -> checker verdict; None means the
     checker step is not in play (no caps), while a dict with a missing index
@@ -146,6 +151,7 @@ def assemble_candidates(
     for index, candidate in enumerate(candidates):
         snapshot_text = snapshots.get((candidate.source_id, candidate.chunk_id), "")
         page_count = (page_counts or {}).get(candidate.source_id)
+        source_scrambled = frozenset((scrambled_pages or {}).get(candidate.source_id, ()))
         verdict = (verdicts or {}).get(index)
         try:
             scored.append(
@@ -154,13 +160,16 @@ def assemble_candidates(
                     taxonomy=taxonomy,
                     snapshot_text=snapshot_text,
                     page_count=page_count,
+                    scrambled_pages=source_scrambled,
                     verdict=verdict,
                     checker_enabled=checker_enabled,
                 )
             )
         except ValueError as exc:
             reason = str(exc)
-            message = reason
+            # EvidenceFailure carries the human-readable message (e.g. the
+            # scrambled-page degraded-fallback note); other reasons echo the code.
+            message = getattr(exc, "message", reason)
             if verdict is not None and reason in CHECKER_FAIL_REASONS.values() and verdict.note:
                 message = verdict.note
             failures.append(FailureRecord.from_candidate(reason, message, candidate))
@@ -326,6 +335,12 @@ def _output_row(
     commentary = _commentary(candidate, locator_source=locator_source)
     if corroboration:
         commentary += f" {corroboration}"
+    if scored.evidence_check.degraded:
+        commentary += (
+            " Evidence check: cited page detected as scrambled two-column text; "
+            "verbatim quote match degraded to key-token overlap "
+            "(confidence capped, review required)."
+        )
     if scored.checker_status == "unclear":
         note = f" ({scored.checker_note})" if scored.checker_note else ""
         commentary += f" Checker: unconfirmed{note}."
@@ -431,6 +446,9 @@ def _manifest_text(
             flag_text = " [visual_heavy]" if summary.get("visual_heavy") else ""
             if summary.get("printed_pdf"):
                 flag_text += " [printed-to-pdf]"
+            scrambled = summary.get("scrambled_pages") or []
+            if scrambled:
+                flag_text += f" [scrambled pages: {', '.join(f'p.{n}' for n in scrambled)}]"
             pages = summary.get("page_count")
             chunk_count = summary.get("chunk_count", 0)
             size = f"{pages}p / {chunk_count} chunks" if pages else f"{chunk_count} chunks"

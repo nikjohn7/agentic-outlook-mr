@@ -36,12 +36,44 @@ CHECKER_UNCONFIRMED_CAP = 74
 MIN_PDF_CHARS_PER_PAGE = 200
 MIN_HTML_SNAPSHOT_CHARS = 1000
 
+# Multi-span prose evidence (an honest elision joining two real passages) is
+# gated deterministically: each span is verified verbatim on its own, but the
+# join is bounded so it cannot smuggle a paraphrase or a reversed stitch past
+# the check. A lone span keeps the original single-quote contract (no floor).
+MAX_PROSE_SPANS = 3
+MIN_SPAN_MEANINGFUL_TOKENS = 4
+
+# When the cited page is flagged scrambled (its text layer is column-
+# interleaved — see src/ingest.detect_scrambled_page), a correct contiguous
+# prose quote of the RENDERED page cannot survive the verbatim check against
+# the scrambled snapshot. On those pages only, prose falls back to the same
+# key-token overlap used for table/visual evidence. That is a weaker guarantee
+# (word order is no longer verified), so the score is capped just below the
+# High band and the row is flagged for review, and the degradation is recorded.
+SCRAMBLED_PROSE_CAP = 74
+
 
 @dataclass(frozen=True, slots=True)
 class EvidenceCheck:
     passed: bool
     reason_code: str = ""
     message: str = ""
+    # True when the verbatim prose guarantee was relaxed to key-token overlap
+    # because the cited page is scrambled. Both a degraded pass and a degraded
+    # failure carry it, so the outcome is always visible to analysts.
+    degraded: bool = False
+
+
+class EvidenceFailure(ValueError):
+    """A failed evidence check, carrying the human-readable message (not just
+    the reason code) so failure rows can explain what happened — e.g. that a
+    degraded key-token fallback on a scrambled page also came up empty."""
+
+    def __init__(self, check: EvidenceCheck) -> None:
+        super().__init__(check.reason_code)
+        self.reason_code = check.reason_code
+        self.message = check.message
+        self.degraded = check.degraded
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,11 +139,23 @@ def snapshot_read_quality(snapshot_text: str, *, page_count: int | None = None) 
     return chars >= MIN_HTML_SNAPSHOT_CHARS
 
 
-def evidence_passes(candidate: CandidateCall, snapshot_text: str) -> EvidenceCheck:
-    """Validate evidence according to its kind without using model judgment."""
+def evidence_passes(
+    candidate: CandidateCall,
+    snapshot_text: str,
+    *,
+    scrambled_pages: frozenset[int] = frozenset(),
+) -> EvidenceCheck:
+    """Validate evidence according to its kind without using model judgment.
+
+    scrambled_pages is the source's set of column-interleaved page numbers; a
+    prose call citing one of them falls back to the key-token overlap check.
+    """
     if not snapshot_text or not snapshot_text.strip():
         return EvidenceCheck(False, HARD_FAILURE_EVIDENCE, "snapshot text is empty")
     if candidate.evidence_kind == "prose":
+        cited_page = _cited_page(candidate.locator)
+        if cited_page is not None and cited_page in scrambled_pages:
+            return _degraded_prose_evidence_passes(candidate, snapshot_text, cited_page)
         return _prose_evidence_passes(candidate, snapshot_text)
     return _table_or_visual_evidence_passes(candidate, snapshot_text)
 
@@ -122,22 +166,25 @@ def score_candidate(
     taxonomy: Taxonomy,
     snapshot_text: str,
     page_count: int | None = None,
+    scrambled_pages: frozenset[int] = frozenset(),
     verdict: CheckVerdict | None = None,
     checker_enabled: bool = False,
 ) -> ConfidenceResult:
     """Return a deterministic score, or raise ValueError for hard failures.
 
     page_count is the source's PDF page count (None for HTML); it feeds the
-    read-quality signal. When checker_enabled, verdict is the second reader's
+    read-quality signal. scrambled_pages are the source's column-interleaved
+    pages; a prose call citing one uses the degraded key-token check and is
+    capped below High. When checker_enabled, verdict is the second reader's
     categorical answers: any `fail` is a hard failure, and anything short of
     all-pass caps the score below the High band.
     """
     if candidate.taxonomy_match == "none" or not taxonomy.is_valid_label(candidate.sub_asset_class):
         raise ValueError(HARD_FAILURE_TAXONOMY)
 
-    evidence_check = evidence_passes(candidate, snapshot_text)
+    evidence_check = evidence_passes(candidate, snapshot_text, scrambled_pages=scrambled_pages)
     if not evidence_check.passed:
-        raise ValueError(evidence_check.reason_code)
+        raise EvidenceFailure(evidence_check)
 
     if checker_enabled and verdict is not None:
         failed = verdict.failed_questions()
@@ -150,6 +197,10 @@ def score_candidate(
     score += {"exact": 20, "semantic": 10}[candidate.taxonomy_match]
     score += 5 if candidate.conflict else 15
     score += 10 if snapshot_read_quality(snapshot_text, page_count=page_count) else 0
+
+    # The verbatim guarantee was weakened to key-token overlap: cap below High.
+    if evidence_check.degraded:
+        score = min(score, SCRAMBLED_PROSE_CAP)
 
     checker_status = "off"
     checker_note = ""
@@ -167,6 +218,8 @@ def score_candidate(
 
     band = score_band(score)
     review_flag = review_flag_for(score, candidate)
+    if evidence_check.degraded and review_flag == "none":
+        review_flag = "review"
     return ConfidenceResult(
         candidate=candidate,
         confidence=score,
@@ -195,13 +248,64 @@ def review_flag_for(score: int, candidate: CandidateCall) -> str:
 
 
 def _prose_evidence_passes(candidate: CandidateCall, snapshot_text: str) -> EvidenceCheck:
-    quote = normalize_quote_text(candidate.evidence_quote)
-    source = normalize_quote_text(snapshot_text)
-    if not quote:
+    """Every span must match the snapshot verbatim (after normalize_quote_text),
+    and the spans must appear in document order. A single span is the original
+    contiguous-quote contract; multiple spans (an honest elision) additionally
+    obey the join guardrails so a paraphrase or reversed stitch cannot slip by.
+    """
+    spans = [
+        normalized
+        for span in candidate.evidence_spans
+        if (normalized := normalize_quote_text(span))
+    ]
+    if not spans:
         return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote is empty")
-    if quote not in source:
-        return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote was not found")
+    if len(spans) > MAX_PROSE_SPANS:
+        return EvidenceCheck(
+            False, HARD_FAILURE_QUOTE, f"prose quote has more than {MAX_PROSE_SPANS} spans"
+        )
+    if len(spans) > 1:
+        for span in candidate.evidence_spans:
+            if len(_meaningful_tokens(span)) < MIN_SPAN_MEANINGFUL_TOKENS:
+                return EvidenceCheck(
+                    False, HARD_FAILURE_QUOTE, "a prose quote span is too short to verify"
+                )
+
+    source = normalize_quote_text(snapshot_text)
+    cursor = 0
+    for span in spans:
+        index = source.find(span, cursor)
+        if index == -1:
+            # Present but only before the cursor => the spans are stitched out of
+            # document order; genuinely absent => a paraphrase or fabrication.
+            if span in source:
+                return EvidenceCheck(
+                    False, HARD_FAILURE_QUOTE, "prose quote spans are out of document order"
+                )
+            return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote was not found")
+        cursor = index + len(span)
     return EvidenceCheck(True)
+
+
+def _degraded_prose_evidence_passes(
+    candidate: CandidateCall,
+    snapshot_text: str,
+    cited_page: int,
+) -> EvidenceCheck:
+    """Prose fallback for a scrambled (column-interleaved) page: the verbatim
+    check cannot succeed because the snapshot reorders the columns, so require
+    key-token overlap instead — the same weaker check table/visual evidence
+    uses. Every returned check is marked degraded so the score is capped and
+    the outcome is recorded for review."""
+    if _key_tokens_overlap(candidate.evidence_quote, snapshot_text):
+        return EvidenceCheck(True, degraded=True)
+    return EvidenceCheck(
+        False,
+        HARD_FAILURE_QUOTE,
+        f"page p.{cited_page} flagged scrambled (two-column interleave); "
+        "prose verbatim check degraded to key-token overlap, which also failed",
+        degraded=True,
+    )
 
 
 def _table_or_visual_evidence_passes(
@@ -215,20 +319,33 @@ def _table_or_visual_evidence_passes(
             "table/visual evidence needs page plus table, figure, grid, caption, or heading",
         )
 
-    quote_tokens = _meaningful_tokens(candidate.evidence_quote)
-    source_tokens = set(_meaningful_tokens(snapshot_text))
-    if not quote_tokens:
+    if not _meaningful_tokens(candidate.evidence_quote):
         return EvidenceCheck(False, HARD_FAILURE_EVIDENCE, "table/visual evidence is empty")
-
-    required_overlap = min(2, len(set(quote_tokens)))
-    overlap = len(set(quote_tokens) & source_tokens)
-    if overlap < required_overlap:
+    if not _key_tokens_overlap(candidate.evidence_quote, snapshot_text):
         return EvidenceCheck(
             False,
             HARD_FAILURE_EVIDENCE,
             "table/visual evidence tokens were not found in snapshot text",
         )
     return EvidenceCheck(True)
+
+
+def _key_tokens_overlap(evidence_quote: str, snapshot_text: str) -> bool:
+    """At least two (or all, if fewer) of the evidence's meaningful tokens must
+    appear somewhere in the snapshot. Order is not checked — this is the weaker
+    guarantee used for evidence the snapshot cannot preserve verbatim (tables,
+    visuals, and scrambled-page prose)."""
+    quote_tokens = set(_meaningful_tokens(evidence_quote))
+    if not quote_tokens:
+        return False
+    source_tokens = set(_meaningful_tokens(snapshot_text))
+    return len(quote_tokens & source_tokens) >= min(2, len(quote_tokens))
+
+
+def _cited_page(locator: str) -> int | None:
+    """First page number in a locator like ``p.2`` / ``p. 2 — Regional grid``."""
+    match = re.search(r"p\.?\s*(\d+)", locator, flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
 
 def _has_specific_visual_locator(locator: str) -> bool:

@@ -20,6 +20,20 @@ convention, the convention-blind checker failed it as a sign mismatch.
 Checker independence is preserved: it still never sees the source and judges
 only the presented fields; it now judges them under the same law.
 
+### `analyze_chunk.md` — v1.3 (2026-07-05)
+
+v1.3: `evidence_quote` for `prose` may now be a JSON **array** of verbatim
+spans (in document order) for an honestly elided quote — where the support
+lives in two or three separated passages (e.g. a two-sided path that nets to
+`N`, up-leg in one sentence and down-leg in a later one). Each span is checked
+verbatim on its own downstream, so the previous single-contiguous-quote gate no
+longer structurally penalizes calls that inherently need multi-span evidence.
+The prompt forbids the old workaround (one string with `...` between passages)
+and forbids reordering spans. A single contiguous quote stays a plain string.
+Rationale: pilot-04's AllianceBernstein Euro Govt Bonds `N` call failed
+`quote_not_found` only because its quote joined two real passages with `...`;
+both fragments pass verbatim individually.
+
 ### `analyze_chunk.md` — v1.2 (2026-07-05)
 
 v1.2: injects `{{conventions}}` (normative section before the calibration
@@ -62,6 +76,16 @@ sidebar, banner, stat panel, infographic column) must be tagged
 text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
+
+### `check_candidates.md` — v1.2 (2026-07-05)
+
+v1.2: teaches the checker to read an **elided** `evidence_quote` (spans joined
+with ` ... ` because the support is split across the document — each span
+already verified verbatim) as one body of evidence, and to judge whether the
+stitched spans together support the `view` (e.g. up-leg + down-leg netting to
+`N`) — never failing a call merely because the evidence arrives in spans. Pairs
+with `analyze_chunk.md` v1.3, which emits the span list. The checker still sees
+the spans joined into one string (`run.py` passes `candidate.evidence_quote`).
 
 ### `check_candidates.md` — v1.1 (2026-07-05)
 

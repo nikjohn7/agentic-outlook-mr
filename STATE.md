@@ -16,9 +16,12 @@ The deterministic spine is `src/taxonomy.py` (exact 396-leaf validation +
 `grouped_block()` for prompt injection), `src/schemas.py` (LLM candidate
 contract), `src/confidence.py` (quote/table/visual evidence checks + rubric
 scoring, incl. per-source read-quality floors: PDF chars/page, HTML snapshot
-length), `src/assemble.py` (`output.csv`/`failures.csv`/`manifest.md`),
-`src/ingest.py` (thin pilot/source loading, snapshots, chunk boundaries,
-visual-heavy detection, Playwright print-to-PDF capture of visual-heavy HTML),
+length, and a scrambled-page prose fallback that degrades to the key-token
+check with a confidence cap + review flag), `src/assemble.py`
+(`output.csv`/`failures.csv`/`manifest.md`), `src/ingest.py` (thin
+pilot/source loading, snapshots, chunk boundaries, visual-heavy detection,
+deterministic scrambled-page (column-interleave) detection, Playwright
+print-to-PDF capture of visual-heavy HTML),
 and `src/llm.py` (swappable headless `claude -p` / `codex exec`, with
 `{{name}}` template-var injection). Output rows are the 10 workbook columns
 plus `confidence`, `band`, and `review_flag`; one-hot columns are
@@ -45,10 +48,47 @@ prompts are indexed in `prompts/REGISTRY.md`. Blind pilots `pilot-01`,
 is the first with the checker + arbiter steps active) are frozen in `runs/`
 awaiting user review; `POC_PLAN.md` locks the 3-phase build order and
 LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`, `playwright` (+ chromium). 77 unittests pass.
+`trafilatura`, `htmldate`, `playwright` (+ chromium). 94 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-05: Added deterministic scrambled-page detection to rescue prose
+  calls on column-interleaved PDF pages (the JPM pilot-04 JPM
+  `quote_not_found`: pdfplumber merges the two columns line-by-line, so no
+  contiguous quote of the rendered page survives the verbatim check).
+  `src/ingest.detect_scrambled_page` flags a page (1-indexed) when it has a
+  near-empty full-body-height vertical gutter separating two populated
+  columns — line length alone fails to separate them (AB's wide single-column
+  pages run longer than JPM's two-column page). Flags land in `IngestedSource`,
+  `ingest_meta.json`, and the run manifest source line. In `src/confidence.py`
+  a prose call citing a flagged page falls back to the key-token overlap check
+  (like table/visual), capping confidence at 74 (below High), forcing
+  `review`, and recording the degradation in the output/failure row; a clean
+  page still enforces verbatim, and a non-cited scrambled page is unaffected.
+  Threaded `scrambled_pages` through `assemble_candidates`/`score_candidate`.
+  Validated: flags JPM p.2 (+p.1/p.4), does NOT flag AB clean single-column
+  pages (incl. p.7, whose failure is a genuine stitched quote that stays
+  failed); only AB's real 3-col grid (p.3) and forecast table (p.10) flag.
+  Deterministically re-scored the frozen JPM pilot-04 `quote_not_found`: now
+  passes at confidence 74 / Medium / review / degraded. 11 new tests (real
+  word-box fixtures from JPM p2 + AB p7); 94 pass. No pilot re-run.
+- 2026-07-05: `evidence_quote` now accepts a list of verbatim spans (a lone
+  string is still one span), so an honest elision — two real passages joined
+  with "..." — no longer fails the prose quote gate. Schema
+  (`src/schemas.py`) parses string-or-list into `evidence_spans`;
+  `evidence_quote` became a property joining spans with " ... " (commentary,
+  failures, checker/arbiter inputs unchanged). The prose gate
+  (`src/confidence.py`) verifies each span verbatim individually and,
+  deterministically for multi-span only, enforces max 3 spans, ≥4 meaningful
+  tokens per span, and document order (blocks reversed stitching); ellipses
+  are never parsed out of free text — only an explicit list splits. Prompts:
+  `analyze_chunk.md` v1.3 emits span lists for elided prose (no more inline
+  "..."), `check_candidates.md` v1.2 reads the ` ... `-joined spans as one
+  body of evidence. Deterministically re-scored the frozen pilot-04 AB Euro
+  Govt Bonds `quote_not_found` (split its recorded quote on the ellipsis into
+  2 spans): now passes against the frozen snapshot; the JPM
+  `quote_not_found` (no ellipsis, a separate ingestion issue) still fails,
+  untouched. 6 new tests; 83 pass. No pilot re-run.
 - 2026-07-05: Applied both pilot-03 diagnosability fixes (delegated to an
   Opus 4.8 subagent). (1) `failures.csv` now records `evidence_quote` (column
   after `evidence_kind`; empty for chunk-level failures) so `quote_not_found`
@@ -122,24 +162,14 @@ LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   pages but the verbatim check ran against the pdfplumber snapshot, which
   scrambles infographic/callout-box text (PIMCO lost all 10 candidates this
   way). Led directly to the `evidence_kind: visual` and print-to-PDF fixes.
-- 2026-07-04: Built `prompts/brain.md` (v1.1, ~1.4k tokens) from the user's
-  five-source ground truth in `ground-truth/ground-truth.csv` (Schwab, CBRE
-  IM, Cantor Fitzgerald, BMO GAM, Barings — no pilot-source overlap, so
-  blindness holds). All 69 GT rows validated against the locked taxonomy and
-  verified against their sources; the Cantor block's mis-sorted Full
-  Commentary column was re-paired in place (views untouched). Wrote
-  `ground-truth/review-notes-for-markets-recon.md` for the client: 7 disputed
-  calls (4 BMO prose-vs-dial rows, 3 Barings rows), 3 possibly missing rows,
-  minor number slips.
 
 ## Next / Open
 
 - Phase 2 evaluation: `pilot-01`, `pilot-02`, and `pilot-03` (plus the
   single-source `pilot-03-schroders`) are frozen and await the user's blind
-  review against held-back originals (per-call view/leaf/citation). Still open:
-  whether the softer key-token check should also cover `prose` evidence when
-  the cited page's snapshot is detected as scrambled (column-merge/rotated
-  text).
+  review against held-back originals (per-call view/leaf/citation). The
+  scrambled-page prose fallback is built but the frozen pilot outputs predate
+  it — re-run to pick it up, or apply the deterministic re-score offline.
 - Grouping live test (pilot-04) is staged: pilot.csv gained the second
   Schroders doc ("Our multi-asset investment views – March 2026", 3/20/2026,
   user-downloaded PDF in `prev-excel/`; the pilot firm→PDF mapping now

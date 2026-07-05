@@ -117,6 +117,7 @@ def run_pipeline(
     chunk_failures: list[FailureRecord] = []
     snapshots: dict[tuple[str, str], str] = {}
     page_counts: dict[str, int] = {}
+    scrambled_pages: dict[str, set[int]] = {}
     source_infos: dict[str, SourceInfo] = {}
     source_summaries: list[dict[str, object]] = []
     group_ledgers: dict[str, str] = {}
@@ -128,6 +129,8 @@ def run_pipeline(
             snapshots[(source.source_id, chunk.chunk_id)] = snapshot_text
         if ingested.page_count is not None:
             page_counts[source.source_id] = ingested.page_count
+        if ingested.scrambled_pages:
+            scrambled_pages[source.source_id] = set(ingested.scrambled_pages)
         source_infos[source.source_id] = SourceInfo(
             source_id=source.source_id,
             firm=source.firm,
@@ -186,6 +189,7 @@ def run_pipeline(
                 "candidates": len(candidates),
                 "visual_heavy": ingested.visual_heavy,
                 "printed_pdf": ingested.printed_pdf,
+                "scrambled_pages": list(ingested.scrambled_pages),
             }
         )
 
@@ -202,6 +206,7 @@ def run_pipeline(
         taxonomy=taxonomy,
         snapshots=snapshots,
         page_counts=page_counts,
+        scrambled_pages=scrambled_pages,
         verdicts=verdicts,
         arbiter=arbiter,
         group_map=group_map or None,

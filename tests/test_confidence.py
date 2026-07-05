@@ -6,6 +6,7 @@ from src.confidence import (
     CHECKER_UNCONFIRMED_CAP,
     MIN_HTML_SNAPSHOT_CHARS,
     MIN_PDF_CHARS_PER_PAGE,
+    SCRAMBLED_PROSE_CAP,
     evidence_passes,
     normalize_quote_text,
     score_candidate,
@@ -71,6 +72,109 @@ class ConfidenceTest(unittest.TestCase):
 
         self.assertFalse(check.passed)
         self.assertEqual("quote_not_found", check.reason_code)
+
+    def test_multi_span_prose_passes_when_each_span_matches_in_order(self) -> None:
+        # An honest elision: two real passages verified verbatim on their own.
+        candidate = _candidate(
+            evidence_quote=[
+                "We could start a rate-hiking cycle from June",
+                "the bank would deliver rate cuts back to neutral later",
+            ]
+        )
+        snapshot = (
+            "Growth is firm. We could start a rate-hiking cycle from June. "
+            "Later, as inflation normalizes, the bank would deliver rate cuts "
+            "back to neutral later in the horizon."
+        )
+
+        self.assertTrue(evidence_passes(candidate, snapshot).passed)
+
+    def test_multi_span_prose_out_of_order_fails(self) -> None:
+        # Same two spans, but stitched in the reverse of their document order.
+        candidate = _candidate(
+            evidence_quote=[
+                "the bank would deliver rate cuts back to neutral later",
+                "We could start a rate-hiking cycle from June",
+            ]
+        )
+        snapshot = (
+            "Growth is firm. We could start a rate-hiking cycle from June. "
+            "Later, as inflation normalizes, the bank would deliver rate cuts "
+            "back to neutral later in the horizon."
+        )
+
+        check = evidence_passes(candidate, snapshot)
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+        self.assertIn("order", check.message)
+
+    def test_multi_span_prose_tiny_span_fails(self) -> None:
+        # The second span has too few meaningful tokens to verify as a stitch.
+        candidate = _candidate(
+            evidence_quote=[
+                "We could start a rate-hiking cycle from June",
+                "back to neutral",
+            ]
+        )
+        snapshot = (
+            "We could start a rate-hiking cycle from June, then move rates "
+            "back to neutral by year end."
+        )
+
+        check = evidence_passes(candidate, snapshot)
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+        self.assertIn("too short", check.message)
+
+    def test_more_than_three_spans_fails(self) -> None:
+        candidate = _candidate(
+            evidence_quote=[
+                "the first meaningful passage of evidence",
+                "the second meaningful passage of evidence",
+                "the third meaningful passage of evidence",
+                "the fourth meaningful passage of evidence",
+            ]
+        )
+        snapshot = (
+            "the first meaningful passage of evidence and the second meaningful "
+            "passage of evidence and the third meaningful passage of evidence "
+            "and the fourth meaningful passage of evidence."
+        )
+
+        check = evidence_passes(candidate, snapshot)
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+        self.assertIn("more than 3 spans", check.message)
+
+    def test_multi_span_prose_paraphrase_still_fails(self) -> None:
+        # One span is a paraphrase absent from the source: the stitch must fail.
+        candidate = _candidate(
+            evidence_quote=[
+                "We could start a rate-hiking cycle from June",
+                "policymakers plan to slash rates aggressively next year",
+            ]
+        )
+        snapshot = (
+            "Growth is firm. We could start a rate-hiking cycle from June. "
+            "Later, as inflation normalizes, the bank would deliver rate cuts."
+        )
+
+        check = evidence_passes(candidate, snapshot)
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+
+    def test_single_string_quote_is_treated_as_one_span_backcompat(self) -> None:
+        # A short single string (below the multi-span token floor) still passes:
+        # the floor applies only to stitched multi-span evidence.
+        candidate = _candidate(evidence_quote="a long-term overweight stance")
+
+        self.assertTrue(
+            evidence_passes(candidate, "We hold a long-term overweight stance today.").passed
+        )
 
     def test_semantic_implied_call_scores_high_at_threshold(self) -> None:
         candidate = _candidate(taxonomy_match="semantic", call_language="implied")
@@ -142,6 +246,101 @@ class ConfidenceTest(unittest.TestCase):
         check = evidence_passes(candidate, "Regional views grid Taiwan overweight")
 
         self.assertTrue(check.passed)
+
+
+class ScrambledPageProseTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    # A correct contiguous quote of the rendered page whose words are reordered
+    # in the scrambled snapshot: verbatim fails, key tokens are all present.
+    QUOTE = "front end government bond markets offer opportunities"
+    SCRAMBLED_SNAPSHOT = "markets government opportunities bond end front offer stance today"
+
+    def test_scrambled_page_prose_falls_back_to_key_tokens(self) -> None:
+        candidate = _candidate(
+            locator="p.2", evidence_quote=self.QUOTE, taxonomy_match="semantic",
+            call_language="implied",
+        )
+
+        check = evidence_passes(
+            candidate, _healthy_snapshot(self.SCRAMBLED_SNAPSHOT),
+            scrambled_pages=frozenset({2}),
+        )
+
+        self.assertTrue(check.passed)
+        self.assertTrue(check.degraded)
+
+    def test_scrambled_page_prose_pass_is_capped_and_flagged(self) -> None:
+        candidate = _candidate(
+            locator="p.2", evidence_quote=self.QUOTE, taxonomy_match="semantic",
+            call_language="implied",
+        )
+
+        result = score_candidate(
+            candidate, taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(self.SCRAMBLED_SNAPSHOT),
+            scrambled_pages=frozenset({2}),
+        )
+
+        self.assertEqual(SCRAMBLED_PROSE_CAP, result.confidence)
+        self.assertEqual("Medium", result.band)
+        self.assertEqual("review", result.review_flag)
+        self.assertTrue(result.evidence_check.degraded)
+
+    def test_scrambled_page_prose_still_fails_when_key_tokens_absent(self) -> None:
+        candidate = _candidate(
+            locator="p.2", evidence_quote="tungsten palladium rhodium platinum"
+        )
+
+        check = evidence_passes(
+            candidate, _healthy_snapshot("unrelated commentary about domestic equities"),
+            scrambled_pages=frozenset({2}),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+        self.assertTrue(check.degraded)
+        self.assertIn("scrambled", check.message)
+
+    def test_scrambled_page_prose_failure_is_a_hard_failure(self) -> None:
+        candidate = _candidate(
+            locator="p.2", evidence_quote="tungsten palladium rhodium platinum"
+        )
+
+        with self.assertRaises(ValueError) as caught:
+            score_candidate(
+                candidate, taxonomy=self.taxonomy,
+                snapshot_text=_healthy_snapshot("unrelated commentary about equities"),
+                scrambled_pages=frozenset({2}),
+            )
+
+        self.assertEqual("quote_not_found", str(caught.exception))
+
+    def test_clean_page_prose_keeps_verbatim_check(self) -> None:
+        # Same reordered snapshot, but the cited page is NOT scrambled: the
+        # verbatim guarantee must still reject the out-of-order wording.
+        candidate = _candidate(locator="p.2", evidence_quote=self.QUOTE)
+
+        check = evidence_passes(candidate, _healthy_snapshot(self.SCRAMBLED_SNAPSHOT))
+
+        self.assertFalse(check.passed)
+        self.assertFalse(check.degraded)
+        self.assertEqual("quote_not_found", check.reason_code)
+
+    def test_scramble_only_affects_the_cited_page(self) -> None:
+        # The source has a scrambled page, but this call cites a different,
+        # clean page, so verbatim still applies.
+        candidate = _candidate(locator="p.5", evidence_quote=self.QUOTE)
+
+        check = evidence_passes(
+            candidate, _healthy_snapshot(self.SCRAMBLED_SNAPSHOT),
+            scrambled_pages=frozenset({2}),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertFalse(check.degraded)
 
 
 class CheckerScoringTest(unittest.TestCase):

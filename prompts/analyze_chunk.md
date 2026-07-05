@@ -77,6 +77,17 @@ leave little room, we are trimming risk"). If it is neither, it is not a call.
   the document text in `evidence_quote`. Copy exactly; do not paraphrase.
   Use `prose` **only for text in the main reading flow** — running paragraphs
   and ordinary body text.
+  - **Elided evidence — use a list, never an ellipsis inside one string.** When
+    the support genuinely lives in two (at most three) separated passages —
+    e.g. a two-sided path that nets to `N`, where one sentence gives the
+    up-leg and a later sentence the down-leg — set `evidence_quote` to a JSON
+    **array** of the verbatim spans, in the order they appear in the document
+    (`["…first passage…", "…later passage…"]`). Each span is verified verbatim
+    on its own, so copy each exactly and make each a substantial phrase (a few
+    meaningful words at least, not a stray fragment). Do NOT write one string
+    with "..." between the passages, and do NOT reorder the spans. If a single
+    contiguous quote already supports the call, keep `evidence_quote` a single
+    string.
 - `evidence_kind: table` — the call comes from a table. In `evidence_quote`
   give the row/column labels and cell value you read (e.g. "US Duration —
   Underweight"). The `locator` must name the specific table.
@@ -121,7 +132,7 @@ Return exactly one JSON object of this shape and nothing else:
       "view": "O | N | U | UNCERTAIN",
       "call_language": "explicit | implied | none",
       "evidence_kind": "prose | table | visual",
-      "evidence_quote": "verbatim sentence for prose; read cell/figure content for table/visual",
+      "evidence_quote": "verbatim sentence for prose (or a JSON array of verbatim spans in document order for an elided prose quote); read cell/figure content for table/visual",
       "locator": "p.N | char:start-end | p.N — 'specific table/figure'",
       "reasoning": "one sentence: why this view",
       "conflict": false

@@ -30,10 +30,22 @@ class CandidateCall:
     view: str
     call_language: str
     evidence_kind: str
-    evidence_quote: str
+    # One or more verbatim spans of supporting evidence. A single contiguous
+    # quote is one span; an honest elision (two real passages the analyst joins
+    # with "...") is emitted as an explicit list of spans, so each fragment can
+    # be verified verbatim on its own without the join sinking the whole quote.
+    evidence_spans: tuple[str, ...]
     locator: str
     reasoning: str
     conflict: bool = False
+
+    @property
+    def evidence_quote(self) -> str:
+        """Human-readable evidence: spans joined with an explicit ellipsis so
+        analysts read an elided quote naturally, and so every existing consumer
+        (commentary, checker/arbiter inputs, failure rows) keeps a single
+        string."""
+        return " ... ".join(self.evidence_spans)
 
     @classmethod
     def from_mapping(cls, value: dict[str, Any]) -> "CandidateCall":
@@ -50,7 +62,7 @@ class CandidateCall:
             view=_require_choice(value, "view", VALID_VIEWS),
             call_language=_require_choice(value, "call_language", VALID_CALL_LANGUAGES),
             evidence_kind=_require_choice(value, "evidence_kind", VALID_EVIDENCE_KINDS),
-            evidence_quote=_require_text(value, "evidence_quote"),
+            evidence_spans=_require_spans(value, "evidence_quote"),
             locator=_require_text(value, "locator"),
             reasoning=_require_text(value, "reasoning"),
             conflict=_require_bool(value, "conflict", default=False),
@@ -67,7 +79,13 @@ class CandidateCall:
             "view": self.view,
             "call_language": self.call_language,
             "evidence_kind": self.evidence_kind,
-            "evidence_quote": self.evidence_quote,
+            # Round-trips through from_mapping: a lone span serializes as a plain
+            # string (back-compat), multiple spans as a list.
+            "evidence_quote": (
+                list(self.evidence_spans)
+                if len(self.evidence_spans) > 1
+                else self.evidence_spans[0]
+            ),
             "locator": self.locator,
             "reasoning": self.reasoning,
             "conflict": self.conflict,
@@ -147,6 +165,29 @@ def _require_text(value: dict[str, Any], field: str) -> str:
     if not isinstance(item, str) or item.strip() == "":
         raise SchemaError(f"{field} must be a non-empty string")
     return item
+
+
+def _require_spans(value: dict[str, Any], field: str) -> tuple[str, ...]:
+    """Accept evidence as one verbatim span (a string) or an explicit list of
+    verbatim spans. Structure only: every span must be a non-empty string. The
+    span-count/order/token guardrails are deterministic gates in
+    src/confidence.py, not schema rules — and ellipses are never parsed out of a
+    single string here (only an explicit list produces multiple spans)."""
+    item = value.get(field)
+    if isinstance(item, str):
+        if item.strip() == "":
+            raise SchemaError(f"{field} must be a non-empty string")
+        return (item,)
+    if isinstance(item, list):
+        if not item:
+            raise SchemaError(f"{field} must not be an empty list")
+        spans: list[str] = []
+        for span in item:
+            if not isinstance(span, str) or span.strip() == "":
+                raise SchemaError(f"{field} spans must each be a non-empty string")
+            spans.append(span)
+        return tuple(spans)
+    raise SchemaError(f"{field} must be a string or a list of strings")
 
 
 def _require_choice(value: dict[str, Any], field: str, choices: tuple[str, ...]) -> str:
