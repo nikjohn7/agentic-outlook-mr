@@ -1,6 +1,6 @@
 # Brain — worked examples for allocation-call extraction
 
-_Version: v1.5_
+_Version: v1.6_
 
 Distilled from five analyst-reviewed outlook sources (a sector strategist, a
 real-assets macro house, two multi-asset managers, a wealth manager). The
@@ -18,6 +18,11 @@ contract.
   "caution has increased" beside a printed Neutral dial → `N`.
 - A five-tier "Most Favored … Least Favored" spectrum maps `O`/`O`/`N`/`U`/`U`.
   Record the tier name inside the evidence.
+- Published-level-wins with narrower commentary: a positioning grid places
+  `Gold/Precious` in the Overweight column while a nearby note frets about gold
+  *miners'* margins. The chart call stands — `Gold/Precious` `O` — because the
+  cautious commentary is about a narrower sub-asset (mining equities), not the
+  charted leaf; only commentary on gold itself could refine it.
 - Bought / "added substantially" → `O` (implied); "largely exited most of
   these" → `U` (implied); "reinforce the case for maintaining exposure" /
   "maintain strategic exposure as a hedge" → `O`.

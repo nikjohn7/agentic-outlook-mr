@@ -247,6 +247,34 @@ class CheckerAndArbiterAssemblyTest(unittest.TestCase):
             result.failures[0].message,
         )
 
+    def test_inferred_candidate_rejected_by_checker_is_auditable(self) -> None:
+        # An inferred call the checker rejects lands in failures.csv with its
+        # basis, the inference reasoning (what was inferred), and the checker's
+        # note (why it failed) — so the rejected inference is never glazed over.
+        candidate = _candidate(
+            basis="inferred",
+            view="U",
+            call_language="implied",
+            reasoning="Sustained capital flight from the region implies EM equities underweight.",
+        )
+        result = assemble_candidates(
+            [candidate],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots=self.snapshots,
+            page_counts={"source-1": 1},
+            verdicts={
+                0: _verdict(supports_view="fail", note="the inference is a multi-step leap")
+            },
+        )
+
+        self.assertEqual([], result.output_rows)
+        failure = result.failures[0]
+        self.assertEqual("checker_sign_mismatch", failure.reason_code)
+        self.assertEqual("inferred", failure.basis)
+        self.assertIn("Sustained capital flight", failure.reasoning)
+        self.assertEqual("the inference is a multi-step leap", failure.message)
+
     def test_arbiter_resolves_conflict_and_records_loser(self) -> None:
         candidates = [_candidate(view="O"), _candidate(view="U")]
 
@@ -721,6 +749,131 @@ class CallLanguageOutputTest(unittest.TestCase):
             manifest = (Path(temp_dir) / "manifest.md").read_text(encoding="utf-8")
         self.assertIn("Call language (kept rows)", manifest)
         self.assertIn("- directional: 1", manifest)
+
+
+class StatedBeatsImpliedTest(unittest.TestCase):
+    """Deterministic stated-beats-implied resolution (client decision 5): a
+    same-leaf conflict between a stated call and an implied one is resolved
+    without the arbiter — stated wins, the implied side is logged as a flagged
+    recommendation."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1",
+                firm="Test Firm",
+                date="4/2/2026",
+                source="Outlook",
+                url="https://example.test/source",
+            )
+        }
+
+    def _assemble(self, candidates: list[CandidateCall], *, arbiter=None):
+        snapshot = (
+            "EM equities are favored in the outlook. "
+            "Capital is leaving the region at pace. " + "Context. " * 30
+        )
+        return assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): snapshot},
+            page_counts={"source-1": 1},
+            arbiter=arbiter,
+        )
+
+    def _implied(self, view: str, reasoning: str) -> CandidateCall:
+        return _candidate(
+            view=view,
+            basis="inferred",
+            call_language="implied",
+            evidence_quote="Capital is leaving the region at pace.",
+            reasoning=reasoning,
+        )
+
+    def test_conflict_resolves_deterministically_without_the_arbiter(self) -> None:
+        def _never(group):
+            raise AssertionError("arbiter must not run on a stated-vs-implied conflict")
+
+        stated = _candidate(view="O")  # basis defaults to stated
+        implied = self._implied("U", "Capital flight implies EM equities underweight.")
+
+        result = self._assemble([stated, implied], arbiter=_never)
+
+        self.assertEqual(1, len(result.output_rows))
+        row = result.output_rows[0]
+        self.assertEqual("O", row["View"])
+        self.assertEqual("stated", row["basis"])
+        self.assertEqual("review", row["review_flag"])
+        self.assertIn("Implied-call challenge", row["Full Commentary"])
+
+        self.assertEqual(
+            [], [f for f in result.failures if f.reason_code == "arbitrated_out"]
+        )
+        challenge = next(
+            f for f in result.failures if f.reason_code == "implied_challenges_stated"
+        )
+        self.assertEqual("inferred", challenge.basis)
+        self.assertIn("reconsider the stated", challenge.message)
+        self.assertIn("Capital flight", challenge.message)  # the inference reasoning is recorded
+
+    def test_same_view_implied_is_plain_dedup_not_a_challenge(self) -> None:
+        stated = _candidate(view="O")
+        implied = self._implied("O", "A thematic read also lands EM equities overweight.")
+
+        result = self._assemble([stated, implied])
+
+        self.assertEqual(1, len(result.output_rows))
+        row = result.output_rows[0]
+        self.assertEqual("O", row["View"])
+        self.assertEqual("stated", row["basis"])
+        self.assertNotIn("Implied-call challenge", row["Full Commentary"])
+        self.assertEqual({"duplicate_same_view"}, {f.reason_code for f in result.failures})
+        self.assertEqual("inferred", result.failures[0].basis)
+
+    def test_both_stated_conflict_still_uses_the_arbiter(self) -> None:
+        used: dict[str, bool] = {}
+
+        def arbiter(group):
+            used["called"] = True
+            return 0, "arbiter picked the first"
+
+        stated_o = _candidate(view="O")
+        stated_u = _candidate(view="U", evidence_quote="Capital is leaving the region at pace.")
+
+        result = self._assemble([stated_o, stated_u], arbiter=arbiter)
+
+        self.assertTrue(used.get("called"))
+        self.assertEqual(1, len(result.output_rows))
+        self.assertEqual(["arbitrated_out"], [f.reason_code for f in result.failures])
+
+    def test_forecast_delta_present_falls_through_to_the_arbiter(self) -> None:
+        used: dict[str, bool] = {}
+
+        def arbiter(group):
+            used["called"] = True
+            return 0, "arbiter resolves"
+
+        stated = _candidate(view="O")
+        delta = _candidate(
+            view="U",
+            basis="forecast_delta",
+            delta_value=40,
+            delta_unit="bp",
+            evidence_kind="table",
+            evidence_quote="Capital is leaving the region at pace.",
+            call_language="implied",
+            locator="p.10 - 'Forecast Table'",
+        )
+
+        result = self._assemble([stated, delta], arbiter=arbiter)
+
+        self.assertTrue(used.get("called"))
+        self.assertEqual(
+            [], [f for f in result.failures if f.reason_code == "implied_challenges_stated"]
+        )
 
 
 def _verdict(**overrides: object) -> CheckVerdict:

@@ -273,6 +273,44 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
         self.assertIn("A two-sided path nets to N.", prompts[0])
         self.assertNotIn("{{conventions}}", prompts[0])
 
+    def test_check_candidates_injects_rolling_memory(self) -> None:
+        prompts: list[str] = []
+        verdicts_json = json.dumps(
+            {
+                "verdicts": [
+                    {
+                        "index": 0,
+                        "supports_view": "pass",
+                        "forward_looking": "pass",
+                        "asset_match": "pass",
+                        "evidence_strength": "decisive",
+                        "note": "",
+                    }
+                ]
+            }
+        )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            prompts.append(prompt)
+            return subprocess.CompletedProcess(command, 0, stdout=verdicts_json, stderr="")
+
+        verdict_map, failure = _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            memory_text="## Chunk p1-5\nSummary: MEMORY-LEDGER-MARKER covered EM positioning.\n",
+            conventions="A two-sided path nets to N.",
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=runner,
+        )
+
+        self.assertIsNone(failure)
+        # The source's whole-file rolling memory reached the checker prompt, and
+        # the placeholder was substituted (no literal token leaks through).
+        self.assertIn("MEMORY-LEDGER-MARKER", prompts[0])
+        self.assertNotIn("{{memory}}", prompts[0])
+
     def test_check_candidates_engine_error_degrades_to_failure_record(self) -> None:
         def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
             return subprocess.CompletedProcess(command, 1, stdout="", stderr="codex blew up")

@@ -159,14 +159,17 @@ def run_pipeline(
             analyze_prompt=analyze_prompt,
             initial_memory=group_ledgers.get(group_id, "") if group_id else "",
         )
+        # The source's rolling memory is complete once every chunk is analyzed;
+        # it seeds the group ledger (grouped sources) and is handed to the
+        # checker as whole-file context for this same source.
+        source_memory = (work_dir / source.source_id / "memory.md").read_text(encoding="utf-8")
         if group_id:
-            memory_text = (work_dir / source.source_id / "memory.md").read_text(encoding="utf-8")
             group_ledgers[group_id] = (
                 "\n## Companion document already analyzed in this grouped source set\n"
                 "Report this document's own stances normally — corroboration and\n"
                 "conflicts across the set are resolved downstream; mark `conflict:\n"
                 "true` where this document disagrees with the companion.\n\n"
-                f"{memory_text}\n"
+                f"{source_memory}\n"
             )
         offset = len(all_candidates)
         all_candidates.extend(candidates)
@@ -180,6 +183,7 @@ def run_pipeline(
             source_verdicts, checker_failure = _check_candidates(
                 source,
                 candidates,
+                memory_text=source_memory,
                 conventions=conventions,
                 engine=checker_engine,
                 model=checker_model,
@@ -309,6 +313,7 @@ def _check_candidates(
     source,
     candidates: list[CandidateCall],
     *,
+    memory_text: str = "",
     conventions: str = "",
     engine: str,
     model: str | None,
@@ -322,6 +327,11 @@ def _check_candidates(
     Returns {local candidate index: verdict}. A failed checker call returns no
     verdicts plus a failure record — candidates then proceed capped and
     flagged for review, never silently promoted.
+
+    memory_text is the source's complete rolling memory (the same ledger built
+    during analyze). It is injected as whole-file context so the checker can see
+    whether a candidate is corroborated or contradicted elsewhere in the file —
+    but it never relaxes the per-candidate evidence bar (the prompt says so).
     """
     inputs = {
         "source_id": source.source_id,
@@ -353,7 +363,7 @@ def _check_candidates(
             model=model,
             effort=effort,
             runner=runner,
-            template_vars={"conventions": conventions},
+            template_vars={"conventions": conventions, "memory": memory_text},
             parser=parse_verdicts,
         )
     except CHUNK_CALL_ERRORS as exc:

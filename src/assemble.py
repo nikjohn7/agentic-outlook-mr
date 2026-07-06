@@ -166,6 +166,10 @@ class _Selected:
     member_count: int
     arbiter_note: str = ""
     corroboration: str = ""
+    # Set when a same-leaf implied call challenged the kept stated call
+    # (deterministic stated-beats-implied resolution). Rendered on the kept row
+    # and forces a review flag so a human sees the recommendation.
+    challenge_note: str = ""
 
 
 def assemble_candidates(
@@ -248,24 +252,38 @@ def assemble_candidates(
         views = {item.candidate.view for item in group}
         arbiter_note = ""
         corroboration = ""
+        challenge_note = ""
         if len(views) > 1:
-            winner, reasoning = _arbitrate(group, arbiter)
-            if winner is None:
-                message = "multiple views survived validation for the same source/group and leaf"
-                if reasoning:
-                    message += f"; arbiter: {reasoning}"
+            stated_resolution = _resolve_stated_vs_implied(group)
+            if stated_resolution is not None:
+                # A clean stated-vs-implied split on one leaf: stated wins
+                # deterministically (client rule), the implied challenge is
+                # logged as a flagged recommendation, and the arbiter is not run.
+                selected, resolution_losers, challenge_note = stated_resolution
                 failures.extend(
-                    FailureRecord.from_candidate("unresolved_conflict", message, item.candidate)
-                    for item in group
+                    FailureRecord.from_candidate(reason, message, item.candidate)
+                    for item, reason, message in resolution_losers
                 )
-                continue
-            failures.extend(
-                FailureRecord.from_candidate("arbitrated_out", reasoning, item.candidate)
-                for item in group
-                if item is not winner
-            )
-            selected = winner
-            arbiter_note = reasoning
+            else:
+                winner, reasoning = _arbitrate(group, arbiter)
+                if winner is None:
+                    message = (
+                        "multiple views survived validation for the same source/group and leaf"
+                    )
+                    if reasoning:
+                        message += f"; arbiter: {reasoning}"
+                    failures.extend(
+                        FailureRecord.from_candidate("unresolved_conflict", message, item.candidate)
+                        for item in group
+                    )
+                    continue
+                failures.extend(
+                    FailureRecord.from_candidate("arbitrated_out", reasoning, item.candidate)
+                    for item in group
+                    if item is not winner
+                )
+                selected = winner
+                arbiter_note = reasoning
         else:
             selected = max(group, key=lambda item: item.confidence)
             corroborators: list[str] = []
@@ -309,6 +327,7 @@ def assemble_candidates(
                 member_count=member_count,
                 arbiter_note=arbiter_note,
                 corroboration=corroboration,
+                challenge_note=challenge_note,
             )
         )
 
@@ -325,6 +344,7 @@ def assemble_candidates(
             locator_source=entry.source.source if entry.member_count > 1 else "",
             corroboration=entry.corroboration,
             sibling_note=sibling_notes.get(id(entry), ""),
+            challenge_note=entry.challenge_note,
         )
         for entry in survivors
     ]
@@ -334,6 +354,86 @@ def assemble_candidates(
         failures=failures,
         candidate_count=len(candidates),
     )
+
+
+def _resolve_stated_vs_implied(
+    group: list[ConfidenceResult],
+) -> tuple[ConfidenceResult, list[tuple[ConfidenceResult, str, str]], str] | None:
+    """Deterministic stated-beats-implied resolution for one conflicting
+    (source/group, leaf) — the client's rule (ROADMAP decision 5).
+
+    Fires only on the clean split it covers: the group holds only `stated` and
+    `inferred` candidates, at least one of each, and the stated side carries a
+    single view. The stated call then wins WITHOUT consulting the arbiter; every
+    inferred call whose view differs is a *challenge*, recorded as a flagged
+    recommendation (it never replaces the stated row in v1). Inferred calls that
+    agree with the stated view are ordinary same-view corroboration.
+
+    Returns (winner, losers, challenge_note) or None to fall through to the
+    arbiter. `losers` is a list of (item, reason_code, message). Conflicts where
+    both sides are stated, both are inferred, or a third basis (forecast_delta)
+    is present return None and keep the existing arbiter path unchanged.
+
+    The `implied_challenges_stated` message carries the implied view and its
+    reasoning as a recommendation — the deliberate hook the v1.2 confidence-based
+    override path will build on (a high-confidence implied call overriding a
+    low-confidence stated view); v1 records the recommendation, nothing more.
+    """
+    stated = [item for item in group if item.candidate.basis == "stated"]
+    inferred = [item for item in group if item.candidate.basis == "inferred"]
+    if not stated or not inferred:
+        return None
+    if len(stated) + len(inferred) != len(group):
+        return None  # a third basis (e.g. forecast_delta) is present — use the arbiter
+    stated_views = {item.candidate.view for item in stated}
+    if len(stated_views) != 1:
+        return None  # the stated side disagrees with itself — that is arbiter work
+    (stated_view,) = tuple(stated_views)
+
+    winner = max(stated, key=lambda item: item.confidence)
+    losers: list[tuple[ConfidenceResult, str, str]] = []
+    challenges: list[str] = []
+    for item in stated:
+        if item is winner:
+            continue
+        losers.append(
+            (
+                item,
+                "duplicate_same_view",
+                f"same stated view already kept from {winner.candidate.locator}",
+            )
+        )
+    for item in inferred:
+        candidate = item.candidate
+        if candidate.view == stated_view:
+            losers.append(
+                (
+                    item,
+                    "duplicate_same_view",
+                    f"inferred call corroborates the kept stated {stated_view} view "
+                    f"from {winner.candidate.locator}",
+                )
+            )
+            continue
+        message = (
+            f"implied {candidate.view} challenges the kept stated {stated_view} call "
+            f"on '{candidate.sub_asset_class}'; stated wins in v1, so this is recorded "
+            f"as a recommendation only. Implied reasoning: {candidate.reasoning} "
+            f"Recommendation: reconsider the stated {stated_view} call in light of this "
+            "inference."
+        )
+        losers.append((item, "implied_challenges_stated", message))
+        challenges.append(f"implied {candidate.view} ({candidate.reasoning})")
+
+    if not challenges:
+        return None  # no inferred call actually challenged the stated view
+
+    challenge_note = (
+        "Implied-call challenge (recommendation only; stated call kept): "
+        + "; ".join(challenges)
+        + " Review recommended."
+    )
+    return winner, losers, challenge_note
 
 
 def _arbitrate(
@@ -572,6 +672,7 @@ def _output_row(
     locator_source: str = "",
     corroboration: str = "",
     sibling_note: str = "",
+    challenge_note: str = "",
 ) -> dict[str, str]:
     candidate = scored.candidate
     lookup = taxonomy.output_fields_for(candidate.sub_asset_class)
@@ -607,6 +708,10 @@ def _output_row(
             review_flag = "review"
     if sibling_note:
         commentary += f" {sibling_note}"
+        if review_flag == "none":
+            review_flag = "review"
+    if challenge_note:
+        commentary += f" {challenge_note}"
         if review_flag == "none":
             review_flag = "review"
     return {

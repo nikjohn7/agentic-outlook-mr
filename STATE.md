@@ -75,6 +75,48 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Recent Changes
 
+- 2026-07-07: **Shipped the checker-context wave (pre-37 wave instruction set
+  1): checker sees whole-file memory, deterministic stated-beats-implied, and a
+  dial-vs-commentary convention line.** Implements the three client decisions
+  (ROADMAP decisions 5 and 7) that touch the checker and conventions. **(A)
+  Checker receives the source's rolling memory.** `run.py` reads the completed
+  `work/<run>/<source>/memory.md` after analyze and passes it to
+  `_check_candidates`, which injects it via a new `{{memory}}` template var;
+  `check_candidates.md` v1.7 gains a "Whole-file context (rolling memory)"
+  section framing it as corroborating context for judging whether a candidate is
+  supported/contradicted elsewhere in the file — and states it never lowers the
+  evidence bar (the per-candidate quote check is unchanged). For grouped sources
+  the memory begins with the companion document's ledger (same-firm
+  cross-document context). **(B) Implied calls always analyzed, never silently
+  dropped; stated always wins (ROADMAP decision 5).** The checker's `inferred`
+  rule now uses the whole-file memory to test the inference for corroboration/
+  contradiction and requires every inferred candidate to be actively judged
+  (output stays categorical). A rejected inference is auditable in `failures.csv`
+  (basis=inferred, the inference reasoning preserved, checker note as the
+  message) — verified by test, no re-implementation needed. New deterministic
+  rule in `src/assemble.py`: when a same-leaf conflict is a clean split of one
+  stated view vs one or more inferred calls, the arbiter is NOT called — the
+  stated call wins, each challenging inferred call is logged as
+  `implied_challenges_stated` (a recommendation carrying the implied view +
+  reasoning + "reconsider the stated call", the deliberate hook for the v1.2
+  confidence-override path), and the kept stated row is force-flagged `review`.
+  Both-stated and both-inferred conflicts keep the existing arbiter path
+  unchanged; a same-view inferred call is ordinary `duplicate_same_view`
+  corroboration. **(C) Dial-vs-commentary convention (ROADMAP decision 7).**
+  `conventions.md` v1.3 adds one line: a clear dial/table/chart call stands
+  regardless of commentary tone unless the commentary addresses the *same* leaf;
+  narrower-sub-asset commentary (gold *mining* vs gold) does not override the
+  chart. Mirrored in `check_candidates.md` v1.7 (checker must not fail a
+  visually-clear call over narrower commentary) and one synthetic gold/gold-mining
+  example in `brain.md` v1.6. The systematic chart-vs-commentary priority
+  sequence stays v2; the v1.2 stated-override path is deliberately NOT built (the
+  recommendation-carrying failure message is its hook). Prompt versions:
+  `conventions.md` v1.3, `check_candidates.md` v1.7, `brain.md` v1.6, registry
+  updated. No live LLM calls (all validation via stub-runner unit tests). Full
+  suite green: baseline 201 at session start; +6 new tests here (checker-memory
+  plumbing, inferred-rejection auditability, stated-vs-implied conflict/same-view/
+  both-stated-arbiter/forecast-delta-fallthrough). Suite also carries the
+  concurrently-committed scout and cross-check sibling tests → 235 total green.
 - 2026-07-07: **Shipped the pre-run companion scout (`src/scout.py`, pre-37
   wave instruction set 2).** A standalone, metadata-only agent pass that reads a
   source CSV's firm / title / date (via `ingest.load_pilot_sources` — header
@@ -691,11 +733,11 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Next / Open
 
-- **Pre-37 wave in flight** (see 2026-07-07 Recent Changes + `ROADMAP.md`):
-  three instruction sets in `tmp/` awaiting agent sessions — checker context
-  wave, companion scout, post-run firm cross-check. Then: API cost test on a
-  small slice (measures the final v1 system), then the 37-source run (≥2 runs
-  under the 20-item cap).
+- **Pre-37 wave (all three instruction sets shipped 2026-07-07;** see 2026-07-07
+  Recent Changes + `ROADMAP.md`): checker context wave, companion scout, and
+  post-run firm cross-check are all implemented and unit-tested. Then: API cost
+  test on a small slice (measures the final v1 system), then the 37-source run
+  (≥2 runs under the 20-item cap).
 - Freeze pending: `runs/pilot-05/` (and still `runs/pilot-04/` +
   `runs/pilot-04-rescored/`) are on disk but not yet committed — `runs/` is
   gitignored; freeze by force-add when the analyst review confirms.
@@ -709,11 +751,15 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   table row per leaf) is a documented out-of-scope limitation of the identical-
   evidence trigger. (3) convention fixes (close-an-overweight → N, hedged risk
   → UNCERTAIN) — DONE. The previously-pending client questions are now
-  ANSWERED (2026-07-06, see `ROADMAP.md`): inference-depth — stated always
-  wins, implied always analyzed and flagged (instruction set 1 implements);
-  dial level policy — clear dial rows are calls now, full-dashboard policy
-  v2; leaf-snapping — calls stay specific, cross-firm broad-vs-specific
-  review is v1.2. (PIMCO source scope resolved 2026-07-06.)
+  ANSWERED (2026-07-06, see `ROADMAP.md`) and the checker/convention ones are
+  now IMPLEMENTED: inference-depth — stated always wins, implied always
+  analyzed and flagged — client-decided AND shipped 2026-07-07 (instruction set
+  1: deterministic stated-beats-implied in `src/assemble.py` +
+  `implied_challenges_stated` recommendation + checker-sees-memory; the v1.2
+  confidence-based override path stays deferred); dial level policy — clear dial
+  rows are calls now (dial-vs-commentary convention line shipped 2026-07-07),
+  full-dashboard policy v2; leaf-snapping — calls stay specific, cross-firm
+  broad-vs-specific review is v1.2. (PIMCO source scope resolved 2026-07-06.)
 - Grouping client questions from pilot-04: combined-row Date/Source now
   ANSWERED (keep each document's title and date, pipe-separated — current
   behavior confirmed, see `ROADMAP.md` decision 9). The outlook-beats-review

@@ -1,6 +1,6 @@
 # House conventions — normative extraction rules
 
-_Version: v1.2_
+_Version: v1.3_
 
 These rules bind every reader of an outlook source: the extractor when making
 a call, and any second reader when judging one. A call that follows these
@@ -20,6 +20,12 @@ itself. They never override the locked taxonomy or the source's own words.
   overrides it. Change verbs describe the journey, not the destination: an
   upgrade that lands at neutral is `N`; "caution has increased" beside a
   printed Neutral dial is `N`.
+- **A clear dial/table/chart call stands regardless of surrounding commentary
+  tone — unless the commentary explicitly addresses the same leaf.** Commentary
+  about a *narrower* sub-asset does not override a chart's call on the broader
+  leaf: cautious prose about gold *mining* does not turn a chart's
+  `Gold/Precious` overweight into a `U`. Only commentary on the *same* leaf the
+  visual charts can override or refine that visual call.
 - **Closing, reducing, neutralizing, or trimming a position lands at its
   resulting stance, not the direction of travel.** "We are closing our
   overweight in X" → `N` (the end state is flat/neutral), **not** `U`.
