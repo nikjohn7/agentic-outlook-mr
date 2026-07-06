@@ -5,6 +5,18 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `conventions.md` — v1.2 (2026-07-06)
+
+v1.2 (post-test2-01 fix wave, Tasks 2-3): extends the resulting-stance rule
+from close/trim language to reduce / neutralize / dial back / scale back / pare
+/ moved back to neutral language. The call lands on the stance the firm ends
+at, not the direction of travel, unless the final position remains explicitly
+over- or underweight. Adds the two-sided rotation/diversification convention:
+when a document favors one segment because it is cautious on another, emit both
+the beneficiary and the source-of-rotation side where both leaves exist. Mirrored
+in `check_candidates.md` v1.6 and illustrated with synthetic examples in
+`brain.md` v1.5.
+
 ### `conventions.md` — v1.1 (2026-07-06)
 
 v1.1 (pilot-05 fix list, Task 3): two convention tweaks. (1) Closing or trimming
@@ -138,6 +150,27 @@ text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
 
+### `check_candidates.md` — v1.6 (2026-07-06)
+
+v1.6 (post-test2-01 fix wave, Tasks 2-3): mirrors `conventions.md` v1.2 so the
+checker polices reduce/neutralize/dial-back/scale-back/pare language as a
+resulting-stance question, not direction of travel. Adds a two-sided
+rotation/diversification policing line: explicitly two-sided evidence can
+support both the favorable and cautionary sides; if the candidate's own evidence
+is clearly two-sided but the treatment is incomplete, the checker marks the
+relevant dimension `unclear` unless the claimed view is directly contradicted.
+
+### `check_candidates.md` — v1.5 (2026-07-06)
+
+v1.5 (post-test2-01 fix wave, Task 1): adds the text-unverifiable visual route.
+Candidates marked `text_unverifiable_visual: true` come from print-captured /
+visual-heavy pages where snapshot text could not verify the dial/grid tokens;
+the checker must open the supplied `native_source_path`, inspect the cited page
+image, and verify the graphic directly. Clear visual confirmation can be
+`decisive`; ambiguous graphics pass only as `adequate`/`thin`; absent or
+contradictory graphics fail with a note. `src/confidence.py` still owns all
+numeric scoring.
+
 ### `check_candidates.md` — v1.4 (2026-07-06)
 
 v1.4 (Rubric v2): adds required `evidence_strength` on every checker verdict,
@@ -227,6 +260,15 @@ reasoning appended to commentary; losers land in `failures.csv` as
 `arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
 confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
 Default engine codex @ medium effort (`--arbiter-*` flags).
+
+### `brain.md` — v1.5 (2026-07-06)
+
+v1.5 (post-test2-01 fix wave, Tasks 2-3): adds two synthetic worked examples.
+One contrasts reducing an overweight back to benchmark (`N`) with paring an
+overweight but remaining above benchmark (`O`). The other shows a rotation away
+from one segment into another as two calls: the source segment cautionary side
+and the destination beneficiary side. Synthetic throughout, preserving the
+blindness protocol.
 
 ### `brain.md` — v1.4 (2026-07-06)
 

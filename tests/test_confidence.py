@@ -15,6 +15,7 @@ from src.confidence import (
     MIN_HTML_SNAPSHOT_CHARS,
     MIN_PDF_CHARS_PER_PAGE,
     SCRAMBLED_PROSE_CAP,
+    VISUAL_UNVERIFIED_BY_TEXT,
     evidence_passes,
     normalize_quote_text,
     score_candidate,
@@ -431,6 +432,156 @@ class ScrambledPageProseTest(unittest.TestCase):
 
         self.assertFalse(check.passed)
         self.assertFalse(check.degraded)
+
+
+class VisualUnverifiedByTextTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def test_visual_token_miss_on_print_captured_page_routes_to_checker(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("page text omits the rendered dial labels"),
+            visual_pages=frozenset({4}),
+        )
+
+        self.assertTrue(check.passed)
+        self.assertEqual(VISUAL_UNVERIFIED_BY_TEXT, check.reason_code)
+        self.assertTrue(check.visual_unverified_by_text)
+        self.assertFalse(check.degraded)
+
+    def test_visual_token_miss_on_clean_text_source_still_hard_fails(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("page text omits the rendered dial labels"),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("evidence_check_failed", check.reason_code)
+        self.assertFalse(check.visual_unverified_by_text)
+
+    def test_visual_route_triggers_only_for_table_or_visual_evidence(self) -> None:
+        candidate = _candidate(
+            evidence_kind="prose",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("page text omits the rendered dial labels"),
+            visual_pages=frozenset({4}),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+        self.assertFalse(check.visual_unverified_by_text)
+
+    def test_visual_route_triggers_only_when_cited_page_is_visual(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("page text omits the rendered dial labels"),
+            visual_pages=frozenset({2}),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("evidence_check_failed", check.reason_code)
+
+    def test_visual_route_scoring_uses_checker_strength_mapping(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+        snapshot = _healthy_snapshot("page text omits the rendered dial labels")
+
+        decisive = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=snapshot,
+            visual_pages=frozenset({4}),
+            verdict=_verdict(evidence_strength="decisive"),
+            checker_enabled=True,
+        )
+        adequate = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=snapshot,
+            visual_pages=frozenset({4}),
+            verdict=_verdict(evidence_strength="adequate"),
+            checker_enabled=True,
+        )
+        thin = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=snapshot,
+            visual_pages=frozenset({4}),
+            verdict=_verdict(evidence_strength="thin"),
+            checker_enabled=True,
+        )
+
+        self.assertEqual("High", decisive.band)
+        self.assertEqual("none", decisive.review_flag)
+        self.assertEqual(decisive.confidence - CHECKER_ADEQUATE_DEDUCTION, adequate.confidence)
+        self.assertEqual("High", adequate.band)
+        self.assertEqual(CHECKER_THIN_CAP, thin.confidence)
+        self.assertEqual("review", thin.review_flag)
+
+    def test_visual_route_checker_fail_is_diagnosable(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        with self.assertRaises(ValueError) as caught:
+            score_candidate(
+                candidate,
+                taxonomy=self.taxonomy,
+                snapshot_text=_healthy_snapshot("page text omits the rendered dial labels"),
+                visual_pages=frozenset({4}),
+                verdict=_verdict(supports_view="fail", note="dial shows underweight"),
+                checker_enabled=True,
+            )
+
+        self.assertEqual("checker_sign_mismatch", str(caught.exception))
+        self.assertIn("checker visual review failed", caught.exception.message)
 
 
 class CheckerScoringTest(unittest.TestCase):

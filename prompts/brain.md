@@ -1,5 +1,7 @@
 # Brain — worked examples for allocation-call extraction
 
+_Version: v1.5_
+
 Distilled from five analyst-reviewed outlook sources (a sector strategist, a
 real-assets macro house, two multi-asset managers, a wealth manager). The
 normative rules these examples illustrate live in `conventions.md` and are
@@ -24,6 +26,12 @@ contract.
   overweight lands at flat, it is not a bearish tilt); "we trimmed our overweight
   in gold but remain overweight" → still `O`. The direction-of-travel verb never
   overrides the stated end state.
+- Synthetic resulting-stance contrast: Northstar Allocation writes, "We reduced
+  our overweight in emerging-market debt back to benchmark after spreads
+  tightened" → `EM Debt - General` `N`, because the final stance is benchmark/
+  neutral. By contrast, "we pared our overweight in emerging-market debt but
+  remain above benchmark" → `EM Debt - General` `O`; the trim is a smaller
+  overweight, not an underweight.
 
 ## Implied calls
 
@@ -41,6 +49,13 @@ contract.
   as "portfolio insurance… maintain strategic exposure" → `Gold/Precious` `O`.
 - "We enter Q2 with a high level of cash and a low level of risk" →
   `Cash/Money Markets` `O` and `Equities - General` `U`.
+- Synthetic rotation example: Harborview Global writes, "We are rotating away
+  from expensive Segment A winners whose margins look vulnerable and into
+  cheaper Segment B suppliers with improving order books." Emit both sides:
+  `Segment A`'s matching leaf `U` (or `basis: inferred` `U` if the leaf bridge
+  is one clear analyst step) and `Segment B`'s matching leaf `O`, each carrying
+  the rotation evidence. Do not record only the favored destination when the
+  source explicitly names the segment it is leaving.
 - "The ECB to raise rates twice in 2026 before reversing in 2027" →
   `Euro Govt Bonds` `N`, quoting both sides.
 - Germany/Spain/Sweden strong vs France/Italy/U.K. weak → `RE - Europe` `N`

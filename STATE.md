@@ -75,6 +75,146 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Recent Changes
 
+- 2026-07-06: Implemented the **post-test2-01 fix wave** from
+  `runs/test2-01/gt-comparison.md`. **Task 1 (visual/dial evidence gate):**
+  `src.confidence` now routes table/visual token misses on print-captured /
+  visual-heavy pages to an explicit `visual_unverified_by_text` state instead
+  of hard-failing on snapshot text; the checker input marks those candidates
+  and includes the native PDF path; kept rows visibly note that the page image
+  was checked rather than snapshot text; checker failures on this route carry a
+  distinct message from the old token-miss failure. Clean-text visual/table
+  token misses still hard-fail. **Task 2:** `conventions.md` and
+  `check_candidates.md` now treat reduce / neutralize / dial back / scale back /
+  pare language as a resulting-stance rule, not direction of travel; `brain.md`
+  has synthetic examples for reduce-to-benchmark (`N`) vs trim-but-still-OW
+  (`O`). Added an O-vs-U sibling-consistency tripwire in `src.assemble` for
+  same source/page/evidence and same top-level asset class; it review-flags
+  both rows and never fails or corrects them, and deliberately does not trigger
+  on N-vs-U. **Task 3:** conventions/checker/brain now require two-sided
+  rotation/diversification evidence to emit both the source-of-rotation caution
+  and the beneficiary where supported. Prompt versions updated:
+  `conventions.md` v1.2, `check_candidates.md` v1.6, `brain.md` v1.5, registry
+  updated. **Task 4:** generated client `tmp/client-update/questions.html`
+  gained dial-grid breadth and source-scope questions. **Task 5:**
+  `tmp/gt-reconciliation-test2.md` drafted the TRP UK IG Credit GT correction
+  and the six BlackRock not-grounded/source-scope rows; GT CSV untouched.
+  **Task 1F artifact:** `runs/test2-01-rescored/` reconstructs the 23 frozen
+  `evidence_check_failed` rows and preserves frozen output rows verbatim, with
+  22 rescued / 1 duplicate-same-view assembly failure. Wellington `Japan
+  Equities N` and the frozen `UK Duration N` UK-rates/gilts row are rescued.
+  The requested `claude/opus/medium` checker run could not execute because the
+  Claude CLI is installed but not logged in; artifact verdicts are explicitly
+  marked `local_visual_review_fallback` in `checker-verdicts.json`. Tests:
+  `.venv/bin/python -m unittest discover -s tests` → 201 pass. Note:
+  `.venv/bin/python -m unittest` and discover without `-s tests` still report
+  0 tests in this checkout, so use the explicit discovery command.
+- 2026-07-06: **Materiality gate CLOSED** by user decision after going
+  unexercised in three consecutive runs (pilot-06, test2-01 first attempt, and
+  test2-01 final attempt: 0 `forecast_delta` candidates). The code and unit
+  coverage remain live (`MATERIALITY_FLOOR_BP = 25`,
+  `MATERIALITY_FLOOR_PCT = 2.0`, sub-floor hard fail, at/above-floor cap), but
+  it is no longer a pending validation item. Revisit only if a forecast-delta
+  source appears in the 37-source batch.
+- 2026-07-06: Ran the **test2-01 GT comparison** (branch phase-3): deterministic
+  `src.eval` join against `ground-truth/test2-ground-truth.csv` (89 rows / 5
+  firms), then a judgment pass (five parallel per-firm agents verifying every
+  non-exact worksheet row against the ingested `work/test2-01/` snapshots +
+  source PDFs). Artifacts: `runs/test2-01/eval/` (`eval-report.md`,
+  `eval-buckets.json`, filled `judgment-worksheet.csv`),
+  `runs/test2-01/gt-judgments/*.judgment.json` (5), synthesis
+  `runs/test2-01/gt-comparison.md`. **Raw recall 68/89 (76.4%)** — best raw of
+  any run (pilot-06 65.9%); view-agreement 63/68 (92.6%); **quote spot check
+  142/142 pass**. **Grounded-adjusted recall ≈ 75/83 (90.4%)** (add 7
+  near_leaf_covered, drop 6 not_grounded GT-provenance rows). Misses (21):
+  recall_gap 4 / near_leaf_covered 7 / not_grounded 6 / defensible_omission 4 —
+  **only 4 genuine misses**, of which **2 are fixable** (Wellington Japan
+  Equities N + UK Gilts N were emitted-but-evidence-gated) and **2 are one costly
+  reading gap** (BlackRock IT/Tech U + US Mega-Cap U — the doc's central "diversify
+  away from expensive mega-cap AI" caution, which the model took the opposite
+  side of by emitting only bullish Asian-semi tech, unflagged). **Precision
+  excellent: 1 overreach / 74 model_only** (66 sound_breadth + 7 near_leaf_of_gt
+  + 1 overreach). Across all 142 kept rows the pass found **exactly 2 real
+  defects, and they are the SAME class**: the 1 view reading error (Franklin EM
+  Debt-Local Currency U vs N) and the 1 overreach (TRP EM Debt-Local Currency U)
+  both map a *reduce/neutralize* dial to `U` instead of the resulting stance `N`
+  — the pilot-05 trim→resulting-stance convention **not firing on
+  "neutralize/reduce" verbs** (Franklin even read the same dial correctly as N
+  for EM Debt-General but U for local-currency; unflagged at conf 75). Of the 5
+  view disagreements: 1 genuine model error (that EM-Debt row), **1 GT error**
+  (TRP UK IG Credit — both dials show Neutral, model's N right), 2 convention
+  disputes, 1 model_correct (BlackRock Healthcare O) → model view calls
+  defensible on 4/5 disagreements and 67/68 matched. **Both post-pilot-06 changes
+  validated positively**: Change-2 country-granularity is recall-POSITIVE
+  (BlackRock inferred Taiwan/South Korea Equities O + GSAM China Equities N all
+  grounded in named-country prose, landing on named leaves alongside stated Asia
+  Equities O — no snapping; 0/6 inferred rows hallucinated); Change-1
+  call_language persisted on all rows, downgrade guard held. Per-firm true
+  recall: Franklin 95.8%, TRP 91.7%, GSAM 88.9% (31/31 model_only sound — faithful
+  p.12 grid enumeration, not overreach), Wellington 75% raw but 0 reading
+  errors/0 overreach (all 4 misses near-leaf or evidence-gated), **BlackRock
+  18.8% raw but true recall strong** — 10/16 GT rows reference bonds/credit/MyMap
+  multi-asset material absent from the ingested equity-only PDF (GT authored from
+  a fuller corpus, like pilot-05 PIMCO), all 13 model calls grounded.
+  **Systemic fix list**: (1) evidence gate vs print-captured HTML dial grids —
+  all 23 `evidence_check_failed` on the two print-to-PDF sources; cost 2
+  Wellington misses; TRP only escaped because the grouped UK-view PDF carried the
+  same dials in clean text (grouping doubling as ingest-robustness backstop) —
+  **highest-value recall fix**; (2) EM-Debt reduce→U convention gap; (3)
+  two-sided-prose caution scope (BlackRock mega-cap); (4) BlackRock GT source
+  scope (analyst decision); (5) **materiality gate UNEXERCISED a 3rd time** (0
+  forecast_delta); (6) GSAM horizon/conditionality flattening (marks risk-column
+  hedges O — caveat, not defect). Verdict: strongest run yet on both recall and
+  precision; defects are narrow and specific, none blind-protocol or
+  extraction-integrity. `runs/` gitignored; not committed. GT itself has ≥1 error
+  + 6 not-grounded rows to reconcile with the analyst.
+- 2026-07-06: Ran the **test2 blind test set** (`prev-excel/test2/test2.csv`, 7
+  new sources: BlackRock, GSAM, T. Rowe Price ×2, Wellington ×2, Franklin
+  Templeton) through the pipeline as `test2-01` on `phase-3` — the behavioral
+  validation of the two post-pilot-06 prompt/output changes (Change-1
+  `call_language` output column, Change-2 country-granularity inference,
+  `analyze_chunk.md` v1.6). Engines held at the pilot-06 config: analyze
+  codex/gpt-5.5/high, checker claude/opus/medium, arbiter claude/sonnet/high,
+  grouper claude/sonnet/medium, `--group-notes prev-excel/test2/group-notes.md`.
+  Pre-flight clean: 191 tests pass; `--ingest-only` smoke confirms all 7 ingest
+  with zero code edits (4 `.pdf` URLs downloaded — BlackRock 13p / GSAM 18p /
+  TRP-UK 4p / Franklin 14p; 3 HTML URLs print-captured as visual-heavy —
+  TRP-Monthly 6p / Wellington-Monthly 8p / Wellington-Quarterly 10p). **Grouping
+  resolved both pairs with zero warnings** (group-1 TRP Monthly+UK, group-2
+  Wellington Quarterly+Monthly) on both the killed and the surviving attempt.
+  253 candidates → **142 kept / 111 failed**; count check pass; 0 chunk
+  failures. Views O 88 / N 32 / U 22 (no kept UNCERTAIN this run). Bands High
+  114 / Medium 28. Basis stated 136 / inferred 6 / **forecast_delta 0**
+  (materiality gate UNEXERCISED a third time — no forecast_delta candidates
+  emitted). Checker strength decisive 76 / adequate 58 / thin 8. Call language
+  explicit_dial 83 / directional 39 / explicit_stance 14 / implied 6.
+  Review-flagged 39. Failures: `duplicate_same_view` 62 (grouped-pair cross-doc
+  dedups), `evidence_check_failed` 23, `arbitrated_out` 13 (sonnet arbiter on
+  grouped-source view conflicts — GBP/Europe Equities/credit dial ties resolved
+  by published-level/specific-beats-general/current-beats-conditional),
+  `quote_not_found` 10 (prose on scrambled/visual pages), `duplicate_cross_leaf`
+  3 (cross-leaf dedup LIVE). **Change-2 validated behaviorally**: BlackRock
+  emitted `Taiwan Equities O` + `South Korea Equities O` as named-country
+  `inferred` leaves (Medium + review) *alongside* the stated `Asia Equities O` —
+  the intended multi-call pattern, no snapping to the regional aggregate; GSAM
+  `China Equities N` (inferred) likewise. This is the direct fix for the
+  pilot-06 Aberdeen "Asia Equities O" snapping. **Change-1 validated**:
+  `call_language` persisted on all 142 rows, explicit_dial dominant (the four
+  dial-grid sources), `implied` on exactly the 6 inferred rows; the
+  explicit_dial→explicit_stance prose downgrade guard held (0 explicit_dial rows
+  on prose). Inference-tier caps intact (all 6 inferred rows Medium + review).
+  **New observation / recall risk**: all 23 `evidence_check_failed` land on the
+  two print-to-PDF HTML sources (TRP-Monthly 16, Wellington-Quarterly 7) with
+  "table/visual evidence tokens were not found in snapshot text" — the
+  visual/table key-token gate rejects legitimate dial-grid calls (US Equities,
+  UK Gilts, currencies, duration) when the print-captured snapshot text lacks
+  the rendered tokens; a print-captured-HTML-grid recall gap worth a fix pass,
+  flagged for human review. Operational note: the **first attempt was killed
+  mid-analyze** (4/7 sources done) when the background-task wrapper was torn down
+  and took its child python with it (`setsid` is absent on macOS); relaunched
+  under `nohup` and it survived to completion. Frozen on disk at `runs/test2-01/`
+  (`output.csv`/`failures.csv`/`manifest.md`); **not committed** (runs/
+  gitignored). Blind protocol held — `ground-truth/test2-ground-truth.csv` never
+  opened; GT comparison is the separate downstream `src.eval` + judgment step.
 - 2026-07-06: Extended generic source intake to load a real-world export CSV
   as-is (`prev-excel/test2/test2.csv`, a 7-source second test set). Two additions
   to `src/ingest.py`. (1) **Header aliases**: `load_pilot_sources` maps a CSV's
@@ -420,20 +560,19 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   gitignored; freeze by force-add when the analyst review confirms.
 - Pilot-05 fix list from the GT comparison (`runs/pilot-05/gt-comparison.md`):
   items (1)–(3) are **done** (2026-07-06, see Recent Changes). (1)
-  materiality gate for forecast-delta evidence — DONE (prose-over-table
-  precedence deliberately NOT implemented; it is client question 1). (2)
-  cross-leaf dedup — DONE, scoped to identical-evidence clusters with a
-  named-leaf guard; the AB global-duration triple (different table row per
-  leaf) is a documented out-of-scope limitation of the identical-evidence
-  trigger, partially mitigated by (1). (3) convention fixes (close-an-
-  overweight → N, hedged risk → UNCERTAIN) — DONE. Still **flagged pending
-  client answers** and encoded only provisionally: the `MATERIALITY_FLOOR_BP`
-  = 25 / `MATERIALITY_FLOOR_PCT` = 2.0 values and whether a forecast delta is a
-  "view" at all (client question 1); inference-depth scope — the `inferred`
-  tier is built and segregated below stated calls, but whether analyst-style
-  macro→allocation inference is in scope (client question 2) still bounds
-  recall; dial main+sub level policy (question 3); leaf-snapping for the 9
-  near-leaf pairs (question 4). (PIMCO source scope resolved 2026-07-06.)
+  materiality gate for forecast-delta evidence — DONE and CLOSED as
+  unit-test-validated by 2026-07-06 decision after three unexercised runs; keep
+  code-live and revisit only if a forecast-delta source appears in the
+  37-source batch. (2) cross-leaf dedup — DONE, scoped to identical-evidence
+  clusters with a named-leaf guard; the AB global-duration triple (different
+  table row per leaf) is a documented out-of-scope limitation of the identical-
+  evidence trigger. (3) convention fixes (close-an-overweight → N, hedged risk
+  → UNCERTAIN) — DONE. Still **flagged pending client answers**:
+  inference-depth scope — the `inferred` tier is built and segregated below
+  stated calls, but whether analyst-style macro→allocation inference is in
+  scope (client question 2) still bounds recall; dial main+sub level policy
+  (question 3); leaf-snapping for the 9 near-leaf pairs (question 4). (PIMCO
+  source scope resolved 2026-07-06.)
 - Grouping client questions from pilot-04: which Date/URL a combined
   pipe-joined row should carry, and confirm the outlook-beats-review arbiter
   rule.

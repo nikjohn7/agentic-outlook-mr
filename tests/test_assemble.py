@@ -194,6 +194,59 @@ class CheckerAndArbiterAssemblyTest(unittest.TestCase):
         self.assertIn("Checker strength (kept rows)", manifest)
         self.assertIn("- adequate: 1", manifest)
 
+    def test_visual_unverified_route_adds_output_note(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+        result = assemble_candidates(
+            [candidate],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): "snapshot text omits rendered dial labels"},
+            page_counts={"source-1": 5},
+            visual_pages={"source-1": {4}},
+            verdicts={0: _verdict()},
+        )
+
+        row = result.output_rows[0]
+        self.assertEqual("High", row["band"])
+        self.assertEqual("none", row["review_flag"])
+        self.assertIn("checker verified the cited page image", row["Full Commentary"])
+
+    def test_visual_unverified_checker_fail_message_is_distinct_from_token_miss(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+        result = assemble_candidates(
+            [candidate],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): "snapshot text omits rendered dial labels"},
+            page_counts={"source-1": 5},
+            visual_pages={"source-1": {4}},
+            verdicts={
+                0: _verdict(supports_view="fail", note="dial was not present on the page")
+            },
+        )
+
+        self.assertEqual([], result.output_rows)
+        self.assertEqual("checker_sign_mismatch", result.failures[0].reason_code)
+        self.assertIn("checker visual review failed", result.failures[0].message)
+        self.assertNotEqual(
+            "table/visual evidence tokens were not found in snapshot text",
+            result.failures[0].message,
+        )
+
     def test_arbiter_resolves_conflict_and_records_loser(self) -> None:
         candidates = [_candidate(view="O"), _candidate(view="U")]
 
@@ -451,6 +504,80 @@ class CrossLeafDedupTest(unittest.TestCase):
 
         self.assertEqual(2, len(result.output_rows))
         self.assertEqual([], [f for f in result.failures if f.reason_code == "duplicate_cross_leaf"])
+
+
+class SiblingConsistencyTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1",
+                firm="Test Firm",
+                date="4/2/2026",
+                source="Outlook",
+                url="https://example.test/source",
+            )
+        }
+
+    def _assemble(self, candidates: list[CandidateCall]):
+        evidence = "Shared dial row shows the pairwise allocation stance."
+        return assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): evidence + " " + "Context. " * 40},
+            page_counts={"source-1": 1},
+        )
+
+    def test_flags_opposite_directional_siblings_on_same_evidence(self) -> None:
+        evidence = "Shared dial row shows the pairwise allocation stance."
+        candidates = [
+            _candidate(
+                sub_asset_class="US Equities",
+                view="O",
+                evidence_quote=evidence,
+                locator="p.3",
+            ),
+            _candidate(
+                sub_asset_class="Japan Equities",
+                view="U",
+                evidence_quote=evidence,
+                locator="p.3",
+            ),
+        ]
+
+        result = self._assemble(candidates)
+
+        self.assertEqual(2, len(result.output_rows))
+        self.assertEqual({"review"}, {row["review_flag"] for row in result.output_rows})
+        self.assertTrue(
+            all("Sibling consistency" in row["Full Commentary"] for row in result.output_rows)
+        )
+
+    def test_neutral_versus_underweight_does_not_trigger_sibling_flag(self) -> None:
+        evidence = "Shared dial row shows the pairwise allocation stance."
+        candidates = [
+            _candidate(
+                sub_asset_class="US Equities",
+                view="N",
+                evidence_quote=evidence,
+                locator="p.3",
+            ),
+            _candidate(
+                sub_asset_class="Japan Equities",
+                view="U",
+                evidence_quote=evidence,
+                locator="p.3",
+            ),
+        ]
+
+        result = self._assemble(candidates)
+
+        self.assertEqual(2, len(result.output_rows))
+        self.assertTrue(
+            all("Sibling consistency" not in row["Full Commentary"] for row in result.output_rows)
+        )
 
 
 class BasisOutputTest(unittest.TestCase):

@@ -15,6 +15,7 @@ HARD_FAILURE_QUOTE = "quote_not_found"
 HARD_FAILURE_VISUAL_LOCATOR = "visual_locator_missing"
 HARD_FAILURE_EVIDENCE = "evidence_check_failed"
 HARD_FAILURE_MATERIALITY = "delta_below_materiality"
+VISUAL_UNVERIFIED_BY_TEXT = "visual_unverified_by_text"
 
 # Materiality floor for forecast-delta evidence (a house forecast endpoint vs.
 # the current level). PROVISIONAL, pending client confirmation — this maps to
@@ -98,6 +99,11 @@ class EvidenceCheck:
     # because the cited page is scrambled. Both a degraded pass and a degraded
     # failure carry it, so the outcome is always visible to analysts.
     degraded: bool = False
+    # True when table/visual evidence is on a print-captured / visual-heavy page
+    # whose rendered dial/grid tokens are not present in the snapshot text. This
+    # is not a deterministic pass; it routes the candidate to checker visual
+    # review instead of hard-failing on the text snapshot.
+    visual_unverified_by_text: bool = False
 
 
 class EvidenceFailure(ValueError):
@@ -120,6 +126,20 @@ class MaterialityFailure(ValueError):
     def __init__(self, message: str) -> None:
         super().__init__(HARD_FAILURE_MATERIALITY)
         self.reason_code = HARD_FAILURE_MATERIALITY
+        self.message = message
+
+
+class CheckerFailure(ValueError):
+    """A checker hard-fail with a diagnosable message.
+
+    In particular, visual-unverified candidates must distinguish "snapshot text
+    lacked dial tokens, then the checker looked at the page image and failed it"
+    from the old deterministic "tokens not found in snapshot text" gate.
+    """
+
+    def __init__(self, reason_code: str, message: str) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
         self.message = message
 
 
@@ -201,6 +221,7 @@ def evidence_passes(
     snapshot_text: str,
     *,
     scrambled_pages: frozenset[int] = frozenset(),
+    visual_pages: frozenset[int] = frozenset(),
 ) -> EvidenceCheck:
     """Validate evidence according to its kind without using model judgment.
 
@@ -214,7 +235,11 @@ def evidence_passes(
         if cited_page is not None and cited_page in scrambled_pages:
             return _degraded_prose_evidence_passes(candidate, snapshot_text, cited_page)
         return _prose_evidence_passes(candidate, snapshot_text)
-    return _table_or_visual_evidence_passes(candidate, snapshot_text)
+    return _table_or_visual_evidence_passes(
+        candidate,
+        snapshot_text,
+        visual_pages=visual_pages,
+    )
 
 
 def score_candidate(
@@ -224,6 +249,7 @@ def score_candidate(
     snapshot_text: str,
     page_count: int | None = None,
     scrambled_pages: frozenset[int] = frozenset(),
+    visual_pages: frozenset[int] = frozenset(),
     verdict: CheckVerdict | None = None,
     checker_enabled: bool = False,
 ) -> ConfidenceResult:
@@ -239,7 +265,12 @@ def score_candidate(
     if candidate.taxonomy_match == "none" or not taxonomy.is_valid_label(candidate.sub_asset_class):
         raise ValueError(HARD_FAILURE_TAXONOMY)
 
-    evidence_check = evidence_passes(candidate, snapshot_text, scrambled_pages=scrambled_pages)
+    evidence_check = evidence_passes(
+        candidate,
+        snapshot_text,
+        scrambled_pages=scrambled_pages,
+        visual_pages=visual_pages,
+    )
     if not evidence_check.passed:
         raise EvidenceFailure(evidence_check)
 
@@ -257,7 +288,14 @@ def score_candidate(
     if checker_enabled and verdict is not None:
         failed = verdict.failed_questions()
         if failed:
-            raise ValueError(CHECKER_FAIL_REASONS[failed[0]])
+            reason_code = CHECKER_FAIL_REASONS[failed[0]]
+            message = verdict.note or reason_code
+            if evidence_check.visual_unverified_by_text:
+                message = (
+                    "checker visual review failed after snapshot text could not verify "
+                    f"the table/visual evidence: {message}"
+                )
+            raise CheckerFailure(reason_code, message)
 
     effective_call, call_language_note = effective_call_language(candidate)
 
@@ -300,6 +338,11 @@ def score_candidate(
     # The verbatim guarantee was weakened to key-token overlap: cap below High.
     if evidence_check.degraded:
         score = min(score, SCRAMBLED_PROSE_CAP)
+
+    if evidence_check.visual_unverified_by_text and not (
+        checker_enabled and verdict is not None and verdict.all_pass
+    ):
+        score = min(score, CHECKER_UNCONFIRMED_CAP)
 
     # Basis-driven caps: a forecast delta at/above the floor is still only a
     # provisional view, and an analyst inference is segregated one band below
@@ -465,6 +508,8 @@ def _degraded_prose_evidence_passes(
 def _table_or_visual_evidence_passes(
     candidate: CandidateCall,
     snapshot_text: str,
+    *,
+    visual_pages: frozenset[int] = frozenset(),
 ) -> EvidenceCheck:
     if not _has_specific_visual_locator(candidate.locator):
         return EvidenceCheck(
@@ -476,6 +521,16 @@ def _table_or_visual_evidence_passes(
     if not _meaningful_tokens(candidate.evidence_quote):
         return EvidenceCheck(False, HARD_FAILURE_EVIDENCE, "table/visual evidence is empty")
     if not _key_tokens_overlap(candidate.evidence_quote, snapshot_text):
+        cited_page = _cited_page(candidate.locator)
+        if cited_page is not None and cited_page in visual_pages:
+            return EvidenceCheck(
+                True,
+                VISUAL_UNVERIFIED_BY_TEXT,
+                "table/visual evidence tokens were not found in snapshot text; "
+                "eligible for checker visual verification because the cited page "
+                "comes from a print-captured or visual-heavy source",
+                visual_unverified_by_text=True,
+            )
         return EvidenceCheck(
             False,
             HARD_FAILURE_EVIDENCE,

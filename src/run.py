@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 from src.assemble import FailureRecord, assemble_candidates, write_run_outputs
+from src.confidence import evidence_passes
 from src.ingest import (
     IngestedSource,
     Chunk,
@@ -118,6 +119,7 @@ def run_pipeline(
     snapshots: dict[tuple[str, str], str] = {}
     page_counts: dict[str, int] = {}
     scrambled_pages: dict[str, set[int]] = {}
+    visual_pages: dict[str, set[int]] = {}
     source_infos: dict[str, SourceInfo] = {}
     source_summaries: list[dict[str, object]] = []
     group_ledgers: dict[str, str] = {}
@@ -131,6 +133,10 @@ def run_pipeline(
             page_counts[source.source_id] = ingested.page_count
         if ingested.scrambled_pages:
             scrambled_pages[source.source_id] = set(ingested.scrambled_pages)
+        source_visual_pages: set[int] = set()
+        if (ingested.printed_pdf or ingested.visual_heavy) and ingested.page_count:
+            source_visual_pages = set(range(1, ingested.page_count + 1))
+            visual_pages[source.source_id] = source_visual_pages
         source_infos[source.source_id] = SourceInfo(
             source_id=source.source_id,
             firm=source.firm,
@@ -166,6 +172,11 @@ def run_pipeline(
         all_candidates.extend(candidates)
         chunk_failures.extend(failures)
         if candidates:
+            visual_unverified = _visual_unverified_candidate_indexes(
+                candidates,
+                snapshot_text=snapshot_text,
+                visual_pages=source_visual_pages,
+            )
             source_verdicts, checker_failure = _check_candidates(
                 source,
                 candidates,
@@ -174,6 +185,8 @@ def run_pipeline(
                 model=checker_model,
                 effort=checker_effort,
                 runner=runner,
+                native_source_path=ingested.native_source_path,
+                visual_unverified=visual_unverified,
             )
             verdicts.update(
                 {offset + local_index: verdict for local_index, verdict in source_verdicts.items()}
@@ -207,6 +220,7 @@ def run_pipeline(
         snapshots=snapshots,
         page_counts=page_counts,
         scrambled_pages=scrambled_pages,
+        visual_pages=visual_pages,
         verdicts=verdicts,
         arbiter=arbiter,
         group_map=group_map or None,
@@ -300,6 +314,8 @@ def _check_candidates(
     model: str | None,
     effort: str | None,
     runner=None,
+    native_source_path: str | Path | None = None,
+    visual_unverified: set[int] | None = None,
 ) -> tuple[dict[int, CheckVerdict], FailureRecord | None]:
     """One second-reader call for all of a source's candidates.
 
@@ -311,6 +327,7 @@ def _check_candidates(
         "source_id": source.source_id,
         "firm": source.firm,
         "source_title": source.source,
+        "native_source_path": str(native_source_path) if native_source_path else "",
         "candidates": [
             {
                 "index": index,
@@ -323,6 +340,7 @@ def _check_candidates(
                 "locator": candidate.locator,
                 "reasoning": candidate.reasoning,
                 "basis": candidate.basis,
+                "text_unverifiable_visual": index in (visual_unverified or set()),
             }
             for index, candidate in enumerate(candidates)
         ],
@@ -349,6 +367,23 @@ def _check_candidates(
         if 0 <= verdict.index < len(candidates)
     }
     return verdict_map, None
+
+
+def _visual_unverified_candidate_indexes(
+    candidates: list[CandidateCall],
+    *,
+    snapshot_text: str,
+    visual_pages: set[int],
+) -> set[int]:
+    if not visual_pages:
+        return set()
+    indexes: set[int] = set()
+    pages = frozenset(visual_pages)
+    for index, candidate in enumerate(candidates):
+        check = evidence_passes(candidate, snapshot_text, visual_pages=pages)
+        if check.visual_unverified_by_text:
+            indexes.add(index)
+    return indexes
 
 
 def _make_arbiter(

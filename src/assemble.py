@@ -176,6 +176,7 @@ def assemble_candidates(
     snapshots: dict[tuple[str, str], str],
     page_counts: dict[str, int] | None = None,
     scrambled_pages: dict[str, set[int]] | None = None,
+    visual_pages: dict[str, set[int]] | None = None,
     verdicts: dict[int, CheckVerdict] | None = None,
     arbiter: Arbiter | None = None,
     group_map: dict[str, str] | None = None,
@@ -185,6 +186,9 @@ def assemble_candidates(
     scrambled_pages maps source_id -> the set of column-interleaved page numbers
     (see src/ingest.detect_scrambled_page); a prose call citing one of them uses
     the degraded key-token check, capping confidence and forcing review.
+    visual_pages maps source_id -> pages from print-captured / visual-heavy
+    sources where table/visual token misses should route to checker visual
+    review instead of hard-failing on snapshot text.
 
     verdicts maps candidate list index -> checker verdict; None means the
     checker step is not in play (no caps), while a dict with a missing index
@@ -203,6 +207,7 @@ def assemble_candidates(
         snapshot_text = snapshots.get((candidate.source_id, candidate.chunk_id), "")
         page_count = (page_counts or {}).get(candidate.source_id)
         source_scrambled = frozenset((scrambled_pages or {}).get(candidate.source_id, ()))
+        source_visual_pages = frozenset((visual_pages or {}).get(candidate.source_id, ()))
         verdict = (verdicts or {}).get(index)
         try:
             scored.append(
@@ -212,6 +217,7 @@ def assemble_candidates(
                     snapshot_text=snapshot_text,
                     page_count=page_count,
                     scrambled_pages=source_scrambled,
+                    visual_pages=source_visual_pages,
                     verdict=verdict,
                     checker_enabled=checker_enabled,
                 )
@@ -221,7 +227,12 @@ def assemble_candidates(
             # EvidenceFailure carries the human-readable message (e.g. the
             # scrambled-page degraded-fallback note); other reasons echo the code.
             message = getattr(exc, "message", reason)
-            if verdict is not None and reason in CHECKER_FAIL_REASONS.values() and verdict.note:
+            if (
+                verdict is not None
+                and reason in CHECKER_FAIL_REASONS.values()
+                and verdict.note
+                and not getattr(exc, "message", "")
+            ):
                 message = verdict.note
             failures.append(
                 FailureRecord.from_candidate(
@@ -303,6 +314,7 @@ def assemble_candidates(
 
     survivors, cross_leaf_failures = _dedup_cross_leaf(selected_entries, taxonomy)
     failures.extend(cross_leaf_failures)
+    sibling_notes = _sibling_conflict_notes(survivors, taxonomy)
 
     output_rows = [
         _output_row(
@@ -312,6 +324,7 @@ def assemble_candidates(
             arbiter_note=entry.arbiter_note,
             locator_source=entry.source.source if entry.member_count > 1 else "",
             corroboration=entry.corroboration,
+            sibling_note=sibling_notes.get(id(entry), ""),
         )
         for entry in survivors
     ]
@@ -402,6 +415,48 @@ def _dedup_cross_leaf(
         else:
             survivors.append(entry)
     return survivors, failures
+
+
+def _sibling_conflict_notes(entries: list[_Selected], taxonomy: Taxonomy) -> dict[int, str]:
+    """Flag O-vs-U sibling rows on byte-identical evidence.
+
+    This is a review tripwire only: same source doc, same cited page, same
+    normalized evidence spans, same top-level Asset Class, opposite directional
+    views. N-vs-U is deliberately out of scope.
+    """
+    clusters: dict[tuple[str, int | None, frozenset[str], str], list[_Selected]] = {}
+    for entry in entries:
+        candidate = entry.scored.candidate
+        if candidate.view not in {"O", "U"}:
+            continue
+        lookup = taxonomy.require_label(candidate.sub_asset_class)
+        span_key = frozenset(
+            normalized
+            for span in candidate.evidence_spans
+            if (normalized := normalize_quote_text(span))
+        )
+        key = (
+            candidate.source_id,
+            _cited_page(candidate.locator),
+            span_key,
+            lookup.asset_class,
+        )
+        clusters.setdefault(key, []).append(entry)
+
+    notes: dict[int, str] = {}
+    for members in clusters.values():
+        views = {member.scored.candidate.view for member in members}
+        if views != {"O", "U"}:
+            continue
+        labels = sorted(member.scored.candidate.sub_asset_class for member in members)
+        note = (
+            "Sibling consistency: same source/page/evidence produced opposite "
+            f"O/U views on related {taxonomy.require_label(members[0].scored.candidate.sub_asset_class).asset_class} "
+            f"leaves ({', '.join(labels)}); review required."
+        )
+        for member in members:
+            notes[id(member)] = note
+    return notes
 
 
 def _leaf_named_in_evidence(candidate: CandidateCall) -> bool:
@@ -516,6 +571,7 @@ def _output_row(
     arbiter_note: str = "",
     locator_source: str = "",
     corroboration: str = "",
+    sibling_note: str = "",
 ) -> dict[str, str]:
     candidate = scored.candidate
     lookup = taxonomy.output_fields_for(candidate.sub_asset_class)
@@ -527,6 +583,11 @@ def _output_row(
             " Evidence check: cited page detected as scrambled two-column text; "
             "verbatim quote match degraded to key-token overlap "
             "(confidence capped, review required)."
+        )
+    if scored.evidence_check.visual_unverified_by_text:
+        commentary += (
+            " Evidence check: snapshot text did not contain the table/visual tokens; "
+            "checker verified the cited page image instead."
         )
     if scored.cap_reason:
         commentary += f" {scored.cap_reason}"
@@ -542,6 +603,10 @@ def _output_row(
     review_flag = scored.review_flag
     if arbiter_note:
         commentary += f" Arbiter: {arbiter_note}"
+        if review_flag == "none":
+            review_flag = "review"
+    if sibling_note:
+        commentary += f" {sibling_note}"
         if review_flag == "none":
             review_flag = "review"
     return {
@@ -585,6 +650,11 @@ def _group_scored(
         )
         groups.setdefault(key, []).append(item)
     return groups
+
+
+def _cited_page(locator: str) -> int | None:
+    match = re.search(r"p\.?\s*(\d+)", locator, flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
 
 def _write_csv(path: Path, columns: tuple[str, ...], rows: list[dict[str, str]]) -> None:
