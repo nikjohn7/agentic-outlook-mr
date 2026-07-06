@@ -75,6 +75,50 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Recent Changes
 
+- 2026-07-07: **Shipped the pre-run companion scout (`src/scout.py`, pre-37
+  wave instruction set 2).** A standalone, metadata-only agent pass that reads a
+  source CSV's firm / title / date (via `ingest.load_pilot_sources` — header
+  aliases accepted; **no URL fetch, no document read**) and proposes
+  read-together groups among same-firm sources, emitting a
+  `--group-notes`-compatible notes file so its output feeds the existing in-run
+  group machinery (`run._resolve_groups` → `resolve_groups.md`) with **zero
+  pipeline changes**. It is **layer 1** of the three-layer grouping design: scout
+  companions *before* a run (this) → in-run assembly/arbitration resolves grouped
+  overlap with full context → post-run cross-check (set 3) catches everything
+  left ungrouped or split across runs by the 20-item cap (see ROADMAP.md). CLI:
+  `python -m src.scout --sources <csv> --out <group-notes.md> [--report <md>]
+  [--engine/--model/--effort]`. **Conservatism is enforced twice.** In the prompt
+  (`prompts/scout_groups.md`, new): a clear companion signal is *required* —
+  same series + same period, an explicit multi-part title, or a monthly +
+  quarterly of the same franchise over the same window — and **same firm alone
+  never groups** (most same-firm sources are independent desk pieces: equity vs
+  fixed-income vs macro), so the default per firm is "no grouping" with an
+  explicit `ungrouped_firms` reason. In deterministic guards
+  (`scout._apply_guards`, mirroring `_resolve_groups`): unknown source ids,
+  overlapping memberships, cross-firm merges, and groups < 2 are each dropped to
+  a warning, never a crash; a failed LLM call degrades to an empty (comment-only)
+  notes file + a report note. One LLM call at most (default a light Claude tier,
+  claude/haiku/low), parsed by `scout.parse_scout_groups` (mirrors
+  `llm.parse_groups` strictness). Two outputs: the `--out` notes file (one
+  analyst-style line per accepted group, naming the firm + exact titles + dates,
+  phrased the way `resolve_groups.md` expects — verified against that prompt's
+  tolerant title/firm/date matching; the proven pilot/test2 two-doc phrasing) and
+  the `--report` sidecar (per-firm grouped/independent reasoning + guard
+  warnings, for Nikhil's review before the run; **never read by the run**).
+  Registered in `prompts/REGISTRY.md` (`scout_groups.md` v1). **Smoke run** over
+  the real 37-source `excel-file/Target Ingestion List.csv` into `tmp/scout-37/`
+  (gitignored, one cheap metadata call): 6 multi-source firms considered
+  (Aberdeen ×7, Invesco ×6, State Street ×5, Columbia Threadneedle ×3, Impax ×2,
+  PGIM ×2), **0 groups proposed, 0 guard warnings** — the conservative default
+  firing correctly: every firm's sources are topic-distinct desk/regional pieces
+  (Impax credit vs equities; PGIM fixed-income vs multi-asset; Columbia
+  equity/FI/macro; Invesco regional splits; State Street thematic ETF pieces;
+  Aberdeen seven desks), none showing a same-series companion signal. Proposals
+  are for Nikhil to review before the 37-run; **not wired into anything**. 14 new
+  stub-runner tests (alias-CSV load, single-source filtering, unknown-id/overlap/
+  group-of-one/cross-firm/LLM-failure guards, notes-file format, no-multi-source
+  early exit); full suite `.venv/bin/python -m unittest discover -s tests` 201 →
+  215 green. `tmp/scout-37/` stays uncommitted.
 - 2026-07-07: **Shipped the bare-bones post-run firm cross-check
   (`src/crosscheck.py`, pre-37 wave instruction set 3).** A standalone,
   additive REPORT generator that finds same-firm overlapping calls across one or
