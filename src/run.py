@@ -546,9 +546,10 @@ def load_sources(spec: str) -> list[SourceRecord]:
     """Resolve a ``--sources`` value to source records.
 
     ``pilot`` and ``target`` load the built-in CSVs; any other value is a path
-    to a pilot-format source CSV (columns Firm, Date, Source, MR Link, optional
-    local_file) — so adding a second test set needs no code change. The <=20
-    source limit is enforced by the caller for every case.
+    to a source CSV in the pilot column family (canonical firm/date/source/url +
+    optional local_file, header aliases accepted — see ``ingest._COLUMN_ALIASES``)
+    — so adding a second test set needs no code change. The <=20 source limit is
+    enforced by the caller for every case.
     """
     if spec == "pilot":
         return load_pilot_sources()
@@ -585,9 +586,10 @@ def main() -> int:
     parser.add_argument(
         "--sources",
         default="pilot",
-        help="'pilot', 'target', or a path to a pilot-format source CSV "
-        "(columns Firm, Date, Source, MR Link, optional local_file); "
-        "the <=20 source limit applies to all",
+        help="'pilot', 'target', or a path to a source CSV (canonical columns "
+        "firm/date/source/url + optional local_file, with header aliases like "
+        "Entity Name/Title/External link accepted). A .pdf URL is downloaded and "
+        "read as a PDF; any other URL takes the HTML path. <=20 sources.",
     )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--engine", choices=("claude", "codex"), default="claude")

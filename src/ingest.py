@@ -23,6 +23,25 @@ PDF_PAGE_CHUNK_SIZE = 5
 HTML_CHAR_CHUNK_SIZE = 8000
 MAX_SOURCES_PER_RUN = 20
 
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+)
+
+# Source-CSV header aliases. A pilot-family CSV names five canonical fields;
+# each accepts any of these headers (case-insensitive, trimmed) so a real-world
+# export using e.g. `Entity Name` / `Title` / `External link` loads without
+# editing. `firm`, `source`, and `url` are required; `date` and `local_file`
+# are optional (a missing date is "", a missing local_file fetches the URL).
+_COLUMN_ALIASES = {
+    "firm": ("firm", "entity name", "entity", "manager", "asset manager", "company", "provider"),
+    "date": ("date", "published at", "published", "publish date"),
+    "source": ("source", "title", "document title", "document"),
+    "url": ("url", "mr link", "external link", "source link", "link"),
+    "local_file": ("local_file", "local file", "local pdf", "file"),
+}
+_REQUIRED_SOURCE_FIELDS = ("firm", "source", "url")
+
 # Graphics in HTML are invisible to every text path we have (trafilatura text,
 # raw markup, markdown fetch), so a page that carries its views in charts or
 # infographics can silently under-report calls. Content graphics (<img>,
@@ -103,32 +122,71 @@ class IngestedSource:
 
 
 def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
-    """Load a pilot-format source CSV.
+    """Load a source CSV in the pilot column family.
 
-    Columns: `Firm`, `Date`, `Source` (title), `MR Link` (URL), and the optional
-    `local_file` (see `_resolve_local_file` for its semantics). Any second test
-    set is a CSV of this exact shape — pointing `--sources <path>` at it needs no
-    code change.
+    Canonical fields — firm, date, source (title), url, and optional local_file —
+    each accept a few header aliases (see `_COLUMN_ALIASES`), so an export CSV
+    using `Entity Name` / `Title` / `External link` loads with no editing.
+    A row's `source_type` is `pdf` when it resolves to a local PDF (`local_file`)
+    or its URL points at a `.pdf` (fetched remotely); otherwise `html`. See
+    `_resolve_local_file` for the local_file contract. Any second test set is a
+    CSV of this family — pointing `--sources <path>` at it needs no code change.
     """
     rows = _read_csv(path)
+    header = _map_source_headers(rows, path)
     sources: list[SourceRecord] = []
     for row in rows:
-        firm, title = row["Firm"], row["Source"]
-        local_path = _resolve_local_file(row, firm=firm, title=title)
-        url = row["MR Link"]
+        firm = row[header["firm"]].strip()
+        title = row[header["source"]].strip()
+        url = row[header["url"]].strip()
+        date = row[header["date"]].strip() if "date" in header else ""
+        local_raw = row[header["local_file"]] if "local_file" in header else ""
+        local_path = _resolve_local_file(local_raw, firm=firm, title=title)
+        resolved_url = resolve_url(url)
         sources.append(
             SourceRecord(
                 source_id=slugify(f"{firm} {title}"),
                 firm=firm,
-                date=row["Date"],
+                date=date,
                 source=title,
                 url=url,
-                resolved_url=resolve_url(url),
-                source_type="pdf" if local_path else detect_source_type(url),
+                resolved_url=resolved_url,
+                source_type="pdf" if local_path else detect_source_type(resolved_url),
                 local_path=local_path,
             )
         )
     return sources
+
+
+def _map_source_headers(rows: list[dict[str, str]], path: str | Path) -> dict[str, str]:
+    """Map a source CSV's actual headers to canonical field names via aliases.
+
+    Returns {canonical field -> actual header}. Raises if a required field
+    (firm/source/url) has no matching header, naming what was seen."""
+    fieldnames = list(rows[0].keys()) if rows else []
+    mapping: dict[str, str] = {}
+    for raw_header in fieldnames:
+        canon = _match_header_alias(raw_header)
+        if canon and canon not in mapping:
+            mapping[canon] = raw_header
+    missing = [field for field in _REQUIRED_SOURCE_FIELDS if field not in mapping]
+    if missing:
+        raise ValueError(
+            f"source CSV {path} is missing required column(s) {missing}; "
+            f"headers seen: {fieldnames}. Each canonical field accepts these "
+            f"aliases (case-insensitive): {_COLUMN_ALIASES}"
+        )
+    return mapping
+
+
+def _match_header_alias(header: str | None) -> str | None:
+    if not header:
+        return None
+    key = header.strip().lower()
+    for canon, aliases in _COLUMN_ALIASES.items():
+        if key in aliases:
+            return canon
+    return None
 
 
 def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRecord]:
@@ -141,7 +199,7 @@ def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRec
     for index, row in enumerate(rows, start=1):
         raw_url = row["Source Link"]
         firm, title = row["Firm"], row["Title"]
-        local_path = _resolve_local_file(row, firm=firm, title=title)
+        local_path = _resolve_local_file(row.get("local_file"), firm=firm, title=title)
         source_id = row["Id"] or slugify(f"{index} {firm} {title}")
         resolved_url = resolve_url(raw_url)
         sources.append(
@@ -199,8 +257,10 @@ def create_snapshot(
     work_dir: str | Path,
     *,
     printer=None,
+    downloader=None,
 ) -> IngestedSource:
-    """printer overrides the headless-browser print-to-PDF step (tests)."""
+    """printer overrides the headless-browser print-to-PDF step, and downloader
+    overrides the remote-PDF fetch (both for tests)."""
     output_dir = Path(work_dir) / source.source_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -210,7 +270,7 @@ def create_snapshot(
     printed_pdf = False
     scrambled_pages: tuple[int, ...] = ()
     if source.source_type == "pdf":
-        native_path = _copy_pdf(source, output_dir)
+        native_path = _copy_pdf(source, output_dir, downloader=downloader)
         snapshot_text, page_count, scrambled_pages = _extract_pdf_text(native_path)
         snapshot_path = output_dir / "snapshot.txt"
         snapshot_path.write_text(snapshot_text, encoding="utf-8")
@@ -345,9 +405,9 @@ def _read_csv(path: str | Path) -> list[dict[str, str]]:
 
 
 def _resolve_local_file(
-    row: dict[str, str], *, firm: str, title: str
+    local_file: str | None, *, firm: str, title: str
 ) -> Path | None:
-    """Resolve a source row's optional `local_file` column to a local PDF.
+    """Resolve a source row's optional `local_file` value to a local PDF.
 
     `local_file` is a repo-relative path (resolved against PROJECT_ROOT). Its
     three-way contract, shared by every source CSV:
@@ -355,11 +415,12 @@ def _resolve_local_file(
         kept only as metadata (the mapped-local-PDF behavior);
       - present but missing on disk  -> hard error naming the row (never a silent
         fall back to the URL — a typo would otherwise fetch the wrong thing);
-      - absent or empty              -> None; fetch the URL.
+      - absent or empty              -> None; fetch the URL (a `.pdf` URL is
+        downloaded and read as a PDF, anything else takes the HTML path).
     A CSV without the column at all behaves as empty for every row (no local
     files), so an existing format keeps loading unchanged.
     """
-    raw = (row.get("local_file") or "").strip()
+    raw = (local_file or "").strip()
     if not raw:
         return None
     path = PROJECT_ROOT / raw
@@ -371,12 +432,36 @@ def _resolve_local_file(
     return path
 
 
-def _copy_pdf(source: SourceRecord, output_dir: Path) -> Path:
-    if source.local_path is None:
-        raise ValueError("PDF source has no local path; remote PDF fetch is not implemented yet")
-    target = output_dir / source.local_path.name
-    shutil.copy2(source.local_path, target)
+def _copy_pdf(source: SourceRecord, output_dir: Path, *, downloader=None) -> Path:
+    """Materialize the source's PDF into output_dir. A local_file is copied; a
+    PDF URL (no local_file) is downloaded. downloader overrides the fetch in
+    tests: (url, output_dir) -> written Path."""
+    if source.local_path is not None:
+        target = output_dir / source.local_path.name
+        shutil.copy2(source.local_path, target)
+        return target
+    return (downloader or _download_pdf)(source.resolved_url, output_dir)
+
+
+def _download_pdf(url: str, output_dir: Path) -> Path:
+    """Fetch a remote PDF into output_dir, named from the URL path. Verifies the
+    response is actually a PDF (`%PDF` magic) so an HTML error/consent page
+    returned for a `.pdf` URL fails loudly instead of feeding pdfplumber junk."""
+    response = requests.get(url, timeout=60, headers={"User-Agent": _BROWSER_UA})
+    response.raise_for_status()
+    if not response.content[:4] == b"%PDF":
+        raise ValueError(
+            f"URL {url} did not return a PDF (body does not start with %PDF; "
+            f"content-type {response.headers.get('Content-Type', '?')})"
+        )
+    target = output_dir / _pdf_filename_from_url(url)
+    target.write_bytes(response.content)
     return target
+
+
+def _pdf_filename_from_url(url: str) -> str:
+    name = Path(urlparse(url).path).name or "download.pdf"
+    return name if name.lower().endswith(".pdf") else f"{name}.pdf"
 
 
 def _extract_pdf_text(path: Path) -> tuple[str, int, tuple[int, ...]]:
@@ -477,17 +562,7 @@ def _html_chunks(
 
 
 def _fetch_html(url: str) -> str:
-    response = requests.get(
-        url,
-        timeout=30,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/126.0 Safari/537.36"
-            )
-        },
-    )
+    response = requests.get(url, timeout=30, headers={"User-Agent": _BROWSER_UA})
     response.raise_for_status()
     return response.text
 

@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 from src.ingest import (
     SourceRecord,
+    _download_pdf,
+    _pdf_filename_from_url,
     count_visual_markup,
     create_snapshot,
     detect_scrambled_page,
@@ -298,6 +300,108 @@ class PrintToPdfIngestTest(unittest.TestCase):
         self.assertFalse(ingested.printed_pdf)
         self.assertIsNone(ingested.page_count)
         self.assertTrue(all(chunk.chunk_id.startswith("char:") for chunk in ingested.chunks))
+
+
+class HeaderAliasTest(unittest.TestCase):
+    """A pilot-family CSV using aliased headers (Entity Name / Title / External
+    link) loads with no editing."""
+
+    def _load(self, temp_dir: str, text: str) -> list:
+        path = Path(temp_dir) / "sources.csv"
+        path.write_text(text, encoding="utf-8")
+        return load_pilot_sources(path)
+
+    def test_aliased_headers_map_to_canonical_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sources = self._load(
+                temp_dir,
+                "Entity Name,Title,Date,External link\n"
+                "BlackRock,Equity Outlook,3/25/2026,https://example.test/a.pdf\n"
+                "T. Rowe Price,Monthly Update,4/8/2026,https://example.test/b.html\n",
+            )
+
+        self.assertEqual(["BlackRock", "T. Rowe Price"], [s.firm for s in sources])
+        self.assertEqual(["Equity Outlook", "Monthly Update"], [s.source for s in sources])
+        self.assertEqual(["3/25/2026", "4/8/2026"], [s.date for s in sources])
+        # .pdf URL -> pdf route (remote), non-pdf -> html route.
+        self.assertEqual(["pdf", "html"], [s.source_type for s in sources])
+        self.assertEqual([None, None], [s.local_path for s in sources])
+
+    def test_missing_required_column_raises_naming_what_was_seen(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaises(ValueError) as ctx:
+                # No firm-like column.
+                self._load(temp_dir, "Title,Date,External link\nDoc,4/8/2026,https://x.test/a\n")
+
+        self.assertIn("firm", str(ctx.exception))
+        self.assertIn("Title", str(ctx.exception))
+
+    def test_local_file_alias_is_honoured(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            [source] = self._load(
+                temp_dir,
+                "Entity Name,Title,Date,External link,Local File\n"
+                "PIMCO,A Doc,4/8/2026,https://example.test/a,prev-excel/PIMCO.pdf\n",
+            )
+
+        self.assertEqual("PIMCO.pdf", source.local_path.name)
+        self.assertEqual("pdf", source.source_type)
+
+
+class RemotePdfTest(unittest.TestCase):
+    def _remote_pdf_source(self) -> SourceRecord:
+        return SourceRecord(
+            source_id="blackrock-outlook",
+            firm="BlackRock",
+            date="3/25/2026",
+            source="Equity Outlook",
+            url="https://example.test/docs/outlook.pdf?view=true",
+            resolved_url="https://example.test/docs/outlook.pdf?view=true",
+            source_type="pdf",
+            local_path=None,
+        )
+
+    def test_remote_pdf_is_downloaded_and_flows_through_the_pdf_path(self) -> None:
+        fetched: list[str] = []
+
+        def fake_downloader(url: str, output_dir: Path) -> Path:
+            fetched.append(url)
+            target = output_dir / "outlook.pdf"
+            shutil.copy2(FIXTURE_PRINTED_PDF, target)
+            return target
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ingested = create_snapshot(
+                self._remote_pdf_source(), temp_dir, downloader=fake_downloader
+            )
+
+        self.assertEqual(["https://example.test/docs/outlook.pdf?view=true"], fetched)
+        self.assertEqual(1, ingested.page_count)
+        self.assertEqual(["p1-1"], [chunk.chunk_id for chunk in ingested.chunks])
+
+    def test_filename_is_derived_from_the_url_path(self) -> None:
+        self.assertEqual(
+            "outlook.pdf", _pdf_filename_from_url("https://x.test/docs/outlook.pdf?view=true")
+        )
+        # A path without a .pdf suffix still lands on a .pdf file on disk.
+        self.assertEqual("report.pdf", _pdf_filename_from_url("https://x.test/report"))
+
+    def test_download_rejects_a_non_pdf_body(self) -> None:
+        # A .pdf URL that actually returns an HTML consent/error page must fail
+        # loudly, not feed junk to pdfplumber.
+        class FakeResponse:
+            content = b"<!doctype html><html>Access denied</html>"
+            headers = {"Content-Type": "text/html"}
+
+            def raise_for_status(self) -> None:
+                pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest.requests.get", return_value=FakeResponse()):
+                with self.assertRaises(ValueError) as ctx:
+                    _download_pdf("https://x.test/a.pdf", Path(temp_dir))
+
+        self.assertIn("did not return a PDF", str(ctx.exception))
 
 
 if __name__ == "__main__":

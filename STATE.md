@@ -27,10 +27,13 @@ and `src/llm.py` (swappable headless `claude -p` / `codex exec`, with
 `{{name}}` template-var injection). Output rows are the 10 workbook columns
 plus `confidence`, `band`, `review_flag`, `basis`, `checker_strength`, and
 `call_language` (the effective, post-downgrade grade); one-hot columns are
-intentionally omitted. Source CSVs are pilot-format (`Firm`, `Date`, `Source`,
-`MR Link`, optional `local_file`) or the target-batch format; `--sources`
-takes `pilot`, `target`, or a path to any pilot-format CSV, so a second test
-set needs no code change (a `local_file` column points a row at a local PDF).
+intentionally omitted. `--sources` takes `pilot`, `target`, or a path to any
+source CSV in the pilot column family — canonical firm/date/source/url +
+optional `local_file`, with header aliases accepted (`Entity Name`/`Title`/
+`External link` etc., see `ingest._COLUMN_ALIASES`), so a real-world export CSV
+loads with no editing. Per row: a present-and-existing `local_file` ingests that
+local PDF; a `.pdf` URL is downloaded and read as a PDF; any other URL takes the
+HTML path. A second test set therefore needs zero code changes.
 A `.claude/settings.json` hook blocks git commits
 containing Claude/Anthropic self-attribution — commit messages stay plain.
 
@@ -72,6 +75,23 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Recent Changes
 
+- 2026-07-06: Extended generic source intake to load a real-world export CSV
+  as-is (`prev-excel/test2/test2.csv`, a 7-source second test set). Two additions
+  to `src/ingest.py`. (1) **Header aliases**: `load_pilot_sources` maps a CSV's
+  headers to canonical fields (firm/date/source/url/local_file) via
+  `_COLUMN_ALIASES` — so `Entity Name`/`Title`/`External link` load with no
+  editing; `firm`/`source`/`url` are required (a missing one raises, naming the
+  headers seen), `date`/`local_file` optional. `load_target_sources` unchanged.
+  (2) **Remote PDF download**: a `.pdf` URL with no `local_file` is now fetched
+  (`_download_pdf`, injectable via `create_snapshot(downloader=...)`, filename
+  from the URL path, `%PDF`-magic guard so an HTML error page returned for a
+  `.pdf` URL fails loudly) and flows through the existing PDF path; the old
+  "remote PDF fetch is not implemented" error is gone. Non-`.pdf` URLs still take
+  the HTML path (and print-to-PDF if visual-heavy). Shared browser UA constant.
+  Live ingest smoke on test2.csv: all 7 sources succeed — 4 PDF URLs downloaded
+  and parsed (14/18/4/14p), 3 HTML URLs fetched (all visual-heavy →
+  print-captured 6/10/8p). 6 new tests (aliases, missing-column error, remote
+  download + filename + non-PDF-body guard); 191 pass. No LLM calls.
 - 2026-07-06: Three post-pilot-06 changes on `phase-3`, gated on the pilot-06
   judgment pass (`runs/pilot-06/gt-comparison.md`). (1) **`call_language`
   persisted to output artifacts**: `output.csv`/`failures.csv` gain a
