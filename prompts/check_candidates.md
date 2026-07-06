@@ -52,6 +52,23 @@ one of `pass`, `unclear`, `fail`:
      subject differently.
 
 Rules:
+- **Closing/trimming an overweight lands at the resulting stance, not `U`.** If
+  the evidence describes closing an overweight to a flat/neutral end state but
+  the call is `U`, that is a sign error → `supports_view: fail` (the end state is
+  `N`). If it trims but stays overweight and the call is `U`, likewise fail. Do
+  not fail a correct `N`/`O` that follows this convention.
+- **A hedged risk note with no position taken should be `UNCERTAIN`, not a
+  directional call.** If the evidence is pure scenario/risk language the house
+  raises without adopting a side, and the call is a directional `U` (or `O`),
+  that view is not supported → `supports_view: fail` (it should be `UNCERTAIN`).
+- **`inferred` basis** — some candidates carry `basis: inferred`: an
+  analyst-style read from macro/thematic prose to a leaf the source never
+  explicitly positions. For these, judge whether the inference is a plausible
+  **single step** from the quoted prose to the named leaf (e.g. country
+  political-crisis prose → that country's equities `U`). A plausible single step
+  is a `pass`/`unclear` as the evidence warrants; an implausible leap or a
+  multi-step chain of speculation → `supports_view: fail`. Verbatim/asset checks
+  apply as usual.
 - An `evidence_quote` containing ` ... ` is an **elided quote**: two or three
   verbatim passages the extractor joined because the support is split across
   the document (each passage has already been verified verbatim). Read the

@@ -19,6 +19,11 @@ contract.
 - Bought / "added substantially" → `O` (implied); "largely exited most of
   these" → `U` (implied); "reinforce the case for maintaining exposure" /
   "maintain strategic exposure as a hedge" → `O`.
+- "We are closing our overweight in developed-market small caps and moving to a
+  neutral stance" → the resulting stance is the call → `N` (not `U`; closing an
+  overweight lands at flat, it is not a bearish tilt); "we trimmed our overweight
+  in gold but remain overweight" → still `O`. The direction-of-travel verb never
+  overrides the stated end state.
 
 ## Implied calls
 
@@ -53,6 +58,10 @@ contract.
 - "Materially underweight the Mag 7, a position carried from 2025… waiting
   for cheaper valuations" → `US Mega-Cap (Tech)` `U` (backward attribution
   counts because the exposure is retained).
+- "There is a risk that long-dated government bonds sell off if fiscal deficits
+  keep widening, but we are not taking an active duration position here" →
+  `UNCERTAIN` (a flagged risk with no stance taken is not a `U`; the house
+  explicitly declines to position).
 
 ## Snapping
 

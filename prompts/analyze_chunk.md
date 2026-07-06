@@ -102,6 +102,38 @@ leave little room, we are trimming risk"). If it is neither, it is not a call.
   boxed and multi-column layouts, so verbatim matching is only reliable for
   main body text — misfiling box text as `prose` gets a correct call rejected.)
 
+**Basis — tag how each call was derived.** Every candidate MUST carry a
+`basis`:
+- `basis: stated` — an explicit dial/score/tier position or explicit OW/N/UW
+  prose ("we are overweight X"; a printed Neutral dial). Stated views are
+  first-class and must **always** be captured — unchanged from before.
+- `basis: forecast_delta` — the call rests on a house forecast **endpoint versus
+  the current level** (a yield, FX, or price-target table: "10-yr yield 4.15% →
+  4.02%"). When `basis` is `forecast_delta` you MUST also emit `delta_value` —
+  the magnitude of the move as a positive number — and `delta_unit` (`bp` for
+  yield/rate moves, `pct` for FX or price moves, expressed as a percent change).
+  A downstream materiality gate drops immaterial moves, so size the move
+  honestly (e.g. 4.15% → 4.02% is `delta_value: 13, delta_unit: "bp"`;
+  1.16 → 1.17 on an FX rate is `delta_value: 0.86, delta_unit: "pct"`).
+- `basis: inferred` — an analyst-style inference: macro or thematic prose that
+  clearly implies a positioning consequence for a specific leaf the source never
+  explicitly positions (e.g. sustained country political-crisis prose → that
+  country's equities `U`; persistent fiscal-slippage discussion → that issuer's
+  sovereigns `U`). You **should** emit these where the bridge is clear — they
+  surface analyst-style reads — but under strict rules:
+  - cite the **verbatim prose spans** that ground the inference, exactly like any
+    other prose call (same evidence contract; `evidence_kind: prose`);
+  - **single step only** — one bridge from the prose to the leaf, never a chained
+    chain of speculation;
+  - if the implication is genuinely two-sided or weak, use `UNCERTAIN` or emit
+    nothing;
+  - an inference must **never replace or contradict a `stated` call on the same
+    leaf** — if the source states a view on that leaf, the stated call wins and
+    you do not also emit an inference for it.
+
+  Inferred calls are segregated and reviewed downstream (capped below stated
+  calls), so never let an inference crowd out, override, or restate a stated view.
+
 **Locator.**
 - prose/PDF: `p.N` (the page the quote is on).
 - prose/HTML: the `char:start-end` locator of this chunk.
@@ -135,12 +167,18 @@ Return exactly one JSON object of this shape and nothing else:
       "evidence_quote": "verbatim sentence for prose (or a JSON array of verbatim spans in document order for an elided prose quote); read cell/figure content for table/visual",
       "locator": "p.N | char:start-end | p.N — 'specific table/figure'",
       "reasoning": "one sentence: why this view",
-      "conflict": false
+      "conflict": false,
+      "basis": "stated | forecast_delta | inferred",
+      "delta_value": 13,
+      "delta_unit": "bp"
     }
   ],
   "summary": "one paragraph: what this chunk covered, plus any unseen figures"
 }
 ```
+
+`delta_value` and `delta_unit` are required **only** when `basis` is
+`forecast_delta`; omit them for `stated` and `inferred` calls.
 
 If the chunk contains no allocation calls, return `{"candidates": [], "summary":
 "<why: no stances taken>"}`. Set `conflict: true` only when this chunk itself

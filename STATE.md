@@ -56,10 +56,42 @@ of visual-heavy HTML), `pilot-03` (first with checker + arbiter), `pilot-04`
 first with providers swapped: codex/gpt-5.5/high analyze, claude checker/
 arbiter/grouper). `POC_PLAN.md` locks the 3-phase build order and LLM-native
 ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`, `playwright` (+ chromium). 95 unittests pass.
+`trafilatura`, `htmldate`, `playwright` (+ chromium). 127 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-06: Shipped the pilot-05 fix list (Tasks 1–4) — deterministic gates
+  and a tagged inference tier, all behind a new required `basis` field on the
+  candidate schema (`stated` | `forecast_delta` | `inferred`; old frozen
+  candidates load as `stated`; `forecast_delta` also requires
+  `delta_value`/`delta_unit`, rejected at parse time if missing). (1)
+  **Materiality gate** (`src/confidence.py`): a `forecast_delta` move below the
+  floor (`MATERIALITY_FLOOR_BP = 25`, `MATERIALITY_FLOOR_PCT = 2.0`, both
+  provisional pending client answer) hard-fails to `delta_below_materiality`
+  (reviewable, reversible — never converted to `N`); at/above the floor it is
+  capped at 74 (below High) with a forced review flag, because delta-as-view is
+  unconfirmed. (2) **Cross-leaf dedup** (`src/assemble.py`): same source doc +
+  same view + identical normalized evidence spans clusters; within a cluster a
+  leaf survives if it is *named* in the evidence (leaf-name/evidence token
+  overlap, prefix-tolerant), so genuine multi-leaf sentences ("long NOK and
+  AUD", "IT and communication services") all survive while unnamed fan-out
+  leaves collapse to `duplicate_cross_leaf`; if no leaf is named, keep the
+  highest-overlap leaf (tie-break: locked-taxonomy order). Known limitation:
+  the trigger is *identical* evidence, so the AB global-duration triple
+  (different table row per leaf) is out of scope — partially mitigated by the
+  materiality gate. (3) **Convention tweaks** (`conventions.md` v1.1, mirrored
+  in `check_candidates.md` v1.3, examples in `brain.md` v1.3): closing/trimming
+  an overweight lands at the resulting stance (→ `N`/`O`, not `U`); a hedged
+  risk note with no position taken → `UNCERTAIN`, not `U`. (4) **Inference
+  tier** (`analyze_chunk.md` v1.4): the analyzer now SHOULD emit single-step
+  analyst inferences (`basis: inferred`, verbatim spans, never overriding a
+  stated call on the same leaf); `src/confidence.py` caps them at 74 (one band
+  below stated) with a forced review flag; the checker verifies each is a
+  plausible single step. Output/`failures.csv` gain a `basis` column after the
+  review fields and the manifest gains a kept-row basis breakdown. 32 new tests
+  (schema, materiality gate, caps, four frozen cross-leaf clusters +
+  no-named-leaf fallback, deterministic pilot-05 re-score of the AB overreach
+  rows and JPM GAA dials); 127 pass. No LLM pilot re-run (separate blind step).
 - 2026-07-06: User replaced `prev-excel/PIMCO.pdf` with the correct/full
   Cyclical Outlook source (the previous file was the 2-page infographic only).
   This makes the 5 PIMCO GT rows judged "not grounded in the ingested source"
@@ -191,19 +223,22 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 - Freeze pending: `runs/pilot-05/` (and still `runs/pilot-04/` +
   `runs/pilot-04-rescored/`) are on disk but not yet committed — `runs/` is
   gitignored; freeze by force-add when the analyst review confirms.
-- Pilot-05 fix list from the GT comparison (`runs/pilot-05/gt-comparison.md`),
-  priority order: (1) deterministic materiality gate for forecast-delta
-  evidence (bp/FX-% floor; possibly prose-over-table precedence) — removes
-  most of the 10-overreach tail that currently passes at 75/High; (2) dedup
-  the same call emitted across multiple leaves (AB global-duration on 3
-  leaves, identical Asia series on 2); (3) convention fixes: "close an
-  overweight" → N not U, hedged risk notes → UNCERTAIN; (4) client
-  questions before encoding conventions: delta-as-view + materiality floor,
-  inference-depth scope (analyst-style macro→allocation inference bounds
-  recall at ~70-75% if out of scope), dial main+sub level policy,
-  leaf-snapping for the 9 near-leaf pairs. (PIMCO source scope is resolved:
-  the user replaced `prev-excel/PIMCO.pdf` with the full source on
-  2026-07-06.)
+- Pilot-05 fix list from the GT comparison (`runs/pilot-05/gt-comparison.md`):
+  items (1)–(3) are **done** (2026-07-06, see Recent Changes). (1)
+  materiality gate for forecast-delta evidence — DONE (prose-over-table
+  precedence deliberately NOT implemented; it is client question 1). (2)
+  cross-leaf dedup — DONE, scoped to identical-evidence clusters with a
+  named-leaf guard; the AB global-duration triple (different table row per
+  leaf) is a documented out-of-scope limitation of the identical-evidence
+  trigger, partially mitigated by (1). (3) convention fixes (close-an-
+  overweight → N, hedged risk → UNCERTAIN) — DONE. Still **flagged pending
+  client answers** and encoded only provisionally: the `MATERIALITY_FLOOR_BP`
+  = 25 / `MATERIALITY_FLOOR_PCT` = 2.0 values and whether a forecast delta is a
+  "view" at all (client question 1); inference-depth scope — the `inferred`
+  tier is built and segregated below stated calls, but whether analyst-style
+  macro→allocation inference is in scope (client question 2) still bounds
+  recall; dial main+sub level policy (question 3); leaf-snapping for the 9
+  near-leaf pairs (question 4). (PIMCO source scope resolved 2026-07-06.)
 - Grouping client questions from pilot-04: which Date/URL a combined
   pipe-joined row should carry, and confirm the outlook-beats-review arbiter
   rule.

@@ -5,6 +5,17 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `conventions.md` — v1.1 (2026-07-06)
+
+v1.1 (pilot-05 fix list, Task 3): two convention tweaks. (1) Closing or trimming
+a position lands at its **resulting stance**, not the direction of travel:
+closing an overweight → `N` (not `U`); trimming but staying overweight → `O`.
+(2) A **hedged risk note with no position taken → `UNCERTAIN`, not `U`**: a
+scenario/risk caveat the house flags without adopting a side is not a `U`.
+Mirrored in `check_candidates.md` v1.3 (categorical `supports_view: fail` when
+the analyzer violates either) and illustrated by two synthetic examples in
+`brain.md` v1.3 (neither drawn from the 7 pilot docs).
+
 ### `conventions.md` — v1 (2026-07-05)
 
 Not a prompt: the shared normative-rules block, injected as `{{conventions}}`
@@ -19,6 +30,23 @@ Rationale: the pilot-03 JPY failure — the extractor applied the netting
 convention, the convention-blind checker failed it as a sign mismatch.
 Checker independence is preserved: it still never sees the source and judges
 only the presented fields; it now judges them under the same law.
+
+### `analyze_chunk.md` — v1.4 (2026-07-06)
+
+v1.4 (pilot-05 fix list, Tasks 1 & 4): adds a required **`basis`** tag to every
+candidate — `stated` (explicit dial/prose position, first-class and unchanged),
+`forecast_delta` (a house forecast endpoint vs. current level; also requires
+`delta_value` + `delta_unit` so the deterministic materiality gate in
+`src/confidence.py` can size the move), or `inferred` (a single-step
+analyst-style read from macro/thematic prose to a leaf the source never
+explicitly positions). Inferred calls are now **encouraged** but strictly
+bounded: verbatim prose spans required, single step only, two-sided/weak →
+`UNCERTAIN` or nothing, and an inference may never replace or contradict a
+stated call on the same leaf (stated wins). The JSON contract gains
+`basis`/`delta_value`/`delta_unit` (the delta fields only for `forecast_delta`).
+The checker (`check_candidates.md` v1.3) verifies inferred candidates are a
+plausible single step; `src/confidence.py` gates immaterial deltas, caps
+forecast_delta and inferred calls below High, and forces review.
 
 ### `analyze_chunk.md` — v1.3 (2026-07-05)
 
@@ -76,6 +104,17 @@ sidebar, banner, stat panel, infographic column) must be tagged
 text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
+
+### `check_candidates.md` — v1.3 (2026-07-06)
+
+v1.3 (pilot-05 fix list, Tasks 3 & 4): mirrors the two new conventions so the
+checker can issue a categorical verdict when the analyzer violates them —
+closing/trimming an overweight to a flat end state called `U` → `supports_view:
+fail`; a hedged risk note with no position taken called `U`/`O` → `fail`. Adds
+`inferred`-basis verification: for `basis: inferred` candidates the checker
+judges whether the read is a plausible **single step** from the quoted prose to
+the leaf (implausible leap or multi-step chain → `fail`). Reads the new `basis`
+field now passed in the checker inputs (`run.py`).
 
 ### `check_candidates.md` — v1.2 (2026-07-05)
 
@@ -146,6 +185,14 @@ reasoning appended to commentary; losers land in `failures.csv` as
 `arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
 confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
 Default engine codex @ medium effort (`--arbiter-*` flags).
+
+### `brain.md` — v1.3 (2026-07-06)
+
+v1.3 (pilot-05 fix list, Task 3): two synthetic worked examples for the new
+conventions — closing an overweight → `N` (small-cap example), trim-but-stay →
+`O` (gold example); and a hedged duration risk note with no position taken →
+`UNCERTAIN`. Both are synthetic patterns, deliberately NOT drawn from the 7
+pilot docs, preserving the blindness protocol.
 
 ### `brain.md` — v1.2 (2026-07-05)
 

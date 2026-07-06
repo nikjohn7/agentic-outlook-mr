@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import csv
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from src.confidence import CHECKER_FAIL_REASONS, ConfidenceResult, score_candidate
+from src.confidence import (
+    CHECKER_FAIL_REASONS,
+    ConfidenceResult,
+    normalize_quote_text,
+    score_candidate,
+)
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import Taxonomy
 
@@ -31,7 +37,9 @@ TARGET_OUTPUT_COLUMNS = (
     "Full Commentary",
 )
 
-OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + ("confidence", "band", "review_flag")
+# `basis` is exposed after the internal-review columns so an analyst can filter
+# stated vs. forecast_delta vs. inferred calls at a glance.
+OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + ("confidence", "band", "review_flag", "basis")
 
 FAILURE_COLUMNS = (
     "reason_code",
@@ -46,6 +54,7 @@ FAILURE_COLUMNS = (
     "evidence_quote",
     "locator",
     "reasoning",
+    "basis",
 )
 
 
@@ -66,6 +75,7 @@ class FailureRecord:
     evidence_quote: str = ""
     locator: str = ""
     reasoning: str = ""
+    basis: str = ""
 
     @classmethod
     def from_candidate(
@@ -84,6 +94,7 @@ class FailureRecord:
             evidence_quote=candidate.evidence_quote,
             locator=candidate.locator,
             reasoning=candidate.reasoning,
+            basis=candidate.basis,
         )
 
     @classmethod
@@ -107,6 +118,7 @@ class FailureRecord:
             "evidence_quote": self.evidence_quote,
             "locator": self.locator,
             "reasoning": self.reasoning,
+            "basis": self.basis,
         }
 
 
@@ -115,6 +127,20 @@ class AssemblyResult:
     output_rows: list[dict[str, str]]
     failures: list[FailureRecord]
     candidate_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class _Selected:
+    """One (source/group, leaf) winner that survived scoring, same-view dedup,
+    and conflict arbitration — carried to the cross-leaf dedup pass and then
+    rendered. Bundles the display context computed during grouping."""
+
+    scored: ConfidenceResult
+    source: SourceInfo
+    display_source: SourceInfo
+    member_count: int
+    arbiter_note: str = ""
+    corroboration: str = ""
 
 
 def assemble_candidates(
@@ -174,7 +200,7 @@ def assemble_candidates(
                 message = verdict.note
             failures.append(FailureRecord.from_candidate(reason, message, candidate))
 
-    output_rows: list[dict[str, str]] = []
+    selected_entries: list[_Selected] = []
     for group in _group_scored(scored, group_map).values():
         views = {item.candidate.view for item in group}
         arbiter_note = ""
@@ -232,16 +258,31 @@ def assemble_candidates(
         display_source, member_count = _display_source(
             selected.candidate.source_id, sources, group_map
         )
-        output_rows.append(
-            _output_row(
-                selected,
-                display_source,
-                taxonomy,
+        selected_entries.append(
+            _Selected(
+                scored=selected,
+                source=source,
+                display_source=display_source,
+                member_count=member_count,
                 arbiter_note=arbiter_note,
-                locator_source=source.source if member_count > 1 else "",
                 corroboration=corroboration,
             )
         )
+
+    survivors, cross_leaf_failures = _dedup_cross_leaf(selected_entries, taxonomy)
+    failures.extend(cross_leaf_failures)
+
+    output_rows = [
+        _output_row(
+            entry.scored,
+            entry.display_source,
+            taxonomy,
+            arbiter_note=entry.arbiter_note,
+            locator_source=entry.source.source if entry.member_count > 1 else "",
+            corroboration=entry.corroboration,
+        )
+        for entry in survivors
+    ]
 
     return AssemblyResult(
         output_rows=output_rows,
@@ -260,6 +301,120 @@ def _arbitrate(
     if winning_index is None or not 0 <= winning_index < len(group):
         return None, reasoning
     return group[winning_index], reasoning
+
+
+def _dedup_cross_leaf(
+    entries: list[_Selected], taxonomy: Taxonomy
+) -> tuple[list[_Selected], list[FailureRecord]]:
+    """Deterministic cross-leaf dedup: one source doc emitting the SAME view on
+    the SAME evidence under several leaves is fanning one call out.
+
+    Cluster key: (source_id, view, normalized evidence span-set) — same source
+    DOC (not group), identical spans, order-insensitive. Within a cluster of
+    more than one row:
+    - A leaf SURVIVES if its name is grounded in the evidence text (token
+      overlap with the evidence — the same signal as the keep rule). When the
+      evidence names several distinct leaves (e.g. "long NOK ... and long AUD",
+      or "the information technology and communication services sectors"), every
+      named leaf is a real, distinct call and all survive.
+    - Leaves the evidence does NOT name are the fan-out duplicates and collapse
+      to `duplicate_cross_leaf`, referencing the surviving leaf/leaves.
+    - If the cluster names NO leaf, keep the single highest-overlap leaf
+      (tie-break: locked-taxonomy order) and fail the rest.
+
+    Rows that differ in view or evidence never share a cluster, so they never
+    collapse — even on sibling leaves.
+
+    Known limitation: the trigger is IDENTICAL evidence. The AB global-duration
+    triple (Duration / Global Govt Bonds/SSAs / DM Sovereigns) cites a DIFFERENT
+    forecast-table row per leaf, so it is out of scope for this rule; the Task-1
+    materiality gate partially mitigates it.
+    """
+    clusters: dict[tuple[str, str, frozenset[str]], list[_Selected]] = {}
+    for entry in entries:
+        candidate = entry.scored.candidate
+        span_key = frozenset(
+            normalized
+            for span in candidate.evidence_spans
+            if (normalized := normalize_quote_text(span))
+        )
+        key = (candidate.source_id, candidate.view, span_key)
+        clusters.setdefault(key, []).append(entry)
+
+    dropped: dict[int, str] = {}  # id(entry) -> description of the kept leaf/leaves
+    for members in clusters.values():
+        if len(members) <= 1:
+            continue
+        named = [m for m in members if _leaf_named_in_evidence(m.scored.candidate)]
+        keepers = named if named else [_highest_overlap_leaf(members, taxonomy)]
+        kept_desc = ", ".join(
+            f"'{m.scored.candidate.sub_asset_class}'" for m in keepers
+        )
+        keeper_ids = {id(m) for m in keepers}
+        for member in members:
+            if id(member) not in keeper_ids:
+                dropped[id(member)] = kept_desc
+
+    survivors: list[_Selected] = []
+    failures: list[FailureRecord] = []
+    for entry in entries:
+        if id(entry) in dropped:
+            failures.append(
+                FailureRecord.from_candidate(
+                    "duplicate_cross_leaf",
+                    f"same source, view, and evidence as kept leaf {dropped[id(entry)]}; "
+                    "this leaf is not named in the shared evidence (cross-leaf fan-out)",
+                    entry.scored.candidate,
+                )
+            )
+        else:
+            survivors.append(entry)
+    return survivors, failures
+
+
+def _leaf_named_in_evidence(candidate: CandidateCall) -> bool:
+    return _leaf_evidence_overlap(candidate.sub_asset_class, candidate.evidence_quote) > 0
+
+
+def _highest_overlap_leaf(members: list[_Selected], taxonomy: Taxonomy) -> _Selected:
+    """The keep rule when no leaf is named: most leaf-name/evidence token overlap
+    wins; ties break by the leaf's position in the locked taxonomy CSV."""
+
+    def sort_key(member: _Selected) -> tuple[int, int]:
+        candidate = member.scored.candidate
+        overlap = _leaf_evidence_overlap(candidate.sub_asset_class, candidate.evidence_quote)
+        return (-overlap, taxonomy.require_label(candidate.sub_asset_class).number)
+
+    return sorted(members, key=sort_key)[0]
+
+
+# Leaf-label tokens are compared against the evidence with prefix tolerance so
+# an extraction seam or a label/prose spelling difference ("tech" vs.
+# "technology") does not read as "not named"; short tokens (2-3 chars, e.g. AI,
+# NOK, AUD) must match a whole evidence word exactly.
+_LEAF_NAME_STOPWORDS = frozenset({"of", "and", "the", "inc", "for", "vs"})
+
+
+def _leaf_name_tokens(label: str) -> list[str]:
+    tokens = re.findall(r"[a-z0-9]+", label.lower())
+    return [token for token in tokens if len(token) >= 2 and token not in _LEAF_NAME_STOPWORDS]
+
+
+def _leaf_evidence_overlap(leaf_label: str, evidence_text: str) -> int:
+    """Count leaf-name tokens grounded in the evidence text."""
+    evidence_words = set(re.findall(r"[a-z0-9]+", normalize_quote_text(evidence_text).lower()))
+    return sum(
+        1 for token in _leaf_name_tokens(leaf_label) if _token_matches(token, evidence_words)
+    )
+
+
+def _token_matches(token: str, evidence_words: set[str]) -> bool:
+    for word in evidence_words:
+        if token == word:
+            return True
+        if len(token) >= 4 and len(word) >= 4 and (word.startswith(token) or token.startswith(word)):
+            return True
+    return False
 
 
 def write_run_outputs(
@@ -341,6 +496,8 @@ def _output_row(
             "verbatim quote match degraded to key-token overlap "
             "(confidence capped, review required)."
         )
+    if scored.cap_reason:
+        commentary += f" {scored.cap_reason}"
     if scored.checker_status == "unclear":
         note = f" ({scored.checker_note})" if scored.checker_note else ""
         commentary += f" Checker: unconfirmed{note}."
@@ -365,6 +522,7 @@ def _output_row(
         "confidence": str(scored.confidence),
         "band": scored.band,
         "review_flag": review_flag,
+        "basis": candidate.basis,
     }
 
 
@@ -430,6 +588,13 @@ def _manifest_text(
         f"- chunk failures (no candidate): {len(chunk_failures)}",
         "",
     ]
+    basis_counts = Counter(row.get("basis") or "stated" for row in result.output_rows)
+    if basis_counts:
+        lines.append("## Call basis (kept rows)")
+        lines.extend(
+            f"- {basis}: {count}" for basis, count in sorted(basis_counts.items())
+        )
+        lines.append("")
     reason_counts = Counter(
         failure.reason_code for failure in [*result.failures, *chunk_failures]
     )

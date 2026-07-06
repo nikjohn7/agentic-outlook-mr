@@ -14,6 +14,26 @@ HARD_FAILURE_TAXONOMY = "taxonomy_no_match"
 HARD_FAILURE_QUOTE = "quote_not_found"
 HARD_FAILURE_VISUAL_LOCATOR = "visual_locator_missing"
 HARD_FAILURE_EVIDENCE = "evidence_check_failed"
+HARD_FAILURE_MATERIALITY = "delta_below_materiality"
+
+# Materiality floor for forecast-delta evidence (a house forecast endpoint vs.
+# the current level). PROVISIONAL, pending client confirmation — this maps to
+# open client question 1 in runs/pilot-05/gt-comparison.md ("is a forecast
+# delta a view at all, and if so what floor?"). Below the floor a forecast_delta
+# candidate hard-fails to `delta_below_materiality` (reviewable and reversible —
+# never silently dropped, and never converted to `N`: an immaterial move is not
+# evidence of neutrality). At/above the floor it may proceed but is capped below
+# High and flagged, because "delta-as-view" itself is not yet confirmed.
+MATERIALITY_FLOOR_BP = 25
+MATERIALITY_FLOOR_PCT = 2.0
+FORECAST_DELTA_CAP = 74
+
+# An analyst-style inference (basis: inferred) reads a positioning consequence
+# out of macro/thematic prose that never states a position. It is encouraged but
+# segregated one full band below stated calls: capped into the middle (Medium)
+# band and always flagged for review. Stated calls reach High (>=75); this cap
+# lands an inference at 74 = the top of Medium, one band down.
+INFERRED_CAP = 74
 
 # A checker `fail` verdict is fatal: the second reader found the evidence does
 # not mean what the call claims. Reason codes are per failed question.
@@ -76,6 +96,17 @@ class EvidenceFailure(ValueError):
         self.degraded = check.degraded
 
 
+class MaterialityFailure(ValueError):
+    """A forecast_delta candidate whose move is below the materiality floor.
+    Carries the human-readable message (like EvidenceFailure) so the failure row
+    states the delta and floor that gated it."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(HARD_FAILURE_MATERIALITY)
+        self.reason_code = HARD_FAILURE_MATERIALITY
+        self.message = message
+
+
 @dataclass(frozen=True, slots=True)
 class ConfidenceResult:
     candidate: CandidateCall
@@ -88,6 +119,10 @@ class ConfidenceResult:
     # the run but produced no verdict for this candidate (call failed/skipped).
     checker_status: str = "off"
     checker_note: str = ""
+    # A basis-driven confidence cap (forecast_delta or inferred), recorded so the
+    # output row can explain why the call is held below High. Empty for stated
+    # calls.
+    cap_reason: str = ""
 
 
 # Dash-like characters (typographic hyphens, en/em/figure dash, horizontal bar,
@@ -186,6 +221,17 @@ def score_candidate(
     if not evidence_check.passed:
         raise EvidenceFailure(evidence_check)
 
+    # Materiality gate for forecast-delta evidence: an immaterial move is not a
+    # view. Below the floor is a hard failure (reviewable, reversible).
+    if candidate.basis == "forecast_delta":
+        floor, magnitude = _materiality_floor_and_magnitude(candidate)
+        if magnitude < floor:
+            raise MaterialityFailure(
+                f"forecast delta {_fmt(magnitude)}{candidate.delta_unit} is below the "
+                f"{_fmt(floor)}{candidate.delta_unit} materiality floor "
+                "(provisional, pending client confirmation)"
+            )
+
     if checker_enabled and verdict is not None:
         failed = verdict.failed_questions()
         if failed:
@@ -201,6 +247,25 @@ def score_candidate(
     # The verbatim guarantee was weakened to key-token overlap: cap below High.
     if evidence_check.degraded:
         score = min(score, SCRAMBLED_PROSE_CAP)
+
+    # Basis-driven caps: a forecast delta at/above the floor is still only a
+    # provisional view, and an analyst inference is segregated one band below
+    # stated calls. Both are held below High and forced to review.
+    cap_reason = ""
+    if candidate.basis == "forecast_delta":
+        score = min(score, FORECAST_DELTA_CAP)
+        cap_reason = (
+            "Basis: forecast_delta — a house forecast endpoint "
+            f"({_fmt(abs(candidate.delta_value or 0.0))}{candidate.delta_unit} move) is treated as a "
+            "provisional view (delta-as-view pending client confirmation); "
+            "confidence capped below High and review required."
+        )
+    elif candidate.basis == "inferred":
+        score = min(score, INFERRED_CAP)
+        cap_reason = (
+            "Basis: inferred — single-step analyst inference from macro/thematic "
+            "prose; segregated one band below stated calls, review required."
+        )
 
     checker_status = "off"
     checker_note = ""
@@ -218,7 +283,7 @@ def score_candidate(
 
     band = score_band(score)
     review_flag = review_flag_for(score, candidate)
-    if evidence_check.degraded and review_flag == "none":
+    if (evidence_check.degraded or cap_reason) and review_flag == "none":
         review_flag = "review"
     return ConfidenceResult(
         candidate=candidate,
@@ -228,7 +293,22 @@ def score_candidate(
         evidence_check=evidence_check,
         checker_status=checker_status,
         checker_note=checker_note,
+        cap_reason=cap_reason,
     )
+
+
+def _materiality_floor_and_magnitude(candidate: CandidateCall) -> tuple[float, float]:
+    """Return the (floor, magnitude) pair for a forecast_delta candidate. The
+    magnitude is taken as an absolute value so the gate is sign-agnostic (a move
+    of a given size is material regardless of direction)."""
+    floor = MATERIALITY_FLOOR_BP if candidate.delta_unit == "bp" else MATERIALITY_FLOOR_PCT
+    magnitude = abs(candidate.delta_value) if candidate.delta_value is not None else 0.0
+    return float(floor), magnitude
+
+
+def _fmt(value: float) -> str:
+    """Format a delta/floor without a trailing ``.0`` for whole numbers."""
+    return f"{value:g}"
 
 
 def score_band(score: int) -> str:

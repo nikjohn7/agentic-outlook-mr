@@ -13,6 +13,19 @@ VALID_EVIDENCE_KINDS = ("prose", "table", "visual")
 VALID_CHECK_VERDICTS = ("pass", "unclear", "fail")
 CHECK_QUESTIONS = ("supports_view", "forward_looking", "asset_match")
 
+# How the call was derived — drives the deterministic materiality gate and the
+# analyst-inference confidence tier (src/confidence.py):
+#   stated         — an explicit dial/score/tier position or explicit OW/N/UW
+#                    prose ("we are overweight X"). First-class, uncapped.
+#   forecast_delta — a house forecast endpoint vs. the current level (a yield,
+#                    FX, or price-target table). Requires delta_value/delta_unit
+#                    so the materiality gate can size the move.
+#   inferred       — a single-step analyst inference from macro/thematic prose
+#                    that never states a position. Capped one band below stated.
+VALID_BASIS = ("stated", "forecast_delta", "inferred")
+VALID_DELTA_UNITS = ("bp", "pct")
+DEFAULT_BASIS = "stated"
+
 
 class SchemaError(ValueError):
     """Raised when pipeline data does not satisfy the shared contract."""
@@ -38,6 +51,15 @@ class CandidateCall:
     locator: str
     reasoning: str
     conflict: bool = False
+    # How this call was derived (VALID_BASIS). Backward-compatible: candidates
+    # loaded from frozen runs written before this field existed default to
+    # `stated`. New analyzer output always carries it (the prompt requires it).
+    basis: str = DEFAULT_BASIS
+    # Only for basis == "forecast_delta": the magnitude of the forecast move and
+    # its unit ("bp" for yields/rates, "pct" for FX/price moves). Required for
+    # forecast_delta candidates, absent (None) otherwise.
+    delta_value: float | None = None
+    delta_unit: str | None = None
 
     @property
     def evidence_quote(self) -> str:
@@ -53,6 +75,8 @@ class CandidateCall:
         if missing:
             raise SchemaError(f"candidate missing required fields: {', '.join(missing)}")
 
+        basis = _optional_basis(value)
+        delta_value, delta_unit = _require_delta_fields(value, basis)
         candidate = cls(
             source_id=_require_text(value, "source_id"),
             chunk_id=_require_text(value, "chunk_id"),
@@ -66,6 +90,9 @@ class CandidateCall:
             locator=_require_text(value, "locator"),
             reasoning=_require_text(value, "reasoning"),
             conflict=_require_bool(value, "conflict", default=False),
+            basis=basis,
+            delta_value=delta_value,
+            delta_unit=delta_unit,
         )
         return candidate
 
@@ -89,6 +116,14 @@ class CandidateCall:
             "locator": self.locator,
             "reasoning": self.reasoning,
             "conflict": self.conflict,
+            "basis": self.basis,
+            # Only round-trip the delta fields when they carry a value, so a
+            # stated/inferred candidate serializes without null delta keys.
+            **(
+                {"delta_value": self.delta_value, "delta_unit": self.delta_unit}
+                if self.basis == "forecast_delta"
+                else {}
+            ),
         }
 
 
@@ -188,6 +223,38 @@ def _require_spans(value: dict[str, Any], field: str) -> tuple[str, ...]:
             spans.append(span)
         return tuple(spans)
     raise SchemaError(f"{field} must be a string or a list of strings")
+
+
+def _optional_basis(value: dict[str, Any]) -> str:
+    """Parse the optional `basis` field. Absent => `stated` (backward-compat for
+    frozen candidates written before the field existed). Present => must be a
+    valid basis choice."""
+    item = value.get("basis")
+    if item is None:
+        return DEFAULT_BASIS
+    if not isinstance(item, str) or item not in VALID_BASIS:
+        raise SchemaError(f"basis must be one of {', '.join(VALID_BASIS)}")
+    return item
+
+
+def _require_delta_fields(
+    value: dict[str, Any], basis: str
+) -> tuple[float | None, str | None]:
+    """A forecast_delta candidate MUST carry a numeric `delta_value` and a
+    `delta_unit` so the deterministic materiality gate can size the move; any
+    other basis carries neither."""
+    if basis != "forecast_delta":
+        return None, None
+    for field in ("delta_value", "delta_unit"):
+        if field not in value:
+            raise SchemaError(f"forecast_delta candidate requires {field}")
+    raw = value.get("delta_value")
+    # bool is an int subclass; reject it explicitly so True/False can't pose as a
+    # magnitude.
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise SchemaError("delta_value must be a number")
+    unit = _require_choice(value, "delta_unit", VALID_DELTA_UNITS)
+    return float(raw), unit
 
 
 def _require_choice(value: dict[str, Any], field: str, choices: tuple[str, ...]) -> str:

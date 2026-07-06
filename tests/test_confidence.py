@@ -4,6 +4,11 @@ import unittest
 
 from src.confidence import (
     CHECKER_UNCONFIRMED_CAP,
+    FORECAST_DELTA_CAP,
+    HARD_FAILURE_MATERIALITY,
+    INFERRED_CAP,
+    MATERIALITY_FLOOR_BP,
+    MATERIALITY_FLOOR_PCT,
     MIN_HTML_SNAPSHOT_CHARS,
     MIN_PDF_CHARS_PER_PAGE,
     SCRAMBLED_PROSE_CAP,
@@ -393,6 +398,168 @@ class CheckerScoringTest(unittest.TestCase):
 
         self.assertEqual(100, result.confidence)
         self.assertEqual("off", result.checker_status)
+
+
+class MaterialityGateTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def _score(self, **overrides: object):
+        candidate = _forecast_candidate(**overrides)
+        return score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+        )
+
+    def test_sub_floor_bp_delta_hard_fails(self) -> None:
+        for magnitude in (4, 10, 14, MATERIALITY_FLOOR_BP - 1):
+            with self.subTest(bp=magnitude), self.assertRaises(ValueError) as caught:
+                self._score(delta_value=magnitude, delta_unit="bp")
+            self.assertEqual(HARD_FAILURE_MATERIALITY, str(caught.exception))
+            self.assertIn("materiality floor", caught.exception.message)
+
+    def test_sub_floor_pct_delta_hard_fails(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            self._score(delta_value=0.86, delta_unit="pct")
+        self.assertEqual(HARD_FAILURE_MATERIALITY, str(caught.exception))
+
+    def test_at_floor_bp_delta_is_capped_and_flagged(self) -> None:
+        # Exactly at the floor is material (>=), so it proceeds — but capped.
+        result = self._score(delta_value=MATERIALITY_FLOOR_BP, delta_unit="bp")
+
+        self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
+        self.assertEqual("Medium", result.band)
+        self.assertEqual("review", result.review_flag)
+        self.assertIn("forecast_delta", result.cap_reason)
+
+    def test_material_bp_delta_is_capped_below_high(self) -> None:
+        result = self._score(delta_value=40, delta_unit="bp")
+
+        self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
+        self.assertEqual("review", result.review_flag)
+
+    def test_material_pct_delta_is_capped(self) -> None:
+        result = self._score(delta_value=MATERIALITY_FLOOR_PCT, delta_unit="pct")
+
+        self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
+        self.assertEqual("review", result.review_flag)
+
+    def test_negative_delta_is_sized_by_magnitude(self) -> None:
+        # A -40bp move is as material as +40bp (gate is sign-agnostic).
+        result = self._score(delta_value=-40, delta_unit="bp")
+        self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
+
+
+class InferredTierTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def test_inferred_call_is_capped_one_band_below_and_flagged(self) -> None:
+        candidate = _candidate(
+            basis="inferred", taxonomy_match="exact", call_language="explicit"
+        )
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+        )
+
+        # Stated calls reach High (>=75); an inference lands one full band down.
+        self.assertEqual(INFERRED_CAP, result.confidence)
+        self.assertEqual("Medium", result.band)
+        self.assertEqual("review", result.review_flag)
+        self.assertIn("inferred", result.cap_reason)
+
+    def test_stated_call_is_not_capped_by_basis(self) -> None:
+        candidate = _candidate(basis="stated")
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+        )
+        self.assertEqual(100, result.confidence)
+        self.assertEqual("", result.cap_reason)
+
+
+class Pilot05RescoreTest(unittest.TestCase):
+    """Deterministic re-score (no LLM) reconstructing frozen pilot-05 rows: the
+    AB forecast-delta overreach rows named in runs/pilot-05/gt-comparison.md now
+    gate or cap, while JPM GAA stated dials are untouched. Fixtures are built
+    from the frozen runs/pilot-05/output.csv values; nothing under runs/ is
+    modified."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def _score_forecast(self, leaf: str, delta_value: float, delta_unit: str):
+        candidate = _forecast_candidate(
+            sub_asset_class=leaf, delta_value=delta_value, delta_unit=delta_unit
+        )
+        return score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+        )
+
+    def test_ab_subfloor_forecast_rows_now_gate(self) -> None:
+        # (leaf, delta, unit) read off the frozen AB forecast-table rows.
+        sub_floor = [
+            ("Asia Fixed Income", 4, "bp"),            # 5.71 -> 5.67
+            ("Global Govt Bonds/SSAs", 13, "bp"),      # 4.15 -> 4.02
+            ("LatAm Fixed Income", 14, "bp"),          # 9.90 -> 9.76
+            ("Developed Markets - Sovereigns", 20, "bp"),  # 3.63 -> 3.43
+            ("EUR", 0.86, "pct"),                      # 1.16 -> 1.17
+        ]
+        for leaf, delta, unit in sub_floor:
+            with self.subTest(leaf=leaf), self.assertRaises(ValueError) as caught:
+                self._score_forecast(leaf, delta, unit)
+            self.assertEqual(HARD_FAILURE_MATERIALITY, str(caught.exception))
+
+    def test_ab_material_forecast_row_caps_below_high(self) -> None:
+        # EM sovereigns 8.85 -> 8.51 = 34bp: material, but still only provisional.
+        result = self._score_forecast("Emerging Markets - Sovereigns", 34, "bp")
+        self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
+        self.assertEqual("review", result.review_flag)
+
+    def test_jpm_gaa_stated_dial_is_untouched(self) -> None:
+        # A GAA views-table dial is a stated visual position, not a forecast
+        # delta: no materiality gate, no cap.
+        candidate = _candidate(
+            sub_asset_class="Emerging Markets Equities",
+            basis="stated",
+            evidence_kind="visual",
+            evidence_quote="EM overweight dial",
+            locator="p.6 — 'Global Asset Allocation' views table",
+        )
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot("EM overweight dial views table"),
+        )
+        self.assertEqual(100, result.confidence)
+        self.assertEqual("High", result.band)
+        self.assertEqual("", result.cap_reason)
+
+
+def _forecast_candidate(**overrides: object) -> CandidateCall:
+    """A forecast_delta candidate: table evidence with a specific locator so the
+    evidence check passes, leaving the materiality gate as the decisive test."""
+    values: dict[str, object] = {
+        "evidence_kind": "table",
+        "evidence_quote": "Global row Long Rates forecast endpoint move",
+        "locator": "p.10 - 'Forecast Table'",
+        "basis": "forecast_delta",
+        "delta_value": 40,
+        "delta_unit": "bp",
+        "call_language": "implied",
+        "taxonomy_match": "exact",
+    }
+    values.update(overrides)
+    return _candidate(**values)
 
 
 def _verdict(**overrides: object) -> CheckVerdict:

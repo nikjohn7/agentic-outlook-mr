@@ -18,6 +18,12 @@ itself. They never override the locked taxonomy or the source's own words.
   overrides it. Change verbs describe the journey, not the destination: an
   upgrade that lands at neutral is `N`; "caution has increased" beside a
   printed Neutral dial is `N`.
+- **Closing or trimming a position lands at its resulting stance, not the
+  direction of travel.** "We are closing our overweight in X" → `N` (the end
+  state is flat/neutral), **not** `U`. Trimming but staying overweight → still
+  `O`; "reducing our underweight toward neutral" → `N`. The stance the source
+  lands on is the call; the direction-of-travel verb never overrides the stated
+  end state.
 - Ranked house scales collapse by tier: top tiers → `O`, middle → `N`,
   bottom → `U`.
 - When the house's own rating and its hedging prose diverge, the rating wins.
@@ -49,7 +55,13 @@ itself. They never override the locked taxonomy or the source's own words.
 - Absence of mention — never infer `U` from silence.
 - **Explicit non-conviction is `N`, not `UNCERTAIN`** ("no strong directional
   conviction" → `N`). `UNCERTAIN` is reserved for a source that contradicts
-  itself.
+  itself or raises a stance it does not take.
+- **A hedged risk note with no position taken is `UNCERTAIN`, not `U`.**
+  Scenario/risk language the house flags without committing to a side — "there
+  is a risk that X sells off if scenario Y plays out", stated as a caveat rather
+  than a stance — is `UNCERTAIN`, never a `U`. A flagged downside risk is not a
+  taken position; only map to `U` when the house actually adopts the cautious
+  stance.
 - Backward performance attribution counts only when the exposure is retained
   or reaffirmed.
 

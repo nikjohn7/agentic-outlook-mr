@@ -322,6 +322,7 @@ def _check_candidates(
                 "evidence_quote": candidate.evidence_quote,
                 "locator": candidate.locator,
                 "reasoning": candidate.reasoning,
+                "basis": candidate.basis,
             }
             for index, candidate in enumerate(candidates)
         ],

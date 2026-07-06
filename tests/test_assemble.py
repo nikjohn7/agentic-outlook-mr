@@ -46,6 +46,7 @@ class AssembleTest(unittest.TestCase):
                 "confidence",
                 "band",
                 "review_flag",
+                "basis",
             ),
             OUTPUT_COLUMNS,
         )
@@ -306,6 +307,200 @@ class GroupedAssemblyTest(unittest.TestCase):
         row = result.output_rows[0]
         self.assertEqual("Quarterly Markets Review Q1", row["Source"])
         self.assertNotIn("(Quarterly", row["Full Commentary"])
+
+
+class CrossLeafDedupTest(unittest.TestCase):
+    """One source doc emitting the same view on the same evidence under several
+    leaves. Fixtures mirror the four frozen pilot-05 clusters plus the
+    no-named-leaf fallback."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1",
+                firm="Test Firm",
+                date="4/2/2026",
+                source="Outlook",
+                url="https://example.test/source",
+            )
+        }
+
+    def _assemble(self, candidates: list[CandidateCall], evidence_texts: list[str]):
+        snapshot = " ".join(dict.fromkeys(evidence_texts)) + " " + "Context. " * 40
+        return assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): snapshot},
+            page_counts={"source-1": 1},
+        )
+
+    def _cluster(self, evidence: str, leaves: list[str], view: str = "O") -> list[CandidateCall]:
+        return [_candidate(sub_asset_class=leaf, view=view, evidence_quote=evidence) for leaf in leaves]
+
+    def test_aberdeen_fanout_collapses_to_the_named_leaf(self) -> None:
+        evidence = "We expect AI to remain a tailwind for the region and for EMs overall."
+        candidates = self._cluster(evidence, ["AI", "Asia Equities", "Emerging Markets Equities"])
+
+        result = self._assemble(candidates, [evidence])
+
+        kept = {row["Sub-Asset Class"] for row in result.output_rows}
+        self.assertEqual({"AI"}, kept)
+        dropped = [f for f in result.failures if f.reason_code == "duplicate_cross_leaf"]
+        self.assertEqual({"Asia Equities", "Emerging Markets Equities"}, {f.sub_asset_class for f in dropped})
+        self.assertIn("'AI'", dropped[0].message)
+
+    def test_jpm_currency_pair_both_named_survive(self) -> None:
+        evidence = "Leaving us long NOK versus GBP and long AUD versus USD and GBP."
+        candidates = self._cluster(evidence, ["NOK", "AUD"])
+
+        result = self._assemble(candidates, [evidence])
+
+        self.assertEqual({"NOK", "AUD"}, {row["Sub-Asset Class"] for row in result.output_rows})
+        self.assertEqual([], [f for f in result.failures if f.reason_code == "duplicate_cross_leaf"])
+
+    def test_jpm_sector_pair_both_named_survive(self) -> None:
+        evidence = "We maintain overweights to the information technology and communication services sectors."
+        candidates = self._cluster(evidence, ["IT/Tech/Telecomms (inc. AI)", "Communication Services"])
+
+        result = self._assemble(candidates, [evidence])
+
+        self.assertEqual(
+            {"IT/Tech/Telecomms (inc. AI)", "Communication Services"},
+            {row["Sub-Asset Class"] for row in result.output_rows},
+        )
+        self.assertEqual([], [f for f in result.failures if f.reason_code == "duplicate_cross_leaf"])
+
+    def test_pimco_box_keeps_only_the_leaves_the_text_names(self) -> None:
+        evidence = "Consider structural allocations to real assets and commodities to hedge energy shocks."
+        candidates = self._cluster(
+            evidence, ["Commodities", "Real Assets", "Inflation-Linked/TIPs"]
+        )
+
+        result = self._assemble(candidates, [evidence])
+
+        self.assertEqual(
+            {"Commodities", "Real Assets"}, {row["Sub-Asset Class"] for row in result.output_rows}
+        )
+        dropped = [f for f in result.failures if f.reason_code == "duplicate_cross_leaf"]
+        self.assertEqual({"Inflation-Linked/TIPs"}, {f.sub_asset_class for f in dropped})
+
+    def test_no_named_leaf_falls_back_to_highest_overlap_then_taxonomy_order(self) -> None:
+        # Neither leaf name appears in the generic evidence: overlap ties at 0,
+        # so the tie-break is locked-taxonomy order (Gold/Precious #143 < Oil
+        # #146), which keeps Gold/Precious.
+        evidence = "The broad backdrop is constructive across the board."
+        candidates = self._cluster(evidence, ["Oil", "Gold/Precious"])
+
+        result = self._assemble(candidates, [evidence])
+
+        self.assertEqual({"Gold/Precious"}, {row["Sub-Asset Class"] for row in result.output_rows})
+        self.assertEqual(
+            {"Oil"},
+            {f.sub_asset_class for f in result.failures if f.reason_code == "duplicate_cross_leaf"},
+        )
+
+    def test_same_evidence_different_view_never_collapses(self) -> None:
+        evidence = "The broad backdrop is constructive across the board."
+        candidates = [
+            _candidate(sub_asset_class="Oil", view="O", evidence_quote=evidence),
+            _candidate(sub_asset_class="Gold/Precious", view="U", evidence_quote=evidence),
+        ]
+
+        result = self._assemble(candidates, [evidence])
+
+        self.assertEqual(2, len(result.output_rows))
+        self.assertEqual([], [f for f in result.failures if f.reason_code == "duplicate_cross_leaf"])
+
+    def test_different_evidence_same_view_never_collapses(self) -> None:
+        candidates = [
+            _candidate(sub_asset_class="Oil", view="O", evidence_quote="Oil prices should settle higher."),
+            _candidate(
+                sub_asset_class="Gold/Precious", view="O", evidence_quote="Gold remains a portfolio ballast."
+            ),
+        ]
+
+        result = self._assemble(
+            candidates, ["Oil prices should settle higher.", "Gold remains a portfolio ballast."]
+        )
+
+        self.assertEqual(2, len(result.output_rows))
+        self.assertEqual([], [f for f in result.failures if f.reason_code == "duplicate_cross_leaf"])
+
+
+class BasisOutputTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1",
+                firm="Test Firm",
+                date="4/2/2026",
+                source="Outlook",
+                url="https://example.test/source",
+            )
+        }
+
+    def _assemble(self, candidate: CandidateCall, snapshot: str):
+        return assemble_candidates(
+            [candidate],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): snapshot + " " + "Context. " * 40},
+            page_counts={"source-1": 1},
+        )
+
+    def test_forecast_delta_row_exposes_basis_and_cap_reason(self) -> None:
+        candidate = _candidate(
+            sub_asset_class="Global Govt Bonds/SSAs",
+            evidence_kind="table",
+            evidence_quote="Global row Long Rates forecast endpoint move",
+            locator="p.10 - 'Forecast Table'",
+            basis="forecast_delta",
+            delta_value=40,
+            delta_unit="bp",
+            call_language="implied",
+        )
+        result = self._assemble(candidate, "Global row Long Rates forecast endpoint move")
+
+        row = result.output_rows[0]
+        self.assertEqual("forecast_delta", row["basis"])
+        self.assertEqual("74", row["confidence"])
+        self.assertEqual("review", row["review_flag"])
+        self.assertIn("Basis: forecast_delta", row["Full Commentary"])
+
+    def test_inferred_row_exposes_basis_and_cap_reason(self) -> None:
+        candidate = _candidate(basis="inferred")
+        result = self._assemble(candidate, "EM equities are favored in the outlook.")
+
+        row = result.output_rows[0]
+        self.assertEqual("inferred", row["basis"])
+        self.assertEqual("review", row["review_flag"])
+        self.assertIn("Basis: inferred", row["Full Commentary"])
+
+    def test_stated_row_defaults_basis_column(self) -> None:
+        result = self._assemble(_candidate(), "EM equities are favored in the outlook.")
+        self.assertEqual("stated", result.output_rows[0]["basis"])
+
+    def test_failure_row_carries_basis(self) -> None:
+        # A sub-floor forecast delta hard-fails and records its basis.
+        candidate = _candidate(
+            sub_asset_class="Asia Fixed Income",
+            evidence_kind="table",
+            evidence_quote="Asia row Long Rates forecast endpoint move",
+            locator="p.10 - 'Forecast Table'",
+            basis="forecast_delta",
+            delta_value=4,
+            delta_unit="bp",
+        )
+        result = self._assemble(candidate, "Asia row Long Rates forecast endpoint move")
+
+        self.assertEqual([], result.output_rows)
+        failure = next(f for f in result.failures if f.reason_code == "delta_below_materiality")
+        self.assertEqual("forecast_delta", failure.basis)
 
 
 def _verdict(**overrides: object) -> CheckVerdict:
