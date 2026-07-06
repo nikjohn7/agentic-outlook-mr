@@ -1,6 +1,6 @@
 # Markets Recon / Allocator Pro POC — State
 
-_Last updated: 2026-07-06_
+_Last updated: 2026-07-07_
 
 ## Current State
 
@@ -75,6 +75,66 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Recent Changes
 
+- 2026-07-07: **Shipped the bare-bones post-run firm cross-check
+  (`src/crosscheck.py`, pre-37 wave instruction set 3).** A standalone,
+  additive REPORT generator that finds same-firm overlapping calls across one or
+  more frozen run `output.csv` files and never modifies any run output. It is
+  **layer 3** of the grouping design: scout companions before a run (set 2) →
+  in-run assembly/arbitration resolves grouped overlap → post-run cross-check
+  catches everything left (ungrouped same-firm sources, and same-firm sources
+  split across runs by the 20-item cap). CLI:
+  `python -m src.crosscheck --outputs <output.csv>... --out-dir <dir>
+  [--engine/--model/--effort] [--no-llm]`. The join key is `src.eval`'s
+  `normalize_firm` + `_leaf_key` — **imported, not reimplemented** (same
+  precedent as `runs/test2-01-rescored/rescore.py`), so a "duplicate key" means
+  the same thing everywhere. Buckets per (firm, leaf): a single row is not
+  reported; ≥2 rows all-same-`View` → `duplicate_same_view` (auto-resolved,
+  zero LLM, reusing the `assemble.py` reason word); ≥2 rows differing-`View` →
+  `conflicting_views`, which get **one batched categorical agent pass**
+  (`prompts/crosscheck_conflicts.md`, default claude/haiku/medium) returning
+  `same_call` / `superseded` / `needs_human` + a one-sentence note per group —
+  categorical only, no numbers. A failed or `--no-llm` pass degrades every
+  conflict group to `needs_human`, never a crash. Exact firm+leaf join only —
+  near-leaf/fuzzy matching and the full dual-confidence firm-reconcile stage are
+  explicitly deferred (ROADMAP.md v1.2 items 6 and 1, the latter superseding
+  this bare-bones tool later). Outputs to `--out-dir`: `crosscheck.csv` (one row
+  per reported key, pipe-joined per-row provenance, bucket, verdict, note,
+  `needs_human` flag) and `crosscheck-summary.md` (counts per bucket/firm,
+  needs-human list, explicit scope disclaimer). Deterministic/byte-stable
+  (sorted, not dict order), proven by a test. **Smoke run** over
+  `runs/test2-01/output.csv` + `runs/test2-01-rescored/output.csv` (no live LLM,
+  `--no-llm`): 142 reported keys, all `duplicate_same_view`, 0 conflicts, 0
+  needs-human — the expected heavy same-view overlap, since the rescored file
+  preserves every frozen row verbatim and adds only 3 net-new leaves (which stay
+  single-row and unreported). New prompt + `REGISTRY.md` entry; 28 new tests
+  (201 → 229, full suite green). Smoke outputs in `tmp/crosscheck-smoke/`
+  (uncommitted); `runs/` untouched (read-only inputs).
+- 2026-07-07: **Client written answers received and recorded; pre-37 wave
+  planned.** The client answered the full questions sheet (legend confirmed;
+  links final; source scope = the link only; stated always wins but implied
+  is always analyzed; specific calls for now; clear dial evidence stands
+  regardless of commentary; combined rows keep pipe-joined titles/dates;
+  capture format and confidence thresholds confirmed). All decisions plus the
+  v1.2 / v2 backlog are recorded in the new **`ROADMAP.md`** (repo root) —
+  read it before design work; `CLAUDE.md`'s open-questions list updated to
+  match. Materially: the 37-source target list is only ~14 distinct firms
+  (Aberdeen ×7, Invesco ×6, State Street ×5, Columbia Threadneedle ×3,
+  Impax ×2, PGIM ×2), so same-firm overlap handling is a hard prerequisite
+  for the 37-run. The pre-37 wave is specced as three independent
+  instruction sets in `tmp/` (gitignored), one agent session each:
+  (1) `tmp/instructions-1-checker-context.md` — checker receives the
+  source's rolling memory; implied calls always verified and never silently
+  dropped; deterministic stated-beats-implied conflict rule with the implied
+  challenge logged as a flagged recommendation; dial-vs-commentary
+  convention line. (2) `tmp/instructions-2-scout-groups.md` — pre-run
+  metadata-only companion scout emitting a `--group-notes`-compatible file
+  (conservative: clear companion signals only, same-firm alone never
+  groups). (3) `tmp/instructions-3-firm-crosscheck.md` — bare-bones post-run
+  firm cross-check: deterministic (firm, leaf) join across run outputs using
+  `src.eval` normalization, same-view duplicates auto-marked, conflicting
+  views reviewed by one batched categorical agent pass into
+  `crosscheck.csv` + summary with a needs-human flag. The client's full
+  dual-confidence firm-reconcile stage is explicitly v1.2 (ROADMAP item 1).
 - 2026-07-06: **Fixed `runs/test2-01-rescored/rescore.py` collision handling
   (frozen-wins) and regenerated the artifact.** The script previously
   concatenated all 142 frozen `output.csv` rows with the 22 rescued rows
@@ -587,6 +647,11 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Next / Open
 
+- **Pre-37 wave in flight** (see 2026-07-07 Recent Changes + `ROADMAP.md`):
+  three instruction sets in `tmp/` awaiting agent sessions — checker context
+  wave, companion scout, post-run firm cross-check. Then: API cost test on a
+  small slice (measures the final v1 system), then the 37-source run (≥2 runs
+  under the 20-item cap).
 - Freeze pending: `runs/pilot-05/` (and still `runs/pilot-04/` +
   `runs/pilot-04-rescored/`) are on disk but not yet committed — `runs/` is
   gitignored; freeze by force-add when the analyst review confirms.
@@ -599,15 +664,17 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   clusters with a named-leaf guard; the AB global-duration triple (different
   table row per leaf) is a documented out-of-scope limitation of the identical-
   evidence trigger. (3) convention fixes (close-an-overweight → N, hedged risk
-  → UNCERTAIN) — DONE. Still **flagged pending client answers**:
-  inference-depth scope — the `inferred` tier is built and segregated below
-  stated calls, but whether analyst-style macro→allocation inference is in
-  scope (client question 2) still bounds recall; dial main+sub level policy
-  (question 3); leaf-snapping for the 9 near-leaf pairs (question 4). (PIMCO
-  source scope resolved 2026-07-06.)
-- Grouping client questions from pilot-04: which Date/URL a combined
-  pipe-joined row should carry, and confirm the outlook-beats-review arbiter
-  rule.
+  → UNCERTAIN) — DONE. The previously-pending client questions are now
+  ANSWERED (2026-07-06, see `ROADMAP.md`): inference-depth — stated always
+  wins, implied always analyzed and flagged (instruction set 1 implements);
+  dial level policy — clear dial rows are calls now, full-dashboard policy
+  v2; leaf-snapping — calls stay specific, cross-firm broad-vs-specific
+  review is v1.2. (PIMCO source scope resolved 2026-07-06.)
+- Grouping client questions from pilot-04: combined-row Date/Source now
+  ANSWERED (keep each document's title and date, pipe-separated — current
+  behavior confirmed, see `ROADMAP.md` decision 9). The outlook-beats-review
+  arbiter rule remains unconfirmed explicitly, but the client's dial answer
+  ("more current/specific reading wins") is consistent with it.
 - Disputed ground-truth calls (7: BMO Cash/Quality/EM Debt/CAD prose-vs-dial,
   Barings Hedge Funds/EM Equities/TIPs) and possibly-missing rows (3: BMO
   Growth and Materials, Barings US Small Cap) were sent to the Markets Recon
@@ -616,6 +683,6 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   respond.
 - Reconcile source count with client (user says 38, workbook CSV has 37) and
   pick an output date-format policy (see `POC_PLAN.md` open items).
-- Open questions tracked in `CLAUDE.md` (View legend confirmation, ground-truth
-  availability, page-number requirements, HTML source locators, confidence
-  threshold).
+- Open questions tracked in `CLAUDE.md` — most resolved by the client's
+  2026-07-06 written answers (see `ROADMAP.md`); still open: fuller
+  ground-truth availability, acceptable model providers.

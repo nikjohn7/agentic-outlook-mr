@@ -5,6 +5,37 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `crosscheck_conflicts.md` — v1 (2026-07-07)
+
+The post-run firm cross-check's one agent step (`src/crosscheck.py`, v1 pre-37
+wave instruction set 3). Runs once, batched over ALL `conflicting_views` groups
+(same firm + same sub-asset leaf, differing views across one or more frozen run
+outputs). Per group the model returns a categorical verdict — `same_call`
+(wording differs, substance identical), `superseded` (one row more current or
+specific; must name which and why), or `needs_human` (genuine unresolved
+conflict) — plus a one-sentence note. Categorical only, no confidence number
+(house rule: deterministic scoring; the LLM never emits numbers). Same-view
+duplicates never reach this prompt (pure-code auto-resolve). A failed call
+degrades every conflict group to `needs_human` in `src/crosscheck.py`, never a
+crash. Default engine a light Claude tier (claude/haiku/medium; codex pinned to
+gpt-5.5 if selected). Inputs (appended JSON): `groups[]` with `group_id`, firm,
+sub_asset_leaf, and each row's view/source_title/date/full_commentary. No
+template vars. Deliberately NOT the v1.2 dual-confidence reconcile (ROADMAP.md
+v1.2 item 1) and does no fuzzy/near-leaf matching (v1.2 item 6).
+
+### `conventions.md` — v1.3 (2026-07-07)
+
+v1.3 (pre-37 checker-context wave, client decision 7): adds the dial-vs-commentary
+convention line. A clear dial/table/chart call stands regardless of surrounding
+commentary tone UNLESS the commentary explicitly addresses the same leaf;
+commentary about a *narrower* sub-asset (cautious prose on gold mining) does not
+override a chart's call on the broader leaf (`Gold/Precious`). This is the single
+convention line only — the systematic chart-vs-commentary priority sequence is v2
+(ROADMAP). Injected into analyze/checker/arbiter alike; the categorical
+consequence is mirrored in `check_candidates.md` v1.7 (a checker must not fail a
+visually clear call because nearby commentary is about a narrower sub-asset), and
+illustrated by one synthetic gold/gold-mining example in `brain.md` v1.6.
+
 ### `conventions.md` — v1.2 (2026-07-06)
 
 v1.2 (post-test2-01 fix wave, Tasks 2-3): extends the resulting-stance rule
@@ -150,6 +181,24 @@ text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
 
+### `check_candidates.md` — v1.7 (2026-07-07)
+
+v1.7 (pre-37 checker-context wave, instruction set 1): three additions. (1) The
+checker now receives the source's complete rolling memory via a new `{{memory}}`
+template var (plumbed by `run.py` `_check_candidates`, read from
+`work/<run>/<source>/memory.md` after analyze completes). A new "Whole-file
+context (rolling memory)" section frames it as corroborating context for judging
+whether a candidate is supported or contradicted elsewhere in the file — and
+states explicitly that it never lowers the evidence bar (the per-candidate quote
+check is unchanged). For grouped sources the memory begins with the companion
+document's ledger, usable as same-firm cross-document context. (2) The `inferred`
+basis rule now tells the checker to use that whole-file memory to test whether the
+inference is corroborated or contradicted elsewhere, and requires every inferred
+candidate to be actively judged (never passed over silently); output stays
+categorical. (3) Mirrors `conventions.md` v1.3's dial-vs-commentary line: a
+checker must not fail a visually clear dial/chart call because nearby commentary
+is about a *narrower* sub-asset than the charted leaf (gold mining vs gold).
+
 ### `check_candidates.md` — v1.6 (2026-07-06)
 
 v1.6 (post-test2-01 fix wave, Tasks 2-3): mirrors `conventions.md` v1.2 so the
@@ -225,6 +274,25 @@ so the call cannot reach High. Default engine codex @ high effort
 (`--checker-engine/--checker-model/--checker-effort`). Inputs (appended JSON):
 source_id, firm, source_title, candidates[] with echoed `index`.
 
+### `scout_groups.md` — v1 (2026-07-07)
+
+The pre-run companion scout (`src/scout.py`, standalone — not part of the run
+pipeline). Runs once over source **metadata only** (firm, title, date — never
+fetches a URL or reads a document) and proposes read-together groups among
+same-firm sources, conservatively: a clear companion signal is required (same
+series + same period, an explicit multi-part title, a monthly + quarterly of
+the same franchise over the same window); same firm alone never groups, and the
+default per firm is "no grouping". Requires an explicit `ungrouped_firms`
+statement per firm left independent so every firm is accounted for. Output is
+`{"groups": [{firm, source_ids, reason}], "ungrouped_firms": [{firm, reason}]}`,
+parsed by `scout.parse_scout_groups` (mirrors `llm.parse_groups` strictness).
+Deterministic guards in `scout._apply_guards` then drop unknown ids, overlaps,
+cross-firm merges, and sub-pairs as warnings. The scout emits a
+`--group-notes`-compatible notes file (consumed by `run._resolve_groups` →
+`resolve_groups.md`) plus a per-firm reasoning sidecar for human review. Default
+engine claude @ haiku / low effort (`--engine/--model/--effort`). Inputs
+(appended JSON): `firms[]` with `firm` and `sources[]` of source_id/title/date.
+
 ### `resolve_groups.md` — v1 (2026-07-05)
 
 The group-notes resolver: runs once at run start, only when `--group-notes
@@ -260,6 +328,17 @@ reasoning appended to commentary; losers land in `failures.csv` as
 `arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
 confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
 Default engine codex @ medium effort (`--arbiter-*` flags).
+
+### `brain.md` — v1.6 (2026-07-07)
+
+v1.6 (pre-37 checker-context wave, client decision 7): one synthetic worked
+example in the Dialect-translation section illustrating published-level-wins with
+narrower commentary — a positioning grid places `Gold/Precious` in the Overweight
+column while a nearby note frets about gold *miners'* margins; the chart call
+stands (`Gold/Precious` `O`) because the cautious commentary is about a narrower
+sub-asset (mining equities), not the charted leaf. Synthetic, preserving the
+blindness protocol; pairs with `conventions.md` v1.3 and `check_candidates.md`
+v1.7.
 
 ### `brain.md` — v1.5 (2026-07-06)
 
