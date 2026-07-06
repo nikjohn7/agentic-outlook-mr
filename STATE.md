@@ -136,8 +136,11 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   Quote spot check 106/106 pass. Verdict: run **supports closing Phase 2** on
   quality grounds; residual gaps are client convention/scope decisions (leaf
   granularity/synonymy now the biggest recall lever, inference scope), not
-  extraction defects. `runs/` gitignored; not committed (freeze is a separate
-  step).
+  extraction defects. `runs/` gitignored; the judgment-pass artifacts
+  (`gt-judgments/`, filled `judgment-worksheet.csv`, `gt-comparison.md`) were
+  force-added and committed (`04c9c43`), but the rest of the pilot-06 run
+  (`output.csv`, `manifest.md`, `failures.csv`, `work/`, deterministic
+  `eval-report.md`/`eval-buckets.json`) remains unfrozen.
 - 2026-07-06: Ran the deterministic GT eval for pilot-06 (`src.eval`, no LLM
   calls) against `ground-truth/pilot-ground-truth.csv` (82 rows / 5 pilot firms);
   artifacts in `runs/pilot-06/eval/` (`eval-report.md`, `eval-buckets.json`,
