@@ -1,6 +1,6 @@
 # Markets Recon / Allocator Pro POC — State
 
-_Last updated: 2026-07-05_
+_Last updated: 2026-07-06_
 
 ## Current State
 
@@ -33,8 +33,10 @@ engine/model/effort flags (codex pinned to `gpt-5.5`; claude requires an
 explicit model): analyze (per-chunk extraction via `prompts/analyze_chunk.md`:
 injected taxonomy + conventions + brain examples + rolling `memory.md` +
 native chunk), a second-reader checker (`prompts/check_candidates.md`, one
-call per source, categorical verdicts feeding the deterministic rubric;
-default codex/gpt-5.5/high), a conflict arbiter
+call per source, categorical verdicts feeding the deterministic rubric —
+never a self-confidence number; any `fail` verdict hard-fails the candidate,
+anything short of all-pass caps confidence at 74, so High means a second
+model confirmed the evidence; default codex/gpt-5.5/high), a conflict arbiter
 (`prompts/arbitrate_conflict.md`, fires only on surviving view conflicts;
 default codex/gpt-5.5/medium), and a group-notes resolver
 (`prompts/resolve_groups.md`, only when `--group-notes` supplies analyst
@@ -43,15 +45,99 @@ rules live in `prompts/conventions.md`, injected into analyze, checker, and
 arbiter alike; `brain.md` carries worked examples + reasoning style,
 analyze-only. Both engine CLIs read PDF pages visually (codex renders pages
 to PNG itself), so engine routing is unconstrained by source type. All
-prompts are indexed in `prompts/REGISTRY.md`. Blind pilots `pilot-01`,
-`pilot-02`, and `pilot-03` (5 sources from `prev-excel/pilot.csv`; `pilot-03`
-is the first with the checker + arbiter steps active) are frozen in `runs/`
-awaiting user review; `POC_PLAN.md` locks the 3-phase build order and
-LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`, `playwright` (+ chromium). 94 unittests pass.
+prompts are indexed in `prompts/REGISTRY.md`. The pilot set
+(`prev-excel/pilot.csv`) is now 7 docs / 2 grouped pairs (Schroders
+review+outlook, JPM GFICC+GAA). Blind pilots are frozen in `runs/`
+(gitignored; frozen runs are force-added when committed): `pilot-01`/`pilot-02`
+(analyze only, original 5 sources — pilot-01's 12 false `quote_not_found`
+failures drove the `evidence_kind: visual` tagging rule and print-to-PDF ingest
+of visual-heavy HTML), `pilot-03` (first with checker + arbiter), `pilot-04`
+(first with grouping), and `pilot-05` (first over all 7 docs / 2 groups, and
+first with providers swapped: codex/gpt-5.5/high analyze, claude checker/
+arbiter/grouper). `POC_PLAN.md` locks the 3-phase build order and LLM-native
+ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
+`trafilatura`, `htmldate`, `playwright` (+ chromium). 95 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-06: User replaced `prev-excel/PIMCO.pdf` with the correct/full
+  Cyclical Outlook source (the previous file was the 2-page infographic only).
+  This makes the 5 PIMCO GT rows judged "not grounded in the ingested source"
+  in the pilot-05 comparison in-scope for the next run, and largely resolves
+  client question 5 (PIMCO source scope) in
+  `runs/pilot-05/gt-comparison.md`. No re-run yet.
+- 2026-07-06: Ran the pilot-05 GT comparison (deterministic firm+leaf join +
+  five parallel per-firm judgment agents verifying against the ingested
+  sources; report `runs/pilot-05/gt-comparison.md`, row-level JSONs in
+  `runs/pilot-05/gt-judgments/`). Recall 53/82 (65%, from 51% in pilot-04;
+  70% excluding 6 PIMCO GT rows not grounded in the ingested 2-pager —
+  GT authored from the full Cyclical Outlook article). All 6 view
+  disagreements judged convention disputes (mostly table-vs-prose), none a
+  reading error; all 24 JPM GAA dial signs verified correct; Schroders
+  28/28 again. Of 66 unmatched model rows: 38 defensible GT omissions, 18
+  convention disputes, 10 overreaches (8 pass at 75/High because the
+  forecast-delta convention has no materiality floor — AB 4-14bp deltas;
+  the rubric's 5 review flags correctly caught the prose-soft rows).
+  Dominant remaining miss cause is analyst-style inference depth (20/29),
+  a scope question, not a bug. New client questions: delta materiality
+  floor + prose-over-table precedence, inference-depth scope, dial level
+  policy, PIMCO source scope.
+- 2026-07-06: Ran pilot-05 blind — the provider-swap run over all 7 docs
+  (analyze codex/gpt-5.5/high, checker claude/opus/medium, arbiter
+  claude/sonnet/high, grouper claude/sonnet/medium, `--group-notes`). Single-
+  chunk smoke first (JPM GFICC, codex/high): 5 candidates, first attempt, no
+  repair — codex feeds the span-list schema natively. Grouper resolved both
+  pairs with zero warnings. 131 candidates → 119 kept, 12 failed (10
+  `duplicate_same_view` cross-doc dedups within the two groups, 1
+  `checker_sign_mismatch`, 1 `quote_not_found`); count check pass, 0 chunk
+  failures. Breadth up sharply vs pilot-04's 48 kept: Aberdeen now emits 4
+  (was 0 — priority-1 recall gap closed), AB 30, Schroders multi-asset 38, JPM
+  GAA 47 (the previously-uningested combined source), Schroders review-alone
+  still 0 (correct). Views O 59 / N 31 / U 29; bands High 114 / Medium 5;
+  5 review-flagged (all conf 74). Two non-dedup failures for analyst review:
+  AB JPY=N killed by opus checker reading USD/JPY 155→145 as monotonic yen
+  appreciation (→O, not two-sided-nets-to-N); JPM Short-Dated Bonds=O
+  `quote_not_found` (scrambled-page family, not rescued this run). Frozen on
+  disk at `runs/pilot-05/`; not yet committed.
+- 2026-07-05: Closed the JPM combined-source scope gap from the GT evaluation:
+  added a 7th pilot row ("Global Asset Allocation Views 2Q 2026", 4/30/2026,
+  local PDF in `prev-excel/`), a group note pairing it with the GFICC doc
+  (mirrors the Schroders pair), and title-disambiguated JPM entries in
+  `_pilot_local_pdf_for` (firm-only mapping would have sent both JPM rows to
+  `jp-morgan.pdf`). Pilot is now 7 docs / 2 groups. Tests updated (source
+  limit 7, JPM pair mapping); 95 pass. The recorded MR URL ends in "/c"
+  (likely truncated) — metadata only, the local PDF is ingested.
+- 2026-07-05: First ground-truth evaluation completed. User authored
+  `ground-truth/pilot-ground-truth.csv` (82 rows, all 5 pilot firms); a codex
+  agent ran the hybrid comparison against `runs/pilot-04-rescored/` (results
+  condensed in `runs/pilot-04-rescored/gt-comparison.md`). Direction accuracy
+  is excellent: 42/50 model rows align with GT, zero opposite-sign errors,
+  and the rubric's review flags caught the one overreach. Recall is the gap
+  (42/82 raw): 14 misses from Aberdeen emitting zero candidates, 16 from
+  table/infographic breadth (AB forecast table, PIMCO implication rows), 5
+  from JPM extraction breadth, and 5 because GT pairs JPM's GFICC doc with
+  "Global Asset Allocation Views 2Q 2026", which the pilot never ingested
+  (Schroders-style combined source). The grouped Schroders pair scored
+  28/28. Seven near-leaf disputes cluster on broad-vs-specific leaf snapping
+  (needs a convention decision).
+- 2026-07-05: Built `runs/pilot-04-rescored/` — the GT-comparison artifact for
+  the pilot-04 review. Both pilot-04 `quote_not_found` failures were re-scored
+  deterministically (no LLM calls; script + provenance README in the artifact)
+  under the new gates and pass: AB Euro Govt Bonds `N` via multi-span (2 spans,
+  clean p.7, strict verbatim path) and JPM Short-Dated US Treasuries `O` via
+  the scrambled-page fallback (p.2), both at 74/Medium/review (checker verdicts
+  were not persisted by the run, so the checker-unconfirmed cap applies; the
+  README documents all reconstruction assumptions). The 48 frozen rows are
+  preserved verbatim; rescued rows are inserted in their firm blocks;
+  `failures.csv` is header-only.
+- 2026-07-05: Ran the grouping live test blind (`pilot-04`, claude/opus/medium
+  + checker/arbiter/grouper on codex/gpt-5.5) with `--group-notes
+  prev-excel/group-notes.md`. The Schroders pair grouped with no warnings
+  (review doc alone: 0 candidates; outlook doc: 32). 50 candidates → 48 kept,
+  2 `quote_not_found`, 0 chunk failures, count check pass. Aberdeen emitted 0
+  candidates. Frozen at `runs/pilot-04/`. The two failures were diagnosed as
+  an honest elided quote (AB) and a column-interleaved text layer (JPM) —
+  drove the multi-span and scrambled-page fixes below.
 - 2026-07-05: Added deterministic scrambled-page detection to rescue prose
   calls on column-interleaved PDF pages (the JPM pilot-04 JPM
   `quote_not_found`: pdfplumber merges the two columns line-by-line, so no
@@ -99,85 +185,28 @@ LLM-native ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   line break ("AI-related" → "AIrelated") can no longer sink a correct quote,
   in either direction. Word content/order still must match exactly
   (paraphrase/stitch/reorder tests still fail). 6 new tests; 76 pass.
-- 2026-07-05: Factored the normative house rules out of `brain.md` into
-  `prompts/conventions.md` (one edit point when client feedback changes a
-  convention), injected as `{{conventions}}` into analyze, checker, and
-  arbiter; the checker is told to never fail a call for following a listed
-  convention. Live smoke: the pilot-03 JPY `checker_sign_mismatch` (extractor
-  applied two-sided-nets-to-`N`; the convention-blind checker killed it) now
-  passes 3-for-3. Added analyst group-notes handling for combined sources
-  (the GT combines some same-firm review+outlook pairs into one pipe-joined
-  source — discovered via Schroders, whose pilot doc alone correctly yields
-  no calls): `--group-notes <file>` free text is resolved once at run start
-  by `prompts/resolve_groups.md` into `work/<run>/groups.json` (unknown ids
-  and unmatched notes are warned in the manifest, never guessed; resolver
-  failure degrades to an ungrouped run). Grouped docs chain rolling memory,
-  assembly dedups/arbitrates on the group (`duplicate_same_view` failures
-  keep reconciliation exact; cross-doc corroboration noted in commentary;
-  arbiter rule: outlook beats review), and grouped rows pipe-join
-  Source/Date/URL. 70 tests pass.
-- 2026-07-04: Ran the first blind pilot with checker + arbiter active
-  (`pilot-03`, claude/opus/medium; checker codex/gpt-5.5/high, arbiter
-  codex/gpt-5.5/medium) after a passing single-chunk sanity call (JPM PDF, 4
-  candidates). 33 candidates → 29 kept, 4 failed (3 `quote_not_found`, 1
-  `checker_sign_mismatch`), 0 chunk failures, count check pass. PIMCO recovered
-  to 9 candidates (0 in pilot-01) and total failures fell to 4 (from 13),
-  consistent with the `evidence_kind: visual` fix. Frozen at `runs/pilot-03/`.
-  Added a `schroders` → local-PDF entry in `_pilot_local_pdf_for` and re-ran
-  Schroders alone (`pilot-03-schroders`): the native-PDF read again yields 0
-  calls (backward-looking Q1 recap, no forward stance) — the earlier HTML
-  zero was not an ingestion artifact.
-- 2026-07-04: Added the checker and arbiter LLM steps. Checker: categorical
-  verdicts (`supports_view`, `forward_looking`, `asset_match`:
-  pass|unclear|fail + note) — never a self-confidence number; any `fail`
-  hard-fails the candidate (`checker_sign_mismatch` /
-  `checker_not_forward_looking` / `checker_asset_mismatch`), anything short
-  of all-pass caps confidence at 74, so High means "a second model confirmed
-  the evidence"; rubric weights unchanged for cross-run comparability.
-  Arbiter: names a winner (kept, forced `review`, reasoning in commentary;
-  losers `arbitrated_out`) or null → `unresolved_conflict`; not shown
-  deterministic scores (anchoring). Call failures degrade to capped+review,
-  never promote. Manifest gains step config + failure-reason breakdown.
-- 2026-07-04: Applied both post-pilot-01 fixes. (1) `analyze_chunk.md` v1.1:
-  text inside a designed layout artifact (callout box, sidebar, banner, stat
-  panel, infographic column) must be tagged `evidence_kind: visual`, not
-  `prose`, so it gets the key-token-on-page check instead of the hard verbatim
-  check that rejected 12 correct pilot calls. (2) `visual_heavy` HTML sources
-  are now printed to PDF at ingest (`print_url_to_pdf` in `src/ingest.py`:
-  headless chromium, screen-CSS emulation, consent/investor-gate overlay
-  dismissal, slow scroll + settle wait so lazy images and scroll-triggered JS
-  charts finish rendering) and flow through the native PDF path — page chunks,
-  `p.N` locators, per-page pdfplumber snapshot; `printed_pdf` recorded in
-  `IngestedSource`, `ingest_meta.json`, and the run manifest, and the chunk
-  prompt names the capture's origin URL. Live-verified on Aberdeen: 10-page
-  capture with all three JS charts fully rendered (a fast scroll left chart
-  bodies blank; the consent modal otherwise masked every printed page).
-  Playwright + chromium added to the venv; chromium-printed fixture at
-  `tests/fixtures/printed_page.pdf`; 44 tests pass. PDF rasterization was
-  explicitly skipped — Phase 1 proved both engines already read PDFs visually.
-- 2026-07-04: Ran the first live blind pilot (`pilot-01`, claude/opus/medium).
-  24 candidates → 11 kept, 13 failed (count reconciles), frozen at
-  `runs/pilot-01/`. All 13 failures were `quote_not_found`; ~12 were false
-  negatives from a native-read-vs-snapshot gap — the model reads rendered PDF
-  pages but the verbatim check ran against the pdfplumber snapshot, which
-  scrambles infographic/callout-box text (PIMCO lost all 10 candidates this
-  way). Led directly to the `evidence_kind: visual` and print-to-PDF fixes.
 
 ## Next / Open
 
-- Phase 2 evaluation: `pilot-01`, `pilot-02`, and `pilot-03` (plus the
-  single-source `pilot-03-schroders`) are frozen and await the user's blind
-  review against held-back originals (per-call view/leaf/citation). The
-  scrambled-page prose fallback is built but the frozen pilot outputs predate
-  it — re-run to pick it up, or apply the deterministic re-score offline.
-- Grouping live test (pilot-04) is staged: pilot.csv gained the second
-  Schroders doc ("Our multi-asset investment views – March 2026", 3/20/2026,
-  user-downloaded PDF in `prev-excel/`; the pilot firm→PDF mapping now
-  disambiguates on title), notes at `prev-excel/group-notes.md`; a live
-  resolver smoke grouped the pair with no warnings. Run blind in a fresh
-  session with `--group-notes prev-excel/group-notes.md`. Client questions:
-  which Date/URL a combined pipe-joined row should carry, and confirm the
-  outlook-beats-review arbiter rule.
+- Freeze pending: `runs/pilot-05/` (and still `runs/pilot-04/` +
+  `runs/pilot-04-rescored/`) are on disk but not yet committed — `runs/` is
+  gitignored; freeze by force-add when the analyst review confirms.
+- Pilot-05 fix list from the GT comparison (`runs/pilot-05/gt-comparison.md`),
+  priority order: (1) deterministic materiality gate for forecast-delta
+  evidence (bp/FX-% floor; possibly prose-over-table precedence) — removes
+  most of the 10-overreach tail that currently passes at 75/High; (2) dedup
+  the same call emitted across multiple leaves (AB global-duration on 3
+  leaves, identical Asia series on 2); (3) convention fixes: "close an
+  overweight" → N not U, hedged risk notes → UNCERTAIN; (4) client
+  questions before encoding conventions: delta-as-view + materiality floor,
+  inference-depth scope (analyst-style macro→allocation inference bounds
+  recall at ~70-75% if out of scope), dial main+sub level policy,
+  leaf-snapping for the 9 near-leaf pairs. (PIMCO source scope is resolved:
+  the user replaced `prev-excel/PIMCO.pdf` with the full source on
+  2026-07-06.)
+- Grouping client questions from pilot-04: which Date/URL a combined
+  pipe-joined row should carry, and confirm the outlook-beats-review arbiter
+  rule.
 - Disputed ground-truth calls (7: BMO Cash/Quality/EM Debt/CAD prose-vs-dial,
   Barings Hedge Funds/EM Equities/TIPs) and possibly-missing rows (3: BMO
   Growth and Materials, Barings US Small Cap) were sent to the Markets Recon

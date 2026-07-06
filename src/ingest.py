@@ -332,7 +332,8 @@ def _read_csv(path: str | Path) -> list[dict[str, str]]:
 
 def _pilot_local_pdf_for(firm: str, source: str = "") -> Path | None:
     """Pilot rows map to local PDFs by firm; a firm with more than one pilot
-    doc (the Schroders review + outlook pair) disambiguates on the title."""
+    doc (the Schroders and J.P. Morgan review/outlook pairs) disambiguates on
+    the title."""
     firm_key = _normalize_lookup_key(firm)
     by_firm_and_source = {
         (
@@ -343,10 +344,18 @@ def _pilot_local_pdf_for(firm: str, source: str = "") -> Path | None:
             "schroders",
             _normalize_lookup_key("Our multi-asset investment views – March 2026"),
         ): PREV_EXCEL_DIR / "Our multi-asset investment views – March 2026.pdf",
+        (
+            "jpmorganassetmanagement",
+            _normalize_lookup_key("Global Fixed Income Views 2Q 2026"),
+        ): PREV_EXCEL_DIR / "jp-morgan.pdf",
+        (
+            "jpmorganassetmanagement",
+            _normalize_lookup_key("Global Asset Allocation Views 2Q 2026"),
+        ): PREV_EXCEL_DIR
+        / "Global Asset Allocation Views 2Q 2026 _ J.P. Morgan Asset Management.pdf",
     }
     by_firm = {
         "alliancebernstein": PREV_EXCEL_DIR / "alliance-bernstein.pdf",
-        "jpmorganassetmanagement": PREV_EXCEL_DIR / "jp-morgan.pdf",
         "pimco": PREV_EXCEL_DIR / "PIMCO.pdf",
     }
     path = by_firm_and_source.get((firm_key, _normalize_lookup_key(source))) or by_firm.get(
