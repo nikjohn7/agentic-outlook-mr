@@ -29,5 +29,6 @@ temp/
 # Generated POC outputs
 outputs/
 runs/
+work/
 artifacts/
 *.tmp

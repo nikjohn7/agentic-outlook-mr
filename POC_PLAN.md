@@ -93,7 +93,7 @@ poc/
     REGISTRY.md                # index + rationale + version log for every prompt (the porting contract)
     analyze_chunk.md           # the ONE LLM prompt: find calls -> snap to taxonomy -> assign view + quote + locator
     brain.md                   # few-shot examples distilled from prev-excel, label-reconciled
-  work/<run-id>/<source-id>/   # downloaded text + rolling memory.md + candidates.json
+  work/<run-id>/<source-id>/   # native source + snapshot.txt + chunks.json + ingest_meta.json (page count, visual_heavy) + rolling memory.md + candidates.json
   runs/<run-id>/
     output.csv                 # the reviewable run-level file (Target Output shape + confidence cols)
     failures.csv               # every candidate that died in the pipeline + reason code
@@ -118,6 +118,13 @@ natively). `requests` fallback for fetching. Stdlib `csv`/`json` otherwise.
    snapshot text for PDFs** — it reads the PDF natively. Chunk boundaries: PDF = 5-page
    ranges (`p.N–M`), HTML = ~6–8k chars of the saved text (`char:start-end`). Keep this
    module deliberately simple; it earns complexity only if a source proves unfetchable.
+   **Visual-heavy detection (HTML only):** graphics are invisible to every text path
+   (trafilatura, raw markup, markdown fetch), so ingest counts content graphics
+   (`<img>`/`<canvas>`/`<figure>`; `<svg>` counted but excluded as icon noise) in the raw
+   HTML and flags the source `visual_heavy` at ≥5 (tunable constant), persisted in
+   `ingest_meta.json` and surfaced in `manifest.md` — the analyst must know which HTML
+   sources may have silently dropped chart-borne calls. (PDFs don't need this: the model
+   reads their rendered pages.)
 2. **Analyze chunk** — *the one LLM step* (`prompts/analyze_chunk.md`), guided by
    `brain.md` few-shots. The engine reads the chunk **natively**: PDF chunks as rendered
    page ranges (tables, arrow grids, and colored view dashboards are seen as designed),
@@ -137,6 +144,9 @@ natively). `requests` fallback for fetching. Stdlib `csv`/`json` otherwise.
      acronyms/synonyms/paraphrases ("EM equities" → `Emerging Markets Equities`) and
      records how it matched (`exact` vs `semantic`); code only verifies the snapped label
      is one of the 396.
+   - **Report unseen figures (HTML chunks):** when the text references a graphic the model
+     cannot see ("as the chart below shows…"), it notes this in the chunk summary — the
+     text-side counterpart of the ingest `visual_heavy` flag.
 3. **Validate + score** — *deterministic* (`taxonomy.py` + `confidence.py`),
    **evidence-kind-aware**. Reject any label not among the 396 leaves; check evidence:
    `prose` → the quote must appear verbatim in the **normalized** snapshot (normalization
@@ -150,12 +160,13 @@ natively). `requests` fallback for fetching. Stdlib `csv`/`json` otherwise.
    `UNCERTAIN` and are never silently dropped.
 4. **Assemble** — *deterministic* (`assemble.py`). Merge/dedup candidates for the same leaf
    across chunks (conflicts resolved via the rubric), deterministically fill
-   category/asset-class/canva, write `output.csv` (+ the one-hot `U/N/O` columns),
+   category/asset-class/canva, write `output.csv` (the 10 workbook columns plus
+   `confidence`, `band`, and `review_flag`; no one-hot columns in v1),
    `failures.csv`, and `manifest.md`.
 
 ## Inter-step data contract
 
-One JSON object per candidate call (a dataclass in `assemble.py`; this schema is the LLM's
+One JSON object per candidate call (a dataclass in `schemas.py`; this schema is the LLM's
 output format) — token-efficient, explicit:
 
 ```json
@@ -212,7 +223,7 @@ The LLM supplies *observations* (flags + the quote); code computes the score (0�
 | Evidence check: `prose` quote verbatim in normalized snapshot; `table`/`visual` key tokens on cited page + specific table/figure locator | 25 / fail → `failures.csv` |
 | `taxonomy_match` = exact / semantic / none           | 20 / 10 / fail → `failures.csv` |
 | No cross-chunk conflict for this leaf                 | 15 (−10 if conflict) |
-| Chunk read quality (page rendered/readable, snapshot non-empty) | 10 / 0 |
+| Snapshot read quality: PDF ≥200 chars/page (catches scanned/image-only text layers), HTML ≥1,000 chars total (catches blocked/paywalled fetches) | 10 / 0 |
 
 Bands & balanced policy: **≥75 High** keep call; **50–74 Medium** keep + review flag;
 **<50 Low** keep + strong review flag. **Hard-check failures** (evidence check failed,
@@ -272,7 +283,7 @@ plain scripts and tests:
 - locked-taxonomy lookup: `Sub-Asset Class` -> `Asset Class Category`, `Asset Class`,
   `Canva Groupings`
 - exact taxonomy-label validation
-- output-column ordering and one-hot mapping
+- output-column ordering
 - batch splitting under the 20-source cap
 - verbatim quote-found checks
 - confidence arithmetic once deterministic signals are known
@@ -308,7 +319,9 @@ decide the Claude-vs-Codex routing for the full batch.
   `output.csv` + `failures.csv` + `manifest.md`. The agent must **not** be given the
   ground-truth results during this phase. Freeze the output, then go to Evaluation.
 - **Phase 3 — scale.** Run a full ≤20-item batch on `Target Ingestion List.csv`; produce one
-  run-level output file. *(v2 backlog: cheap checker agent, more API providers.)*
+  run-level output file. *(v2 backlog: cheap checker agent, more API providers, and
+  headless-browser screenshots for `visual_heavy` HTML sources — the HTML analogue of
+  native PDF reading, the only way the model can actually see charts/infographics.)*
 
 ## Evaluation (runs AFTER the output is frozen)
 
@@ -340,9 +353,9 @@ The pilot is a blind test. Ground truth is introduced only here, never during ge
 - Confidence unit test: explicit + evidence-check pass → High; evidence-check fail →
   `failures.csv` with reason code (never `UNCERTAIN`); conflict → flagged; table/visual
   evidence without a specific table/figure locator → flagged.
-- Output shape: `output.csv` columns exactly match `Target Output.csv`; one-hot maps
-  `U→(1,0,0) N→(0,1,0) O→(0,0,1) UNCERTAIN→(0,0,0)`; every dropped candidate appears in
-  `failures.csv` (counts reconcile: candidates = kept + failed).
+- Output shape: `output.csv` columns are exactly `Target Output.csv` plus `confidence`,
+  `band`, and `review_flag`; one-hot columns are intentionally omitted in v1. Every dropped
+  candidate appears in `failures.csv` (counts reconcile: candidates = kept + failed).
 
 ## Open items needing user input
 - Pilot inputs are **provided** (`prev-excel/pilot.csv` + 3 local PDFs). **Ground truth is
