@@ -32,17 +32,17 @@ Also read `POC_PLAN.md` — the agreed implementation plan and build order.
 
 ## Current Pilot Run
 
-The first milestone is a **blind pilot on the 5 sources in `prev-excel/pilot.csv`** (not the
-37-source `Target Ingestion List.csv`, which is the later full batch). Of the 5: 3 are local
-PDFs in `prev-excel/` (`alliance-bernstein.pdf` = AllianceBernstein, `jp-morgan.pdf` = J.P.
-Morgan, `PIMCO.pdf` = PIMCO); 2 are HTML fetched from their URLs (Aberdeen Investments,
-Schroders). Map a pilot row to a local PDF by firm name when the file exists, else fetch the
-URL.
+The first milestone is a **blind pilot on the 7 docs in `prev-excel/pilot.csv`** (not the
+37-source `Target Ingestion List.csv`, which is the later full batch). The pilot currently
+includes the original 5-source set plus 2 added companion docs, forming 2 grouped pairs:
+Schroders review + outlook, and JPM GFICC + Global Asset Allocation. Local PDFs in
+`prev-excel/` are used when available; otherwise fetch the URL. Map a pilot row to a local
+PDF by firm/title when the file exists, else fetch the URL.
 
 Pilot rules:
 - **Blind:** the building agent must NOT be given the saved ground-truth results while
   generating. The user reviews the frozen output afterward. `prompts/brain.md` few-shots must
-  exclude these 5 sources.
+  exclude these 7 docs.
 
 See `POC_PLAN.md` → "Pilot set" for the full table.
 
@@ -162,4 +162,3 @@ The POC is done when:
 - Each found call includes a citation comment and page/source locator.
 - Weak or ambiguous evidence is marked `uncertain` or flagged for review.
 - The POC can be compared against the expected output in the workbook.
-

@@ -109,6 +109,26 @@ class Taxonomy:
         """Return locked leaf labels in workbook row order."""
         return tuple(entry.sub_asset_class for entry in self._entries)
 
+    def grouped_block(self) -> str:
+        """Render the locked leaves as a navigable block for prompt injection.
+
+        Grouped Asset Class -> Asset Class Category so the model can locate the
+        right leaf among 396 without changing the labels it must match exactly.
+        """
+        lines: list[str] = []
+        current_class: str | None = None
+        current_category: str | None = None
+        for entry in self._entries:
+            if entry.asset_class != current_class:
+                current_class = entry.asset_class
+                current_category = None
+                lines.append(f"\n## {current_class}")
+            if entry.asset_class_category != current_category:
+                current_category = entry.asset_class_category
+                lines.append(f"### {current_category}")
+            lines.append(f"- {entry.sub_asset_class}")
+        return "\n".join(lines).strip()
+
     def is_valid_label(self, label: str) -> bool:
         """Return true only for exact locked `Sub-Asset Class` labels."""
         return label in self._by_label

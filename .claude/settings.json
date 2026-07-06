@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r \".tool_input.command // empty\"); if printf \"%s\\n\" \"$cmd\" | grep -qE \"(^|[;&|[:space:]])git[[:space:]]+commit([[:space:]]|$)\"; then if printf \"%s\\n\" \"$cmd\" | grep -qiE \"co-authored-by:.*claude|co-authored-by:.*anthropic|generated with.*claude|noreply@anthropic\\.com|claude\\.ai/code\"; then echo \"Blocked: commit message contains Claude/Anthropic self-attribution (e.g. Co-Authored-By: Claude, Generated with Claude Code, noreply@anthropic.com, or a claude.ai link). Remove the self-attribution line from the commit message and recommit.\" >&2; exit 2; fi; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

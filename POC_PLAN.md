@@ -319,9 +319,12 @@ decide the Claude-vs-Codex routing for the full batch.
   `output.csv` + `failures.csv` + `manifest.md`. The agent must **not** be given the
   ground-truth results during this phase. Freeze the output, then go to Evaluation.
 - **Phase 3 — scale.** Run a full ≤20-item batch on `Target Ingestion List.csv`; produce one
-  run-level output file. *(v2 backlog: cheap checker agent, more API providers, and
-  headless-browser screenshots for `visual_heavy` HTML sources — the HTML analogue of
-  native PDF reading, the only way the model can actually see charts/infographics.)*
+  run-level output file. *(v2 backlog: more API providers. Two items were pulled forward
+  after pilot-01/02: headless-browser capture of `visual_heavy` HTML — ingest prints such
+  pages to PDF via Playwright chromium (`print_url_to_pdf` in `src/ingest.py`) and they flow
+  through the native PDF path — and the checker agent, now a second-reader LLM step whose
+  categorical verdicts feed the deterministic rubric, plus an LLM conflict arbiter; see
+  `prompts/check_candidates.md` / `prompts/arbitrate_conflict.md`.)*
 
 ## Evaluation (runs AFTER the output is frozen)
 
