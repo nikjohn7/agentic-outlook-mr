@@ -18,7 +18,6 @@ import trafilatura
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PILOT_CSV = PROJECT_ROOT / "prev-excel" / "pilot.csv"
 TARGET_SOURCES_CSV = PROJECT_ROOT / "excel-file" / "Target Ingestion List.csv"
-PREV_EXCEL_DIR = PROJECT_ROOT / "prev-excel"
 
 PDF_PAGE_CHUNK_SIZE = 5
 HTML_CHAR_CHUNK_SIZE = 8000
@@ -104,17 +103,25 @@ class IngestedSource:
 
 
 def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
+    """Load a pilot-format source CSV.
+
+    Columns: `Firm`, `Date`, `Source` (title), `MR Link` (URL), and the optional
+    `local_file` (see `_resolve_local_file` for its semantics). Any second test
+    set is a CSV of this exact shape — pointing `--sources <path>` at it needs no
+    code change.
+    """
     rows = _read_csv(path)
     sources: list[SourceRecord] = []
     for row in rows:
-        local_path = _pilot_local_pdf_for(row["Firm"], row["Source"])
+        firm, title = row["Firm"], row["Source"]
+        local_path = _resolve_local_file(row, firm=firm, title=title)
         url = row["MR Link"]
         sources.append(
             SourceRecord(
-                source_id=slugify(f"{row['Firm']} {row['Source']}"),
-                firm=row["Firm"],
+                source_id=slugify(f"{firm} {title}"),
+                firm=firm,
                 date=row["Date"],
-                source=row["Source"],
+                source=title,
                 url=url,
                 resolved_url=resolve_url(url),
                 source_type="pdf" if local_path else detect_source_type(url),
@@ -125,21 +132,28 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
 
 
 def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRecord]:
+    """Load the target-batch CSV (`Id`, `Firm`, `Title`, `Published At`,
+    `Source Link`). It carries no `local_file` column, which resolves as empty
+    for every row (all URLs fetched) — loading is unchanged; the optional column
+    is honoured if a future target CSV adds it."""
     rows = _read_csv(path)
     sources: list[SourceRecord] = []
     for index, row in enumerate(rows, start=1):
         raw_url = row["Source Link"]
-        source_id = row["Id"] or slugify(f"{index} {row['Firm']} {row['Title']}")
+        firm, title = row["Firm"], row["Title"]
+        local_path = _resolve_local_file(row, firm=firm, title=title)
+        source_id = row["Id"] or slugify(f"{index} {firm} {title}")
         resolved_url = resolve_url(raw_url)
         sources.append(
             SourceRecord(
                 source_id=str(source_id),
-                firm=row["Firm"],
+                firm=firm,
                 date=row["Published At"],
-                source=row["Title"],
+                source=title,
                 url=raw_url,
                 resolved_url=resolved_url,
-                source_type=detect_source_type(resolved_url),
+                source_type="pdf" if local_path else detect_source_type(resolved_url),
+                local_path=local_path,
             )
         )
     return sources
@@ -330,42 +344,31 @@ def _read_csv(path: str | Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _pilot_local_pdf_for(firm: str, source: str = "") -> Path | None:
-    """Pilot rows map to local PDFs by firm; a firm with more than one pilot
-    doc (the Schroders and J.P. Morgan review/outlook pairs) disambiguates on
-    the title."""
-    firm_key = _normalize_lookup_key(firm)
-    by_firm_and_source = {
-        (
-            "schroders",
-            _normalize_lookup_key("Quarterly markets review - Q1 2026"),
-        ): PREV_EXCEL_DIR / "Quarterly markets review - Q1 2026.pdf",
-        (
-            "schroders",
-            _normalize_lookup_key("Our multi-asset investment views – March 2026"),
-        ): PREV_EXCEL_DIR / "Our multi-asset investment views – March 2026.pdf",
-        (
-            "jpmorganassetmanagement",
-            _normalize_lookup_key("Global Fixed Income Views 2Q 2026"),
-        ): PREV_EXCEL_DIR / "jp-morgan.pdf",
-        (
-            "jpmorganassetmanagement",
-            _normalize_lookup_key("Global Asset Allocation Views 2Q 2026"),
-        ): PREV_EXCEL_DIR
-        / "Global Asset Allocation Views 2Q 2026 _ J.P. Morgan Asset Management.pdf",
-    }
-    by_firm = {
-        "alliancebernstein": PREV_EXCEL_DIR / "alliance-bernstein.pdf",
-        "pimco": PREV_EXCEL_DIR / "PIMCO.pdf",
-    }
-    path = by_firm_and_source.get((firm_key, _normalize_lookup_key(source))) or by_firm.get(
-        firm_key
-    )
-    return path if path and path.exists() else None
+def _resolve_local_file(
+    row: dict[str, str], *, firm: str, title: str
+) -> Path | None:
+    """Resolve a source row's optional `local_file` column to a local PDF.
 
-
-def _normalize_lookup_key(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", value.lower())
+    `local_file` is a repo-relative path (resolved against PROJECT_ROOT). Its
+    three-way contract, shared by every source CSV:
+      - present and the file exists  -> ingest that local PDF; the row's URL is
+        kept only as metadata (the mapped-local-PDF behavior);
+      - present but missing on disk  -> hard error naming the row (never a silent
+        fall back to the URL — a typo would otherwise fetch the wrong thing);
+      - absent or empty              -> None; fetch the URL.
+    A CSV without the column at all behaves as empty for every row (no local
+    files), so an existing format keeps loading unchanged.
+    """
+    raw = (row.get("local_file") or "").strip()
+    if not raw:
+        return None
+    path = PROJECT_ROOT / raw
+    if not path.exists():
+        raise FileNotFoundError(
+            f"local_file '{raw}' for source '{firm} — {title}' does not exist "
+            f"(resolved to {path}); fix the path or clear the column to fetch the URL"
+        )
+    return path
 
 
 def _copy_pdf(source: SourceRecord, output_dir: Path) -> Path:

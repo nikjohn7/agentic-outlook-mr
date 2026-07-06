@@ -31,6 +31,28 @@ convention, the convention-blind checker failed it as a sign mismatch.
 Checker independence is preserved: it still never sees the source and judges
 only the presented fields; it now judges them under the same law.
 
+### `analyze_chunk.md` — v1.6 (2026-07-06)
+
+v1.6 (post-pilot-06, country-granularity inference): adds a granularity rule to
+the `basis: inferred` section — infer at the granularity the prose names. When
+inference-grounding prose names a specific country/market and the injected
+taxonomy has that country's leaf, the single-step inference lands on the NAMED
+country leaf (e.g. `Taiwan Equities`), not the regional aggregate (`Asia
+Equities`); the regional leaf is emitted only for genuinely regional prose or
+when the named country has no leaf (snap to the nearest containing leaf, as
+before). Several countries named in one passage → one inferred candidate per
+named country carrying the same spans (the multi-call pattern, kept by the
+assemble-side cross-leaf dedup because the leaves are named in the evidence);
+this explicitly does not relax the standing prohibition on fanning a broad
+*stated* call down to unnamed child leaves. Prose-text only, no schema change;
+the checker's `asset_match` question already polices subject identity, so it is
+not mirrored there. Illustrated by one synthetic worked example in `brain.md`
+v1.4 (invented firm, invented Indonesia/Vietnam prose — not drawn from any pilot
+doc). Motivated by the pilot-06 GT comparison
+(`runs/pilot-06/gt-comparison.md`): Aberdeen's country-equity claims snapped
+into one coarse "Asia Equities O" leaf, which can also mask an opposite
+country-level call.
+
 ### `analyze_chunk.md` — v1.5 (2026-07-06)
 
 v1.5 (Rubric v2): widens `call_language` from the coarse legacy buckets to
@@ -205,6 +227,17 @@ reasoning appended to commentary; losers land in `failures.csv` as
 `arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
 confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
 Default engine codex @ medium effort (`--arbiter-*` flags).
+
+### `brain.md` — v1.4 (2026-07-06)
+
+v1.4 (post-pilot-06, pairs with `analyze_chunk.md` v1.6): one synthetic worked
+example in the Snapping section teaching "infer at the granularity the prose
+names" — an invented macro house naming Indonesia and Vietnam yields two
+country-leaf inferred candidates (`Indonesia Equities` O, `Vietnam Equities` O),
+with the regional aggregate `Asia Equities` explicitly NOT emitted, framed as
+the contrast to the adjacent broad-stated "no fan-out" example. Synthetic
+throughout (invented firm, invented country prose), preserving the pilot
+blindness protocol.
 
 ### `brain.md` — v1.3 (2026-07-06)
 

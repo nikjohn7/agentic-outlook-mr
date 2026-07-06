@@ -12,6 +12,7 @@ from typing import Callable
 from src.confidence import (
     CHECKER_FAIL_REASONS,
     ConfidenceResult,
+    effective_call_language,
     normalize_quote_text,
     score_candidate,
 )
@@ -37,15 +38,18 @@ TARGET_OUTPUT_COLUMNS = (
     "Full Commentary",
 )
 
-# `basis` and `checker_strength` are exposed after the internal-review columns
-# so an analyst can filter stated vs. forecast_delta/inferred calls and
-# High-but-adequate checker confirmations at a glance.
+# `basis`, `checker_strength`, and `call_language` are exposed after the
+# internal-review columns so an analyst can filter stated vs.
+# forecast_delta/inferred calls, High-but-adequate checker confirmations, and
+# the effective call-language grade at a glance. `call_language` is the value
+# actually scored (after the explicit_dial-on-prose downgrade).
 OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + (
     "confidence",
     "band",
     "review_flag",
     "basis",
     "checker_strength",
+    "call_language",
 )
 
 FAILURE_COLUMNS = (
@@ -63,6 +67,7 @@ FAILURE_COLUMNS = (
     "reasoning",
     "basis",
     "checker_strength",
+    "call_language",
 )
 
 
@@ -85,6 +90,9 @@ class FailureRecord:
     reasoning: str = ""
     basis: str = ""
     checker_strength: str = ""
+    # The effective call-language bucket (after the explicit_dial-on-prose
+    # downgrade), so a failed row carries the same grade a kept row would.
+    call_language: str = ""
 
     @classmethod
     def from_candidate(
@@ -109,6 +117,7 @@ class FailureRecord:
             reasoning=candidate.reasoning,
             basis=candidate.basis,
             checker_strength=checker_strength,
+            call_language=effective_call_language(candidate)[0],
         )
 
     @classmethod
@@ -134,6 +143,7 @@ class FailureRecord:
             "reasoning": self.reasoning,
             "basis": self.basis,
             "checker_strength": self.checker_strength,
+            "call_language": self.call_language,
         }
 
 
@@ -550,6 +560,7 @@ def _output_row(
         "review_flag": review_flag,
         "basis": candidate.basis,
         "checker_strength": scored.checker_strength,
+        "call_language": scored.call_language,
     }
 
 
@@ -629,6 +640,16 @@ def _manifest_text(
         lines.append("## Checker strength (kept rows)")
         lines.extend(
             f"- {strength}: {count}" for strength, count in sorted(strength_counts.items())
+        )
+        lines.append("")
+    call_language_counts = Counter(
+        row.get("call_language") or "(none)" for row in result.output_rows
+    )
+    if call_language_counts:
+        lines.append("## Call language (kept rows)")
+        lines.extend(
+            f"- {language}: {count}"
+            for language, count in sorted(call_language_counts.items())
         )
         lines.append("")
     reason_counts = Counter(

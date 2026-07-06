@@ -141,6 +141,10 @@ class ConfidenceResult:
     # calls.
     cap_reason: str = ""
     call_language_note: str = ""
+    # The call-language bucket actually scored (after the explicit_dial-on-prose
+    # downgrade), persisted so an analyst can audit the effective grade from the
+    # frozen output — not the raw candidate value.
+    call_language: str = ""
 
 
 # Dash-like characters (typographic hyphens, en/em/figure dash, horizontal bar,
@@ -255,17 +259,10 @@ def score_candidate(
         if failed:
             raise ValueError(CHECKER_FAIL_REASONS[failed[0]])
 
-    effective_call_language = candidate.call_language
-    call_language_note = ""
-    if candidate.call_language == "explicit_dial" and candidate.evidence_kind == "prose":
-        effective_call_language = "explicit_stance"
-        call_language_note = (
-            "Call language: explicit_dial is accepted only for table/visual evidence; "
-            "prose evidence scored as explicit_stance."
-        )
+    effective_call, call_language_note = effective_call_language(candidate)
 
     score = 0
-    score += CALL_LANGUAGE_POINTS[effective_call_language]
+    score += CALL_LANGUAGE_POINTS[effective_call]
     score += 25
     score += {"exact": 20, "semantic": 10}[candidate.taxonomy_match]
     score += 5 if candidate.conflict else 15
@@ -349,7 +346,25 @@ def score_candidate(
         checker_note=checker_note,
         cap_reason=cap_reason,
         call_language_note=call_language_note,
+        call_language=effective_call,
     )
+
+
+def effective_call_language(candidate: CandidateCall) -> tuple[str, str]:
+    """The call-language bucket actually scored, plus an optional note.
+
+    `explicit_dial` reads a dial/grid position, so it is accepted only for
+    table/visual evidence; on prose it downgrades to `explicit_stance` with a
+    recorded note. Every other bucket passes through unchanged. Shared by
+    score_candidate and the failure path so both persist the same effective
+    value.
+    """
+    if candidate.call_language == "explicit_dial" and candidate.evidence_kind == "prose":
+        return "explicit_stance", (
+            "Call language: explicit_dial is accepted only for table/visual evidence; "
+            "prose evidence scored as explicit_stance."
+        )
+    return candidate.call_language, ""
 
 
 def _append_reason(existing: str, addition: str) -> str:

@@ -542,6 +542,21 @@ def _conventions_text() -> str:
     return "No house conventions are available for this run."
 
 
+def load_sources(spec: str) -> list[SourceRecord]:
+    """Resolve a ``--sources`` value to source records.
+
+    ``pilot`` and ``target`` load the built-in CSVs; any other value is a path
+    to a pilot-format source CSV (columns Firm, Date, Source, MR Link, optional
+    local_file) — so adding a second test set needs no code change. The <=20
+    source limit is enforced by the caller for every case.
+    """
+    if spec == "pilot":
+        return load_pilot_sources()
+    if spec == "target":
+        return load_target_sources()
+    return load_pilot_sources(spec)
+
+
 def resolve_engine_settings(engine: str, model: str | None, effort: str | None) -> tuple[str, str]:
     """Validate and resolve the per-run model/effort so every run states them.
 
@@ -567,7 +582,13 @@ def resolve_engine_settings(engine: str, model: str | None, effort: str | None) 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Markets Recon POC runner")
-    parser.add_argument("--sources", choices=("pilot", "target"), default="pilot")
+    parser.add_argument(
+        "--sources",
+        default="pilot",
+        help="'pilot', 'target', or a path to a pilot-format source CSV "
+        "(columns Firm, Date, Source, MR Link, optional local_file); "
+        "the <=20 source limit applies to all",
+    )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--engine", choices=("claude", "codex"), default="claude")
     parser.add_argument(
@@ -633,7 +654,7 @@ def main() -> int:
     parser.add_argument("--ingest-only", action="store_true")
     args = parser.parse_args()
 
-    sources = load_pilot_sources() if args.sources == "pilot" else load_target_sources()
+    sources = load_sources(args.sources)
     enforce_source_limit(sources)
 
     if args.ingest_only:

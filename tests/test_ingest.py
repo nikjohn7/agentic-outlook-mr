@@ -67,6 +67,99 @@ class IngestTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             enforce_source_limit(sources, limit=6)
 
+    def test_pilot_resolution_regression(self) -> None:
+        # Golden (source_id -> local PDF name or None) captured from the
+        # firm/title mapping before it was replaced by the local_file column.
+        # The migrated pilot.csv must resolve byte-identically.
+        expected = {
+            "aberdeen-investments-emerging-markets-q2-2026-outlook-shifting-sands": None,
+            "alliancebernstein-global-macro-outlook-second-quarter-2026": "alliance-bernstein.pdf",
+            "schroders-quarterly-markets-review-q1-2026": "Quarterly markets review - Q1 2026.pdf",
+            "j-p-morgan-asset-management-global-fixed-income-views-2q-2026": "jp-morgan.pdf",
+            "pimco-layered-uncertainty-conflict-credit-stress-and-ai": "PIMCO.pdf",
+            "schroders-our-multi-asset-investment-views-march-2026": (
+                "Our multi-asset investment views – March 2026.pdf"
+            ),
+            "j-p-morgan-asset-management-global-asset-allocation-views-2q-2026": (
+                "Global Asset Allocation Views 2Q 2026 _ J.P. Morgan Asset Management.pdf"
+            ),
+        }
+        resolved = {
+            source.source_id: (source.local_path.name if source.local_path else None)
+            for source in load_pilot_sources()
+        }
+        self.assertEqual(expected, resolved)
+
+
+class LocalFileLoaderTest(unittest.TestCase):
+    """The optional `local_file` column's three-way contract."""
+
+    HEADER = "Firm,Date,Source,MR Link,local_file\n"
+
+    def _write_csv(self, temp_dir: str, body: str) -> Path:
+        path = Path(temp_dir) / "sources.csv"
+        path.write_text(self.HEADER + body, encoding="utf-8")
+        return path
+
+    def test_present_and_existing_local_file_is_ingested(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = self._write_csv(
+                temp_dir,
+                "Test Firm,4/2/2026,A Doc,https://example.test/a,prev-excel/PIMCO.pdf\n",
+            )
+            [source] = load_pilot_sources(csv_path)
+
+        self.assertEqual("pdf", source.source_type)
+        self.assertEqual("PIMCO.pdf", source.local_path.name)
+        self.assertEqual("https://example.test/a", source.url)  # URL kept as metadata
+
+    def test_missing_local_file_hard_errors_naming_the_row(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = self._write_csv(
+                temp_dir,
+                "Test Firm,4/2/2026,Ghost Doc,https://example.test/a,prev-excel/does-not-exist.pdf\n",
+            )
+            with self.assertRaises(FileNotFoundError) as ctx:
+                load_pilot_sources(csv_path)
+
+        self.assertIn("Ghost Doc", str(ctx.exception))
+        self.assertIn("does-not-exist.pdf", str(ctx.exception))
+
+    def test_empty_local_file_fetches_the_url(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = self._write_csv(
+                temp_dir, "Test Firm,4/2/2026,A Doc,https://example.test/a.html,\n"
+            )
+            [source] = load_pilot_sources(csv_path)
+
+        self.assertIsNone(source.local_path)
+        self.assertEqual("html", source.source_type)
+
+    def test_absent_local_file_column_behaves_as_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "sources.csv"
+            path.write_text(
+                "Firm,Date,Source,MR Link\nTest Firm,4/2/2026,A Doc,https://example.test/a.html\n",
+                encoding="utf-8",
+            )
+            [source] = load_pilot_sources(path)
+
+        self.assertIsNone(source.local_path)
+        self.assertEqual("html", source.source_type)
+
+    def test_arbitrary_pilot_format_csv_loads_and_respects_the_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            body = "".join(
+                f"Firm {n},4/2/2026,Doc {n},https://example.test/{n}.html,\n" for n in range(3)
+            )
+            csv_path = self._write_csv(temp_dir, body)
+            sources = load_pilot_sources(csv_path)
+
+        self.assertEqual(3, len(sources))
+        enforce_source_limit(sources, limit=3)
+        with self.assertRaises(ValueError):
+            enforce_source_limit(sources, limit=2)
+
     def test_pilot_schroders_pair_maps_to_distinct_local_pdfs(self) -> None:
         schroders = [source for source in load_pilot_sources() if source.firm == "Schroders"]
 

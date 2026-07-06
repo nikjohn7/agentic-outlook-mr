@@ -70,6 +70,17 @@ contract.
   high yield… 7.7% yield-to-worst" → `US HY`.
 - "EM equities, e.g. Brazil and Korea" → `Emerging Markets Equities`, no
   fan-out to country leaves.
+- **Infer at the granularity the prose names** (contrast the row above). A macro
+  house writes: "Indonesia's nickel-processing boom keeps drawing sustained
+  foreign investment, and Vietnam is capturing the supply chains relocating out
+  of China." The taxonomy has both `Indonesia Equities` and `Vietnam Equities`,
+  so the single-step inference lands on the two **named** country leaves —
+  `Indonesia Equities` `O` **and** `Vietnam Equities` `O` (`basis: inferred`,
+  each carrying that same quoted span) — and the regional aggregate `Asia
+  Equities` is **not** emitted. Two named countries → two country candidates is
+  the multi-call pattern (each leaf is named in the evidence), not a fan-out;
+  the "no fan-out" rule only bars pushing a *broad stated* call ("we favor EM
+  equities") down onto countries the source never named.
 
 ## The `reasoning` sentence (becomes analyst-facing commentary)
 

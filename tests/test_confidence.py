@@ -320,6 +320,22 @@ class CallLanguageScoringTest(unittest.TestCase):
         self.assertEqual(96, result.confidence)
         self.assertIn("scored as explicit_stance", result.call_language_note)
         self.assertEqual("none", result.review_flag)
+        # The persisted field is the EFFECTIVE (downgraded) value, not the raw
+        # candidate bucket.
+        self.assertEqual("explicit_dial", candidate.call_language)
+        self.assertEqual("explicit_stance", result.call_language)
+
+    def test_result_persists_effective_call_language_unchanged_for_prose(self) -> None:
+        candidate = _candidate(call_language="directional")
+
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+        )
+
+        self.assertEqual("directional", result.call_language)
+        self.assertEqual("", result.call_language_note)
 
 
 class ScrambledPageProseTest(unittest.TestCase):

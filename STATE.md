@@ -19,13 +19,19 @@ scoring, incl. per-source read-quality floors: PDF chars/page, HTML snapshot
 length, and a scrambled-page prose fallback that degrades to the key-token
 check with a confidence cap + review flag), `src/assemble.py`
 (`output.csv`/`failures.csv`/`manifest.md`), `src/ingest.py` (thin
-pilot/source loading, snapshots, chunk boundaries, visual-heavy detection,
+source-CSV loading via the optional `local_file` column, snapshots, chunk
+boundaries, visual-heavy detection,
 deterministic scrambled-page (column-interleave) detection, Playwright
 print-to-PDF capture of visual-heavy HTML),
 and `src/llm.py` (swappable headless `claude -p` / `codex exec`, with
 `{{name}}` template-var injection). Output rows are the 10 workbook columns
-plus `confidence`, `band`, `review_flag`, `basis`, and `checker_strength`;
-one-hot columns are intentionally omitted. A `.claude/settings.json` hook blocks git commits
+plus `confidence`, `band`, `review_flag`, `basis`, `checker_strength`, and
+`call_language` (the effective, post-downgrade grade); one-hot columns are
+intentionally omitted. Source CSVs are pilot-format (`Firm`, `Date`, `Source`,
+`MR Link`, optional `local_file`) or the target-batch format; `--sources`
+takes `pilot`, `target`, or a path to any pilot-format CSV, so a second test
+set needs no code change (a `local_file` column points a row at a local PDF).
+A `.claude/settings.json` hook blocks git commits
 containing Claude/Anthropic self-attribution — commit messages stay plain.
 
 The pipeline runs up to four LLM steps, each with explicit per-step
@@ -65,6 +71,129 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 `trafilatura`, `htmldate`, `playwright` (+ chromium). 144 unittests pass.
 
 ## Recent Changes
+
+- 2026-07-06: Three post-pilot-06 changes on `phase-3`, gated on the pilot-06
+  judgment pass (`runs/pilot-06/gt-comparison.md`). (1) **`call_language`
+  persisted to output artifacts**: `output.csv`/`failures.csv` gain a
+  `call_language` column carrying the EFFECTIVE grade actually scored (after the
+  explicit_dial→explicit_stance downgrade on prose), and the manifest gains a
+  call-language distribution. The downgrade logic is now a shared
+  `confidence.effective_call_language(candidate)` helper used by both
+  `score_candidate` (persisted on `ConfidenceResult.call_language`) and the
+  assemble failure path; the existing `call_language_note` was already carried
+  into commentary. (2) **Country-granularity inference (prompt-only)**:
+  `analyze_chunk.md` v1.6 + `brain.md` v1.4 tell the inference tier to infer at
+  the granularity the prose names — a named country with a taxonomy leaf lands
+  on that country leaf (Taiwan Equities), not the regional aggregate (Asia
+  Equities); regional only for genuinely regional prose or a country with no
+  leaf; several named countries → one candidate each carrying the same spans
+  (multi-call, kept by the existing cross-leaf dedup because the leaves are
+  named). One synthetic Indonesia/Vietnam worked example (invented firm/prose,
+  blind-safe). Not mirrored in the checker (its `asset_match` already polices
+  subject identity); no schema change — behavioral validation is the upcoming
+  blind test-set run. Fixes the pilot-06 Aberdeen "Asia Equities O" snapping.
+  (3) **Generic source intake**: source CSVs gain an optional `local_file`
+  column (repo-relative local PDF; present+exists → ingest with URL as
+  metadata, present+missing → hard error naming the row, absent/empty → fetch
+  URL). `_pilot_local_pdf_for`'s hardcoded firm/title→PDF mapping is DELETED and
+  migrated into `prev-excel/pilot.csv`'s 7 rows (loads byte-identically — pinned
+  by a regression test). `--sources` now accepts `pilot`, `target`, or a path to
+  any pilot-format CSV (new `run.load_sources` helper; `enforce_source_limit`
+  applies to all); `Target Ingestion List.csv` (no `local_file` column) loads
+  unchanged. **This unblocks the second blind test set — a new CSV with
+  `local_file` paths is now all that's needed, zero code edits.** 14 new tests;
+  185 pass. No pilot re-run, no LLM calls.
+- 2026-07-06: Ran the pilot-06 GT judgment pass (branch phase-3; five parallel
+  per-firm judgment agents verifying every non-exact worksheet row against the
+  ingested `work/pilot-06/` snapshots + `prev-excel/` PDFs; report
+  `runs/pilot-06/gt-comparison.md`, row-level JSONs in
+  `runs/pilot-06/gt-judgments/`, worksheet judgment/notes columns filled). **True
+  recall 70/82 (85.4%)** = 54 exact + 16 near_leaf_covered, up from pilot-05's
+  53/82 (65%); and because **0 GT rows are not-grounded this run** (down from 6),
+  grounded-subset recall equals raw recall (pilot-05 needed a not-grounded
+  discount to reach 70%). View agreement 49/53 decided exacts (92.5%), 64/69
+  incl. near-leaf (92.8%). **Overreach collapsed 10→1** (JPM Gold/Precious O,
+  0.9% of 106 rows, **review-flagged — flag hit-rate 1/1**); pilot-05's AB
+  forecast-table micro-delta tail is entirely gone (AB emitted 10 rows, none a
+  table micro-delta, and its country-macro inferences flipped from pilot-05
+  misses to exact matches — the intended fix-wave outcome). All 4 exact view
+  disagreements are convention disputes (0 reading errors, 4/4 flagged); the
+  first kept UNCERTAIN (Aberdeen Oil) correctly abstained on GT's structurally
+  disputable Oil U. Per-firm true recall: Schroders 28/28 (100%), PIMCO 13/15
+  (86.7%, full 11p source resolves every pilot-05 grounding gap), AB 10/12
+  (83.3%), JPM 10/13 (76.9%, all 25 GAA dial signs re-verified), **Aberdeen
+  9/14 (64.3%)** the weak spot — country-granularity snapping into one "Asia
+  Equities O" leaf (swallows Taiwan/Korea/Malaysia + AI-sector) + an EM-sovereign
+  synonym split account for ~5 of its 10 "misses" (raw exact recall 28.6% badly
+  understates true recall). Residual 12 true misses: 9 inference_depth + 3
+  not_emitted (incl. Aberdeen Data Centers regression) + 0 not_grounded.
+  Inferred-tier audit (17 rows, first live): all grounded, 0 hallucinated; 7 AB
+  inferences are sound + recall-positive; the 2 genuine over-reads (JPM Gold,
+  PIMCO Equities) were caught (capped ≤74 + flagged). Thin-tier audit (13 rows,
+  first live): correct for hedged/soft rows but conflates hedged evidence with
+  scrambled-page verbatim degradation on 3 stated PIMCO/JPM rows (rubric note).
+  **Materiality gate UNEXERCISED again** (no forecast_delta candidates emitted).
+  Quote spot check 106/106 pass. Verdict: run **supports closing Phase 2** on
+  quality grounds; residual gaps are client convention/scope decisions (leaf
+  granularity/synonymy now the biggest recall lever, inference scope), not
+  extraction defects. `runs/` gitignored; not committed (freeze is a separate
+  step).
+- 2026-07-06: Ran the deterministic GT eval for pilot-06 (`src.eval`, no LLM
+  calls) against `ground-truth/pilot-ground-truth.csv` (82 rows / 5 pilot firms);
+  artifacts in `runs/pilot-06/eval/` (`eval-report.md`, `eval-buckets.json`,
+  `judgment-worksheet.csv`). Raw leaf-match recall 54/82 (65.9%, flat vs
+  pilot-05's 53/82); view-agreement among decided matches 49/53 (92.5%); 52
+  model_only, 28 gt_only. Only 4 view disagreements and **all 4 sit on
+  review-flagged rows** (AB China Equities U/N, AB EM Equities O/N, AB LatAm FI
+  N/O, PIMCO Equities-General U/N). Quote-verbatim spot check **106/106 pass, 0
+  fail**. Per-firm recall: Schroders 92.9% (26/28, all agree), AB 75%, PIMCO 60%
+  (now properly grounded on the full 11p source — 9 matched/8 agree), JPM 46.2%
+  (34 model_only from the grouped GFICC+GAA breadth), **Aberdeen 28.6%** the weak
+  spot (10 misses, mostly country-equity leaves snapping to broad "Asia
+  Equities"). eval is bookkeeping only — the judgment pass over
+  `judgment-worksheet.csv` (defensible miss vs recall gap, overreach vs breadth,
+  near-leaf snapping) is the separate downstream step, not yet done. Not
+  committed.
+- 2026-07-06: Ran pilot-06 blind — the validation run for the pilot-05 fix wave
+  (basis field, materiality gate, cross-leaf dedup, convention tweaks, inference
+  tier, Rubric v2). Engines held constant vs pilot-05: analyze codex/gpt-5.5/
+  high, checker claude/opus/medium, arbiter claude/sonnet/high, grouper
+  claude/sonnet/medium, `--group-notes`. Pre-flight clean (144 tests pass;
+  PIMCO.pdf confirmed 11p). Single-source smoke first (JPM GFICC, codex/high): 5
+  candidates, no repair retries, new schema round-trips — `call_language` carried
+  `directional`/`implied` and `basis` carried `stated`/`inferred` (inference tier
+  behaviorally live at smoke). Full run: both groups resolved with zero warnings;
+  124 candidates → 106 kept, 18 failed; count check pass; 0 chunk failures.
+  Failures: 14 `duplicate_same_view` (cross-doc dedups within the two groups), 1
+  `arbitrated_out` (JPM Intermediate US Treasuries=N; sonnet arbiter applied
+  current-beats-conditional), 1 `duplicate_cross_leaf` (JPM Global HY=N vs kept
+  EM Debt-General — cross-leaf dedup LIVE), 1 `quote_not_found` (JPM Short-Dated
+  Bonds=O, same scrambled-page family unrescued as pilot-05), 1
+  `taxonomy_no_match` (PIMCO analyzer emitted non-leaf label "Currencies",
+  deterministically rejected). Views O 44 / N 31 / U 30 / UNCERTAIN 1 (first
+  kept UNCERTAIN — the hedged-risk→UNCERTAIN convention fix firing, Aberdeen Oil).
+  Bands High 76 / Medium 30. Basis stated 89 / inferred 17 / forecast_delta 0.
+  Checker strength decisive 68 / adequate 25 / thin 13. Review-flagged 31.
+  Checklist outcomes: (2/3) **materiality gate UNEXERCISED** — zero
+  `delta_below_materiality` failures AND zero `forecast_delta` kept rows: the
+  analyzer emitted no forecast_delta candidates at all this run (codex classified
+  AB's calls as broad `stated`/`inferred` country views; AB candidate count fell
+  30→10 and the pilot-05 4–14bp micro-delta table rows the gate was built for did
+  not recur), so gate + caps are code-live/unit-tested but not demonstrated
+  behaviorally here — flagged for human. (4) inference tier LIVE: 17 inferred
+  kept rows, all ≤74 + review, none violating. (5) cross-leaf dedup LIVE (1
+  row). (6) Rubric v2 LIVE: `checker_strength` populated with a
+  decisive/adequate/thin spread, all 13 thin rows ≤74 + review; call-language
+  vocabulary confirmed live at smoke, but per-row `call_language` (incl.
+  `explicit_dial` on JPM GAA) is NOT persisted to output.csv so cannot be
+  verified from frozen artifacts — JPM GAA's band/checker profile (36 High,
+  mostly decisive) is consistent with dial extraction. (7) PIMCO now ingests the
+  full 11p Cyclical Outlook (was 2p): 23 candidates / 16 kept, up from
+  pilot-05's 9 / 7. Shape vs pilot-05 (119 kept / O59-N31-U29-UNC0 / High114-
+  Med5 / 5 review-flagged): the shift to more Medium and far more review flags
+  is the expected consequence of the inference tier + Rubric v2 caps, not a
+  regression. Frozen on disk at `runs/pilot-06/`; not committed. No fixes made
+  and no ground-truth opened (blind). GT comparison happens separately via eval.
 
 - 2026-07-06: Opened the **phase-3** branch and added `src/eval.py` — a
   standalone, fully deterministic (no-LLM) ground-truth comparison harness, run

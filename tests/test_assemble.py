@@ -48,6 +48,7 @@ class AssembleTest(unittest.TestCase):
                 "review_flag",
                 "basis",
                 "checker_strength",
+                "call_language",
             ),
             OUTPUT_COLUMNS,
         )
@@ -523,6 +524,76 @@ class BasisOutputTest(unittest.TestCase):
         self.assertEqual([], result.output_rows)
         failure = next(f for f in result.failures if f.reason_code == "delta_below_materiality")
         self.assertEqual("forecast_delta", failure.basis)
+
+
+class CallLanguageOutputTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1",
+                firm="Test Firm",
+                date="4/2/2026",
+                source="Outlook",
+                url="https://example.test/source",
+            )
+        }
+
+    def _assemble(self, candidate: CandidateCall, snapshot: str):
+        return assemble_candidates(
+            [candidate],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): snapshot + " " + "Context. " * 40},
+            page_counts={"source-1": 1},
+        )
+
+    def test_output_row_persists_directional_call_language(self) -> None:
+        result = self._assemble(
+            _candidate(call_language="directional"), "EM equities are favored in the outlook."
+        )
+        self.assertEqual("directional", result.output_rows[0]["call_language"])
+
+    def test_explicit_dial_on_prose_persists_downgraded_effective_value(self) -> None:
+        # explicit_dial is accepted only for table/visual; on prose it downgrades
+        # to explicit_stance, and it is the EFFECTIVE (scored) value that persists.
+        result = self._assemble(
+            _candidate(call_language="explicit_dial"), "EM equities are favored in the outlook."
+        )
+        row = result.output_rows[0]
+        self.assertEqual("explicit_stance", row["call_language"])
+        self.assertIn("scored as explicit_stance", row["Full Commentary"])
+
+    def test_explicit_dial_on_table_evidence_is_kept(self) -> None:
+        candidate = _candidate(
+            call_language="explicit_dial",
+            evidence_kind="table",
+            evidence_quote="Emerging Markets Equities Overweight",
+            locator="p.5 - 'Regional allocation grid'",
+        )
+        result = self._assemble(candidate, "Emerging Markets Equities Overweight")
+        row = result.output_rows[0]
+        self.assertEqual("explicit_dial", row["call_language"])
+        self.assertNotIn("scored as explicit_stance", row["Full Commentary"])
+
+    def test_failure_row_carries_effective_call_language(self) -> None:
+        # A taxonomy failure still records the effective (downgraded) grade.
+        candidate = _candidate(sub_asset_class="Not A Leaf", call_language="explicit_dial")
+        result = self._assemble(candidate, "EM equities are favored in the outlook.")
+
+        failure = next(f for f in result.failures if f.reason_code == "taxonomy_no_match")
+        self.assertEqual("explicit_stance", failure.call_language)
+
+    def test_manifest_reports_call_language_distribution(self) -> None:
+        result = self._assemble(
+            _candidate(call_language="directional"), "EM equities are favored in the outlook."
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir)
+            manifest = (Path(temp_dir) / "manifest.md").read_text(encoding="utf-8")
+        self.assertIn("Call language (kept rows)", manifest)
+        self.assertIn("- directional: 1", manifest)
 
 
 def _verdict(**overrides: object) -> CheckVerdict:

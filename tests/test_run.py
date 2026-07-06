@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from src.ingest import Chunk, IngestedSource, SourceRecord
 from src.run import (
     analyze_source,
+    load_sources,
     resolve_engine_settings,
     _check_candidates,
     _chunk_content,
@@ -152,6 +153,25 @@ class AnalyzeSourceTest(unittest.TestCase):
         self.assertEqual(2, len(failures))
         self.assertEqual({"json_parse_error"}, {f.reason_code for f in failures})
         self.assertIn("json_parse_error; chunk skipped", memory)
+
+
+class LoadSourcesTest(unittest.TestCase):
+    def test_pilot_and_target_keywords_route_to_the_builtin_loaders(self) -> None:
+        self.assertEqual(7, len(load_sources("pilot")))
+        self.assertTrue(load_sources("target"))  # non-empty target batch
+
+    def test_arbitrary_path_loads_a_pilot_format_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "second-set.csv"
+            path.write_text(
+                "Firm,Date,Source,MR Link,local_file\n"
+                "Test Firm,4/2/2026,A Doc,https://example.test/a.html,\n",
+                encoding="utf-8",
+            )
+            sources = load_sources(str(path))
+
+        self.assertEqual(1, len(sources))
+        self.assertEqual("html", sources[0].source_type)
 
 
 class ResolveEngineSettingsTest(unittest.TestCase):
