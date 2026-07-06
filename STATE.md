@@ -102,9 +102,14 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   `evidence_check_failed` rows and preserves frozen output rows verbatim, with
   22 rescued / 1 duplicate-same-view assembly failure. Wellington `Japan
   Equities N` and the frozen `UK Duration N` UK-rates/gilts row are rescued.
-  The requested `claude/opus/medium` checker run could not execute because the
-  Claude CLI is installed but not logged in; artifact verdicts are explicitly
-  marked `local_visual_review_fallback` in `checker-verdicts.json`. Tests:
+  The artifact was first generated with an explicit
+  `local_visual_review_fallback` (Claude CLI not logged in at the time), then
+  regenerated the same day with the real `claude/opus/medium` checker once the
+  CLI was authenticated: all 23 verdicts real, 0 hard fails, strength 22
+  decisive / 1 adequate, identical outcome (22 rescued / 1 duplicate-same-view
+  assembly failure) — opus visually confirmed every dial call the fallback had
+  assumed. `checker-verdicts.json` now records `claude/opus/medium` on every
+  entry. Tests:
   `.venv/bin/python -m unittest discover -s tests` → 201 pass. Note:
   `.venv/bin/python -m unittest` and discover without `-s tests` still report
   0 tests in this checkout, so use the explicit discovery command.

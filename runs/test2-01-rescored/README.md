@@ -9,7 +9,7 @@ untouched.
 
 - Source rows: the 23 `evidence_check_failed` candidates only.
 - Source files: existing snapshots and printed PDFs in `work/test2-01/`.
-- Checker/review source: local visual review fallback (Claude CLI was not logged in).
+- Checker/review source: claude/opus/medium.
 - Assembly/scoring: current `assemble_candidates` and `score_candidate` with
   `visual_pages` set from frozen `ingest_meta.json` (`printed_pdf` /
   `visual_heavy`).
