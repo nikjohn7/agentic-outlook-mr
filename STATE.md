@@ -47,7 +47,11 @@ rules live in `prompts/conventions.md`, injected into analyze, checker, and
 arbiter alike; `brain.md` carries worked examples + reasoning style,
 analyze-only. Both engine CLIs read PDF pages visually (codex renders pages
 to PNG itself), so engine routing is unconstrained by source type. All
-prompts are indexed in `prompts/REGISTRY.md`. The pilot set
+prompts are indexed in `prompts/REGISTRY.md`. Separate from the run pipeline,
+`src/eval.py` is a standalone deterministic (no-LLM) harness that compares a
+frozen run's `output.csv` against a held-back ground-truth CSV (firm+leaf join →
+phase-1 buckets, recall/view-agreement, missed-call list, and a judgment
+worksheet); it reads the run but never influences it. The pilot set
 (`prev-excel/pilot.csv`) is now 7 docs / 2 grouped pairs (Schroders
 review+outlook, JPM GFICC+GAA). Blind pilots are frozen in `runs/`
 (gitignored; frozen runs are force-added when committed): `pilot-01`/`pilot-02`
@@ -62,6 +66,28 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Recent Changes
 
+- 2026-07-06: Opened the **phase-3** branch and added `src/eval.py` — a
+  standalone, fully deterministic (no-LLM) ground-truth comparison harness, run
+  only after a run is frozen (`python -m src.eval --run runs/<id>
+  --ground-truth <csv>`). It joins `output.csv` against the GT CSV on
+  (normalized firm, sub-asset leaf) into the pilot-05 phase-1 buckets
+  (`exact_match` split view-agree/disagree, `model_only`, `gt_only`), emits
+  near-leaf suggestions for gt_only rows (same-firm agreeing-view rows on a
+  different leaf, token-overlap ranked, >0 overlap only — never auto-matched),
+  and reports raw recall, view-agreement (UNCERTAIN counted separately as
+  abstain), per-firm math, the missed-call list, a review-flag hit analysis,
+  and band/basis/checker_strength distributions (the last two shown only when
+  the run's output carries them; pilot-05 predates them). A best-effort
+  quote-verbatim spot check reconstructs each output row's evidence from its
+  Full Commentary and re-verifies it via `confidence.evidence_passes` against
+  the `work/<run-id>/` snapshots (evidence_kind inferred from commentary/locator
+  text; skips cleanly when snapshots are absent). Writes
+  `runs/<id>/eval/{eval-report.md, eval-buckets.json, judgment-worksheet.csv}`.
+  **Pinned regression** reproduces the pilot-05 phase-1 counts exactly (82 GT,
+  119 model, 44 exact = 40 agree/4 disagree, 75 model_only, 38 gt_only) and
+  reconciles per-firm against the frozen `runs/pilot-05/gt-judgments/*.phase1.json`;
+  spot check reports 119/119 pass. 27 new tests; 171 pass. Adds files only —
+  no pipeline module touched.
 - 2026-07-06: Shipped Rubric v2: graded categorical judgments now feed the
   deterministic confidence arithmetic while band semantics stay unchanged.
   Analyzer `call_language` widened to `explicit_dial` / `explicit_stance` /
