@@ -37,9 +37,16 @@ TARGET_OUTPUT_COLUMNS = (
     "Full Commentary",
 )
 
-# `basis` is exposed after the internal-review columns so an analyst can filter
-# stated vs. forecast_delta vs. inferred calls at a glance.
-OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + ("confidence", "band", "review_flag", "basis")
+# `basis` and `checker_strength` are exposed after the internal-review columns
+# so an analyst can filter stated vs. forecast_delta/inferred calls and
+# High-but-adequate checker confirmations at a glance.
+OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + (
+    "confidence",
+    "band",
+    "review_flag",
+    "basis",
+    "checker_strength",
+)
 
 FAILURE_COLUMNS = (
     "reason_code",
@@ -55,6 +62,7 @@ FAILURE_COLUMNS = (
     "locator",
     "reasoning",
     "basis",
+    "checker_strength",
 )
 
 
@@ -76,10 +84,15 @@ class FailureRecord:
     locator: str = ""
     reasoning: str = ""
     basis: str = ""
+    checker_strength: str = ""
 
     @classmethod
     def from_candidate(
-        cls, reason_code: str, message: str, candidate: CandidateCall
+        cls,
+        reason_code: str,
+        message: str,
+        candidate: CandidateCall,
+        checker_strength: str = "",
     ) -> "FailureRecord":
         return cls(
             reason_code=reason_code,
@@ -95,6 +108,7 @@ class FailureRecord:
             locator=candidate.locator,
             reasoning=candidate.reasoning,
             basis=candidate.basis,
+            checker_strength=checker_strength,
         )
 
     @classmethod
@@ -119,6 +133,7 @@ class FailureRecord:
             "locator": self.locator,
             "reasoning": self.reasoning,
             "basis": self.basis,
+            "checker_strength": self.checker_strength,
         }
 
 
@@ -198,7 +213,14 @@ def assemble_candidates(
             message = getattr(exc, "message", reason)
             if verdict is not None and reason in CHECKER_FAIL_REASONS.values() and verdict.note:
                 message = verdict.note
-            failures.append(FailureRecord.from_candidate(reason, message, candidate))
+            failures.append(
+                FailureRecord.from_candidate(
+                    reason,
+                    message,
+                    candidate,
+                    checker_strength=verdict.evidence_strength if verdict is not None else "",
+                )
+            )
 
     selected_entries: list[_Selected] = []
     for group in _group_scored(scored, group_map).values():
@@ -498,11 +520,15 @@ def _output_row(
         )
     if scored.cap_reason:
         commentary += f" {scored.cap_reason}"
+    if scored.call_language_note:
+        commentary += f" {scored.call_language_note}"
     if scored.checker_status == "unclear":
         note = f" ({scored.checker_note})" if scored.checker_note else ""
         commentary += f" Checker: unconfirmed{note}."
     elif scored.checker_status == "missing":
         commentary += " Checker: not run."
+    elif scored.checker_status == "confirmed" and scored.checker_note:
+        commentary += f" Checker: {scored.checker_note}."
     review_flag = scored.review_flag
     if arbiter_note:
         commentary += f" Arbiter: {arbiter_note}"
@@ -523,6 +549,7 @@ def _output_row(
         "band": scored.band,
         "review_flag": review_flag,
         "basis": candidate.basis,
+        "checker_strength": scored.checker_strength,
     }
 
 
@@ -593,6 +620,15 @@ def _manifest_text(
         lines.append("## Call basis (kept rows)")
         lines.extend(
             f"- {basis}: {count}" for basis, count in sorted(basis_counts.items())
+        )
+        lines.append("")
+    strength_counts = Counter(
+        row.get("checker_strength") or "(none)" for row in result.output_rows
+    )
+    if strength_counts:
+        lines.append("## Checker strength (kept rows)")
+        lines.extend(
+            f"- {strength}: {count}" for strength, count in sorted(strength_counts.items())
         )
         lines.append("")
     reason_counts = Counter(

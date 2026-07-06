@@ -68,9 +68,26 @@ Record how you matched:
 never as a dumping ground for "hard to read." A missing view is not a call:
 don't emit leaves the source merely mentions without taking a stance.
 
-**Call language.** `explicit` = a directly stated stance ("we are overweight
-equities"). `implied` = a clear directional lean without the label ("valuations
-leave little room, we are trimming risk"). If it is neither, it is not a call.
+**Call language.** Choose exactly one bucket. This is a categorical judgment
+only; never emit or reason about numeric confidence.
+- `explicit_dial` — a printed dial, grid, score, tier, or dashboard position is
+  the stance. The stance is a rendered artifact, not a sentence.
+  Synthetic anchor: a regional-allocation grid places "Japan Equities" in the
+  Overweight column.
+- `explicit_stance` — prose states a position using positioning vocabulary:
+  overweight, underweight, neutral, marketweight, hold an overweight/underweight.
+  Synthetic anchor: "We are overweight Japan equities."
+- `directional` — prose gives a clear preference or caution without positioning
+  vocabulary. If the sentence would still read naturally with the positioning
+  verb removed, it is `directional`, not `explicit_stance`.
+  Synthetic anchor: "We favor Japan equities because earnings revisions are
+  improving."
+- `implied` — the stance must be read out of the surrounding argument, typical
+  for `basis: inferred` candidates.
+  Synthetic anchor: "Political risk is rising, capital is leaving the country,
+  and the equity risk premium is too low" → that country's equities `U`.
+- `none` — no usable call language. Do not emit a candidate unless another
+  valid evidence path makes the stance reviewable.
 
 **Evidence.**
 - `evidence_kind: prose` — quote the supporting sentence(s) **verbatim** from
@@ -162,7 +179,7 @@ Return exactly one JSON object of this shape and nothing else:
       "sub_asset_class": "an exact locked leaf label",
       "taxonomy_match": "exact | semantic | none",
       "view": "O | N | U | UNCERTAIN",
-      "call_language": "explicit | implied | none",
+      "call_language": "explicit_dial | explicit_stance | directional | implied | none",
       "evidence_kind": "prose | table | visual",
       "evidence_quote": "verbatim sentence for prose (or a JSON array of verbatim spans in document order for an elided prose quote); read cell/figure content for table/visual",
       "locator": "p.N | char:start-end | p.N — 'specific table/figure'",

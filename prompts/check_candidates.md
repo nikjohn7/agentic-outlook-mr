@@ -51,6 +51,20 @@ one of `pass`, `unclear`, `fail`:
    - `unclear` — the mapping is defensible but a reviewer could read the
      subject differently.
 
+Then answer one independent evidence-force question:
+
+4. **evidence_strength** — how much force does the quoted evidence itself carry
+   for the claimed view? Judge only the presented fields; do not fetch or open
+   the source.
+   - `decisive` — the quoted evidence alone compels the claimed view; a
+     skeptical reader could not construct a reasonable alternative reading. If
+     you can imagine a defensible alternative reading, it is `adequate` at best.
+   - `adequate` — the evidence supports the view, but requires the stated
+     reasoning or house conventions to connect, or the stance sits inside a
+     broader passage.
+   - `thin` — the evidence supports the view only just: heavy interpretation,
+     weak language, or the stance is a small part of what the quote says.
+
 Rules:
 - **Closing/trimming an overweight lands at the resulting stance, not `U`.** If
   the evidence describes closing an overweight to a flat/neutral end state but
@@ -78,6 +92,8 @@ Rules:
   the evidence arrives in spans.
 - Judge each candidate on its own; verdicts must not depend on other
   candidates in the batch.
+- Judge `evidence_strength` independently of the three pass/unclear/fail
+  answers. It is required on every verdict.
 - `pass` requires positive support, not absence of doubt about a vague quote —
   a quote you cannot connect to the question is `unclear`, never `pass`.
 - Do not punish house dialect: "constructive" supports `O`, "cautious"
@@ -99,6 +115,7 @@ candidate, echoing its `index`:
       "supports_view": "pass | unclear | fail",
       "forward_looking": "pass | unclear | fail",
       "asset_match": "pass | unclear | fail",
+      "evidence_strength": "decisive | adequate | thin",
       "note": "required when any answer is not pass, else empty"
     }
   ]

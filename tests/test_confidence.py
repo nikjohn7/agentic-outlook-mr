@@ -3,6 +3,9 @@ from __future__ import annotations
 import unittest
 
 from src.confidence import (
+    CALL_LANGUAGE_POINTS,
+    CHECKER_ADEQUATE_DEDUCTION,
+    CHECKER_THIN_CAP,
     CHECKER_UNCONFIRMED_CAP,
     FORECAST_DELTA_CAP,
     HARD_FAILURE_MATERIALITY,
@@ -181,7 +184,7 @@ class ConfidenceTest(unittest.TestCase):
             evidence_passes(candidate, "We hold a long-term overweight stance today.").passed
         )
 
-    def test_semantic_implied_call_scores_high_at_threshold(self) -> None:
+    def test_semantic_implied_call_scores_medium_under_v2(self) -> None:
         candidate = _candidate(taxonomy_match="semantic", call_language="implied")
 
         result = score_candidate(
@@ -190,9 +193,9 @@ class ConfidenceTest(unittest.TestCase):
             snapshot_text=_healthy_snapshot("EM equities are favored in the outlook."),
         )
 
-        self.assertEqual(75, result.confidence)
-        self.assertEqual("High", result.band)
-        self.assertEqual("none", result.review_flag)
+        self.assertEqual(72, result.confidence)
+        self.assertEqual("Medium", result.band)
+        self.assertEqual("review", result.review_flag)
 
     def test_thin_snapshot_drops_read_quality_points(self) -> None:
         candidate = _candidate(taxonomy_match="semantic", call_language="implied")
@@ -203,7 +206,7 @@ class ConfidenceTest(unittest.TestCase):
             snapshot_text="EM equities are favored in the outlook.",
         )
 
-        self.assertEqual(65, result.confidence)
+        self.assertEqual(62, result.confidence)
         self.assertEqual("Medium", result.band)
         self.assertEqual("review", result.review_flag)
 
@@ -253,6 +256,72 @@ class ConfidenceTest(unittest.TestCase):
         self.assertTrue(check.passed)
 
 
+class CallLanguageScoringTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def test_each_call_language_tier_scores_its_constant(self) -> None:
+        base_without_language = 25 + 20 + 15 + 10
+        for call_language, points in CALL_LANGUAGE_POINTS.items():
+            with self.subTest(call_language=call_language):
+                candidate = _candidate(
+                    call_language=call_language,
+                    evidence_kind="visual" if call_language == "explicit_dial" else "prose",
+                    evidence_quote=(
+                        "EM overweight dial"
+                        if call_language == "explicit_dial"
+                        else "EM equities are favored in the outlook."
+                    ),
+                    locator=(
+                        "p.3 - Regional allocation dial"
+                        if call_language == "explicit_dial"
+                        else "p.3"
+                    ),
+                )
+                snapshot = (
+                    _healthy_snapshot("EM overweight dial")
+                    if call_language == "explicit_dial"
+                    else _healthy_snapshot(candidate.evidence_quote)
+                )
+
+                result = score_candidate(candidate, taxonomy=self.taxonomy, snapshot_text=snapshot)
+
+                self.assertEqual(base_without_language + points, result.confidence)
+
+    def test_legacy_explicit_and_implied_rescore_to_v2_tiers(self) -> None:
+        explicit = _candidate(call_language="explicit")
+        implied = _candidate(call_language="implied")
+
+        explicit_result = score_candidate(
+            explicit,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(explicit.evidence_quote),
+        )
+        implied_result = score_candidate(
+            implied,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(implied.evidence_quote),
+        )
+
+        self.assertEqual("explicit_stance", explicit.call_language)
+        self.assertEqual(96, explicit_result.confidence)
+        self.assertEqual(82, implied_result.confidence)
+
+    def test_explicit_dial_on_prose_downgrades_to_explicit_stance(self) -> None:
+        candidate = _candidate(call_language="explicit_dial")
+
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+        )
+
+        self.assertEqual(96, result.confidence)
+        self.assertIn("scored as explicit_stance", result.call_language_note)
+        self.assertEqual("none", result.review_flag)
+
+
 class ScrambledPageProseTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -266,7 +335,7 @@ class ScrambledPageProseTest(unittest.TestCase):
     def test_scrambled_page_prose_falls_back_to_key_tokens(self) -> None:
         candidate = _candidate(
             locator="p.2", evidence_quote=self.QUOTE, taxonomy_match="semantic",
-            call_language="implied",
+            call_language="directional",
         )
 
         check = evidence_passes(
@@ -280,7 +349,7 @@ class ScrambledPageProseTest(unittest.TestCase):
     def test_scrambled_page_prose_pass_is_capped_and_flagged(self) -> None:
         candidate = _candidate(
             locator="p.2", evidence_quote=self.QUOTE, taxonomy_match="semantic",
-            call_language="implied",
+            call_language="directional",
         )
 
         result = score_candidate(
@@ -373,9 +442,43 @@ class CheckerScoringTest(unittest.TestCase):
     def test_confirmed_verdict_leaves_score_uncapped(self) -> None:
         result = self._score(_verdict())
 
-        self.assertEqual(100, result.confidence)
+        self.assertEqual(96, result.confidence)
         self.assertEqual("confirmed", result.checker_status)
+        self.assertEqual("decisive", result.checker_strength)
         self.assertEqual("none", result.review_flag)
+
+    def test_adequate_verdict_deducts_but_can_remain_high(self) -> None:
+        result = self._score(_verdict(evidence_strength="adequate"))
+
+        self.assertEqual(96 - CHECKER_ADEQUATE_DEDUCTION, result.confidence)
+        self.assertEqual("High", result.band)
+        self.assertEqual("none", result.review_flag)
+        self.assertEqual("adequate", result.checker_strength)
+
+    def test_thin_verdict_caps_below_high_and_flags_review(self) -> None:
+        result = self._score(_verdict(evidence_strength="thin"))
+
+        self.assertEqual(CHECKER_THIN_CAP, result.confidence)
+        self.assertEqual("Medium", result.band)
+        self.assertEqual("review", result.review_flag)
+        self.assertEqual("thin", result.checker_strength)
+        self.assertIn("evidence_strength thin", result.cap_reason)
+
+    def test_missing_evidence_strength_preserves_legacy_all_pass_semantics(self) -> None:
+        result = self._score(
+            CheckVerdict.from_mapping(
+                {
+                    "index": 0,
+                    "supports_view": "pass",
+                    "forward_looking": "pass",
+                    "asset_match": "pass",
+                }
+            )
+        )
+
+        self.assertEqual(96, result.confidence)
+        self.assertEqual("decisive", result.checker_strength)
+        self.assertIn("legacy all-pass", result.checker_note)
 
     def test_unclear_verdict_caps_below_high_and_flags_review(self) -> None:
         result = self._score(_verdict(forward_looking="unclear", note="mixed recap"))
@@ -396,8 +499,36 @@ class CheckerScoringTest(unittest.TestCase):
     def test_checker_off_keeps_legacy_scoring(self) -> None:
         result = self._score(None, checker_enabled=False)
 
-        self.assertEqual(100, result.confidence)
+        self.assertEqual(96, result.confidence)
         self.assertEqual("off", result.checker_status)
+
+    def test_strength_deduction_happens_before_basis_cap(self) -> None:
+        candidate = _forecast_candidate()
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+            verdict=_verdict(evidence_strength="adequate"),
+            checker_enabled=True,
+        )
+
+        self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
+        self.assertEqual("adequate", result.checker_strength)
+
+    def test_basis_and_thin_caps_compose_once(self) -> None:
+        candidate = _candidate(basis="inferred")
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+            verdict=_verdict(evidence_strength="thin"),
+            checker_enabled=True,
+        )
+
+        self.assertEqual(CHECKER_THIN_CAP, result.confidence)
+        self.assertEqual("review", result.review_flag)
+        self.assertIn("Basis: inferred", result.cap_reason)
+        self.assertIn("evidence_strength thin", result.cap_reason)
 
 
 class MaterialityGateTest(unittest.TestCase):
@@ -480,7 +611,7 @@ class InferredTierTest(unittest.TestCase):
             taxonomy=self.taxonomy,
             snapshot_text=_healthy_snapshot(candidate.evidence_quote),
         )
-        self.assertEqual(100, result.confidence)
+        self.assertEqual(96, result.confidence)
         self.assertEqual("", result.cap_reason)
 
 
@@ -526,21 +657,23 @@ class Pilot05RescoreTest(unittest.TestCase):
         self.assertEqual("review", result.review_flag)
 
     def test_jpm_gaa_stated_dial_is_untouched(self) -> None:
-        # A GAA views-table dial is a stated visual position, not a forecast
-        # delta: no materiality gate, no cap.
+        # Frozen pilot-05 used the legacy `explicit` bucket, so this dial row
+        # re-scores to the v2 explicit_stance tier (96). A newly extracted
+        # dial row with `explicit_dial` will regain the 30-point tier.
         candidate = _candidate(
             sub_asset_class="Emerging Markets Equities",
             basis="stated",
             evidence_kind="visual",
             evidence_quote="EM overweight dial",
             locator="p.6 — 'Global Asset Allocation' views table",
+            call_language="explicit",
         )
         result = score_candidate(
             candidate,
             taxonomy=self.taxonomy,
             snapshot_text=_healthy_snapshot("EM overweight dial views table"),
         )
-        self.assertEqual(100, result.confidence)
+        self.assertEqual(96, result.confidence)
         self.assertEqual("High", result.band)
         self.assertEqual("", result.cap_reason)
 
@@ -568,6 +701,7 @@ def _verdict(**overrides: object) -> CheckVerdict:
         "supports_view": "pass",
         "forward_looking": "pass",
         "asset_match": "pass",
+        "evidence_strength": "decisive",
         "note": "",
     }
     values.update(overrides)

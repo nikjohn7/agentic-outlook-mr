@@ -31,6 +31,17 @@ convention, the convention-blind checker failed it as a sign mismatch.
 Checker independence is preserved: it still never sees the source and judges
 only the presented fields; it now judges them under the same law.
 
+### `analyze_chunk.md` — v1.5 (2026-07-06)
+
+v1.5 (Rubric v2): widens `call_language` from the coarse legacy buckets to
+graded categorical judgments: `explicit_dial`, `explicit_stance`,
+`directional`, `implied`, `none`. The prompt gives anchored definitions and
+one synthetic example for each non-empty tier, plus the strictness rule that if
+a sentence would still read naturally with the positioning verb removed, it is
+`directional`, not `explicit_stance`. It does not contain point values; the
+model supplies the bucket only and `src/confidence.py` owns all arithmetic.
+Legacy frozen `explicit` candidates still parse as `explicit_stance`.
+
 ### `analyze_chunk.md` — v1.4 (2026-07-06)
 
 v1.4 (pilot-05 fix list, Tasks 1 & 4): adds a required **`basis`** tag to every
@@ -104,6 +115,15 @@ sidebar, banner, stat panel, infographic column) must be tagged
 text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
+
+### `check_candidates.md` — v1.4 (2026-07-06)
+
+v1.4 (Rubric v2): adds required `evidence_strength` on every checker verdict,
+with categorical buckets `decisive`, `adequate`, and `thin`. The checker still
+never opens the source and still emits no confidence number; it judges only the
+presented candidate fields. `src/confidence.py` maps those categories to the
+deterministic adjustment/cap, and missing strength on legacy all-pass verdicts
+is treated as `decisive` to preserve old frozen-run semantics.
 
 ### `check_candidates.md` — v1.3 (2026-07-06)
 

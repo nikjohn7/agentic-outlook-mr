@@ -213,6 +213,7 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
                         "supports_view": "pass",
                         "forward_looking": "unclear",
                         "asset_match": "pass",
+                        "evidence_strength": "thin",
                         "note": "thin stance",
                     },
                     # Out-of-range index must be ignored, not crash the run.
@@ -221,6 +222,7 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
                         "supports_view": "pass",
                         "forward_looking": "pass",
                         "asset_match": "pass",
+                        "evidence_strength": "decisive",
                         "note": "",
                     },
                 ]
@@ -245,6 +247,7 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
         self.assertIsNone(failure)
         self.assertEqual([0], list(verdict_map))
         self.assertEqual("thin stance", verdict_map[0].note)
+        self.assertEqual("thin", verdict_map[0].evidence_strength)
         self.assertIn('model_reasoning_effort="high"', commands[0])
         # The house conventions were injected into the checker prompt.
         self.assertIn("A two-sided path nets to N.", prompts[0])

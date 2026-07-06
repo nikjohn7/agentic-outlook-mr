@@ -93,19 +93,41 @@ class StepParserTest(unittest.TestCase):
     def test_parse_verdicts_returns_typed_verdicts(self) -> None:
         raw = (
             '{"verdicts": [{"index": 1, "supports_view": "pass", '
-            '"forward_looking": "unclear", "asset_match": "pass", "note": "thin stance"}]}'
+            '"forward_looking": "unclear", "asset_match": "pass", '
+            '"evidence_strength": "thin", "note": "thin stance"}]}'
         )
 
         verdicts = parse_verdicts(raw)
 
         self.assertEqual(1, verdicts[0].index)
+        self.assertEqual("thin", verdicts[0].evidence_strength)
         self.assertFalse(verdicts[0].all_pass)
         self.assertEqual([], verdicts[0].failed_questions())
+
+    def test_parse_verdicts_accepts_legacy_missing_evidence_strength(self) -> None:
+        raw = (
+            '{"verdicts": [{"index": 0, "supports_view": "pass", '
+            '"forward_looking": "pass", "asset_match": "pass"}]}'
+        )
+
+        verdicts = parse_verdicts(raw)
+
+        self.assertEqual("", verdicts[0].evidence_strength)
 
     def test_parse_verdicts_rejects_unknown_verdict_value(self) -> None:
         raw = (
             '{"verdicts": [{"index": 0, "supports_view": "maybe", '
             '"forward_looking": "pass", "asset_match": "pass"}]}'
+        )
+
+        with self.assertRaises(SchemaError):
+            parse_verdicts(raw)
+
+    def test_parse_verdicts_rejects_unknown_evidence_strength(self) -> None:
+        raw = (
+            '{"verdicts": [{"index": 0, "supports_view": "pass", '
+            '"forward_looking": "pass", "asset_match": "pass", '
+            '"evidence_strength": "strong"}]}'
         )
 
         with self.assertRaises(SchemaError):

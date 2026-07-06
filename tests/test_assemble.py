@@ -47,6 +47,7 @@ class AssembleTest(unittest.TestCase):
                 "band",
                 "review_flag",
                 "basis",
+                "checker_strength",
             ),
             OUTPUT_COLUMNS,
         )
@@ -73,9 +74,10 @@ class AssembleTest(unittest.TestCase):
             failure_rows = _read_csv(Path(temp_dir) / "failures.csv")
             manifest = (Path(temp_dir) / "manifest.md").read_text(encoding="utf-8")
 
-        self.assertEqual("100", output_rows[0]["confidence"])
+        self.assertEqual("96", output_rows[0]["confidence"])
         self.assertEqual("High", output_rows[0]["band"])
         self.assertEqual("none", output_rows[0]["review_flag"])
+        self.assertEqual("", output_rows[0]["checker_strength"])
         self.assertEqual("taxonomy_no_match", failure_rows[0]["reason_code"])
         self.assertIn("count check: pass", manifest)
 
@@ -169,7 +171,27 @@ class CheckerAndArbiterAssemblyTest(unittest.TestCase):
         row = result.output_rows[0]
         self.assertEqual("74", row["confidence"])
         self.assertEqual("review", row["review_flag"])
+        self.assertEqual("decisive", row["checker_strength"])
         self.assertIn("Checker: unconfirmed (broader bucket).", row["Full Commentary"])
+
+    def test_checker_strength_is_exposed_in_output_and_manifest(self) -> None:
+        result = assemble_candidates(
+            [_candidate()],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots=self.snapshots,
+            page_counts={"source-1": 1},
+            verdicts={0: _verdict(evidence_strength="adequate")},
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir)
+            output_rows = _read_csv(Path(temp_dir) / "output.csv")
+            manifest = (Path(temp_dir) / "manifest.md").read_text(encoding="utf-8")
+
+        self.assertEqual("adequate", output_rows[0]["checker_strength"])
+        self.assertIn("Checker strength (kept rows)", manifest)
+        self.assertIn("- adequate: 1", manifest)
 
     def test_arbiter_resolves_conflict_and_records_loser(self) -> None:
         candidates = [_candidate(view="O"), _candidate(view="U")]
@@ -509,6 +531,7 @@ def _verdict(**overrides: object) -> CheckVerdict:
         "supports_view": "pass",
         "forward_looking": "pass",
         "asset_match": "pass",
+        "evidence_strength": "decisive",
         "note": "",
     }
     values.update(overrides)

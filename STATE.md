@@ -24,8 +24,8 @@ deterministic scrambled-page (column-interleave) detection, Playwright
 print-to-PDF capture of visual-heavy HTML),
 and `src/llm.py` (swappable headless `claude -p` / `codex exec`, with
 `{{name}}` template-var injection). Output rows are the 10 workbook columns
-plus `confidence`, `band`, and `review_flag`; one-hot columns are
-intentionally omitted. A `.claude/settings.json` hook blocks git commits
+plus `confidence`, `band`, `review_flag`, `basis`, and `checker_strength`;
+one-hot columns are intentionally omitted. A `.claude/settings.json` hook blocks git commits
 containing Claude/Anthropic self-attribution — commit messages stay plain.
 
 The pipeline runs up to four LLM steps, each with explicit per-step
@@ -33,10 +33,12 @@ engine/model/effort flags (codex pinned to `gpt-5.5`; claude requires an
 explicit model): analyze (per-chunk extraction via `prompts/analyze_chunk.md`:
 injected taxonomy + conventions + brain examples + rolling `memory.md` +
 native chunk), a second-reader checker (`prompts/check_candidates.md`, one
-call per source, categorical verdicts feeding the deterministic rubric —
-never a self-confidence number; any `fail` verdict hard-fails the candidate,
-anything short of all-pass caps confidence at 74, so High means a second
-model confirmed the evidence; default codex/gpt-5.5/high), a conflict arbiter
+call per source, categorical verdicts plus `evidence_strength` feeding the
+deterministic rubric — never a self-confidence number; any `fail` verdict
+hard-fails the candidate, anything short of all-pass caps confidence at 74,
+`thin` caps below High, and `adequate` deducts deterministically, so High means
+a second model confirmed the evidence with enough force; default
+codex/gpt-5.5/high), a conflict arbiter
 (`prompts/arbitrate_conflict.md`, fires only on surviving view conflicts;
 default codex/gpt-5.5/medium), and a group-notes resolver
 (`prompts/resolve_groups.md`, only when `--group-notes` supplies analyst
@@ -56,10 +58,25 @@ of visual-heavy HTML), `pilot-03` (first with checker + arbiter), `pilot-04`
 first with providers swapped: codex/gpt-5.5/high analyze, claude checker/
 arbiter/grouper). `POC_PLAN.md` locks the 3-phase build order and LLM-native
 ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`, `playwright` (+ chromium). 127 unittests pass.
+`trafilatura`, `htmldate`, `playwright` (+ chromium). 144 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-06: Shipped Rubric v2: graded categorical judgments now feed the
+  deterministic confidence arithmetic while band semantics stay unchanged.
+  Analyzer `call_language` widened to `explicit_dial` / `explicit_stance` /
+  `directional` / `implied` / `none`; legacy `explicit` and `implied` frozen
+  candidates still parse deterministically (`explicit` -> `explicit_stance`).
+  `explicit_dial` is guarded to table/visual evidence and downgrades to
+  `explicit_stance` on prose with a recorded note. Checker verdicts now carry
+  `evidence_strength` (`decisive` / `adequate` / `thin`): `decisive` preserves
+  all-pass behavior, `adequate` applies the tunable
+  `CHECKER_ADEQUATE_DEDUCTION = 4`, and `thin` applies the tunable
+  `CHECKER_THIN_CAP = 74` with review. Tunable call-language constants live in
+  `CALL_LANGUAGE_POINTS`; band thresholds remain 75/50. Output/failure rows add
+  `checker_strength` after `basis`, and manifests include a checker-strength
+  distribution. Prompt versions bumped (`analyze_chunk.md` v1.5,
+  `check_candidates.md` v1.4, `REGISTRY.md` updated). 17 new tests; 144 pass.
 - 2026-07-06: Shipped the pilot-05 fix list (Tasks 1–4) — deterministic gates
   and a tagged inference tier, all behind a new required `basis` field on the
   candidate schema (`stated` | `forecast_delta` | `inferred`; old frozen

@@ -8,10 +8,21 @@ from typing import Any
 
 VALID_TAXONOMY_MATCHES = ("exact", "semantic", "none")
 VALID_VIEWS = ("O", "N", "U", "UNCERTAIN")
-VALID_CALL_LANGUAGES = ("explicit", "implied", "none")
+VALID_CALL_LANGUAGES = (
+    "explicit_dial",
+    "explicit_stance",
+    "directional",
+    "implied",
+    "none",
+)
+LEGACY_CALL_LANGUAGE_MAP = {
+    "explicit": "explicit_stance",
+    "implied": "implied",
+}
 VALID_EVIDENCE_KINDS = ("prose", "table", "visual")
 VALID_CHECK_VERDICTS = ("pass", "unclear", "fail")
 CHECK_QUESTIONS = ("supports_view", "forward_looking", "asset_match")
+VALID_EVIDENCE_STRENGTHS = ("decisive", "adequate", "thin")
 
 # How the call was derived — drives the deterministic materiality gate and the
 # analyst-inference confidence tier (src/confidence.py):
@@ -33,7 +44,13 @@ class SchemaError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class CandidateCall:
-    """One model-proposed allocation call before deterministic validation."""
+    """One model-proposed allocation call before deterministic validation.
+
+    `call_language` is stored in the Rubric v2 vocabulary:
+    `explicit_dial`, `explicit_stance`, `directional`, `implied`, or `none`.
+    Frozen candidates using the legacy `explicit` value normalize to
+    `explicit_stance`; legacy `implied` remains `implied`.
+    """
 
     source_id: str
     chunk_id: str
@@ -84,7 +101,7 @@ class CandidateCall:
             sub_asset_class=_require_text(value, "sub_asset_class"),
             taxonomy_match=_require_choice(value, "taxonomy_match", VALID_TAXONOMY_MATCHES),
             view=_require_choice(value, "view", VALID_VIEWS),
-            call_language=_require_choice(value, "call_language", VALID_CALL_LANGUAGES),
+            call_language=_require_call_language(value),
             evidence_kind=_require_choice(value, "evidence_kind", VALID_EVIDENCE_KINDS),
             evidence_spans=_require_spans(value, "evidence_quote"),
             locator=_require_text(value, "locator"),
@@ -140,6 +157,7 @@ class CheckVerdict:
     supports_view: str
     forward_looking: str
     asset_match: str
+    evidence_strength: str = ""
     note: str = ""
 
     @classmethod
@@ -152,6 +170,7 @@ class CheckVerdict:
             supports_view=_require_choice(value, "supports_view", VALID_CHECK_VERDICTS),
             forward_looking=_require_choice(value, "forward_looking", VALID_CHECK_VERDICTS),
             asset_match=_require_choice(value, "asset_match", VALID_CHECK_VERDICTS),
+            evidence_strength=_optional_evidence_strength(value),
             note=str(value.get("note", "")),
         )
 
@@ -261,6 +280,25 @@ def _require_choice(value: dict[str, Any], field: str, choices: tuple[str, ...])
     item = _require_text(value, field)
     if item not in choices:
         raise SchemaError(f"{field} must be one of {', '.join(choices)}")
+    return item
+
+
+def _require_call_language(value: dict[str, Any]) -> str:
+    item = _require_text(value, "call_language")
+    item = LEGACY_CALL_LANGUAGE_MAP.get(item, item)
+    if item not in VALID_CALL_LANGUAGES:
+        raise SchemaError(f"call_language must be one of {', '.join(VALID_CALL_LANGUAGES)}")
+    return item
+
+
+def _optional_evidence_strength(value: dict[str, Any]) -> str:
+    item = value.get("evidence_strength")
+    if item is None:
+        return ""
+    if not isinstance(item, str) or item not in VALID_EVIDENCE_STRENGTHS:
+        raise SchemaError(
+            f"evidence_strength must be one of {', '.join(VALID_EVIDENCE_STRENGTHS)}"
+        )
     return item
 
 
