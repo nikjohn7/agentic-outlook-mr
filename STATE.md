@@ -75,6 +75,33 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 
 ## Recent Changes
 
+- 2026-07-06: **Fixed `runs/test2-01-rescored/rescore.py` collision handling
+  (frozen-wins) and regenerated the artifact.** The script previously
+  concatenated all 142 frozen `output.csv` rows with the 22 rescued rows
+  verbatim, producing 19 duplicate `(firm, sub-asset leaf)` join keys (5
+  conflicting-view) that made `src.eval` reject the file and diverged from the
+  hand-deduped client deliverable. It now joins each rescued row against the
+  frozen kept rows on the SAME key `src.eval` uses — `normalize_firm(Firm)` +
+  stripped `Sub-Asset Class`, imported from `src.eval` so "no duplicate keys"
+  means the same thing to the harness — and **frozen wins on every collision**:
+  colliding rescued rows are written to `failures.csv` (`duplicate_same_view`,
+  or a distinct `duplicate_conflicting_view` for the 5 reduce/neutralize→N
+  dial-read pairs, each with the full story preserved), leaving only the **3
+  net-new leaves** (TRP `Asia ex-Japan Equities U`, Wellington `Japan Equities
+  N`, `UK Duration N`) appended → **`output.csv` = 145 rows, no duplicate join
+  keys**. `failures.csv` = 21-line file / **20 rows** (19 frozen-wins duplicates
+  + the pre-existing TRP GBP `duplicate_same_view` assembly failure). Verdicts
+  are now **replayed** from the saved `checker-verdicts.json` (default mode; the
+  live `claude/opus/medium` checker path is kept behind `--live` and NOT
+  exercised — **zero LLM calls**), guarded by a hard assertion that every entry
+  is `verdict_source == "claude/opus/medium"`. `output.csv` row membership
+  verified **identical** to `tmp/client-update/second-test-results.csv` (145
+  rows, firm + leaf + view). `src.eval` now consumes the artifact directly and
+  its output lives in the artifact at `runs/test2-01-rescored/eval/`: 89 GT / 145
+  model, 69 exact (64 agree / 5 disagree), 76 model_only, 20 gt_only, recall
+  77.5%, view agreement 92.8%. Re-running the script is byte-identical.
+  `runs/test2-01/` frozen and untouched; full suite
+  `.venv/bin/python -m unittest discover -s tests` green.
 - 2026-07-06: Implemented the **post-test2-01 fix wave** from
   `runs/test2-01/gt-comparison.md`. **Task 1 (visual/dial evidence gate):**
   `src.confidence` now routes table/visual token misses on print-captured /
