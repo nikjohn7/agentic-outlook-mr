@@ -161,6 +161,33 @@ class LocalFileLoaderTest(unittest.TestCase):
         self.assertIsNone(source.local_path)
         self.assertEqual("html", source.source_type)
 
+    def test_txt_local_file_loads_as_transcript_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            transcript = Path(temp_dir) / "vanguard-update.txt"
+            transcript.write_text("transcript body", encoding="utf-8")
+            csv_path = self._write_csv(
+                temp_dir,
+                f"Vanguard,,Mid-year update,https://example.test/video,{transcript}\n",
+            )
+            [source] = load_pilot_sources(csv_path)
+
+        self.assertEqual("txt", source.source_type)
+        self.assertEqual("vanguard-update.txt", source.local_path.name)
+        self.assertEqual("https://example.test/video", source.url)  # URL kept as metadata
+
+    def test_unsupported_local_file_extension_hard_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc = Path(temp_dir) / "outlook.docx"
+            doc.write_text("not ingestible", encoding="utf-8")
+            csv_path = self._write_csv(
+                temp_dir, f"Test Firm,,Word Doc,https://example.test/a,{doc}\n"
+            )
+            with self.assertRaises(ValueError) as ctx:
+                load_pilot_sources(csv_path)
+
+        self.assertIn(".docx", str(ctx.exception))
+        self.assertIn("Word Doc", str(ctx.exception))
+
     def test_arbitrary_pilot_format_csv_loads_and_respects_the_limit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             body = "".join(
@@ -692,6 +719,70 @@ class OcrPdfTest(unittest.TestCase):
 
         self.assertEqual({}, text_by_page)
         self.assertIn("missing tool", note)
+
+
+class TxtTranscriptIngestTest(unittest.TestCase):
+    """Local `.txt` transcripts (video sources) take a text path: the file is
+    the document AND the quote-check corpus, chunked by char ranges."""
+
+    BODY = (
+        "Recorded 22 June 2026. We stay overweight European equities into the "
+        "second half while trimming duration back to benchmark."
+    )
+
+    def _snapshot(self, body: str) -> tuple:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            transcript = Path(temp_dir) / "vanguard-update.txt"
+            transcript.write_text(body, encoding="utf-8")
+            source = SourceRecord(
+                source_id="vanguard-mid-year",
+                firm="Vanguard",
+                date="",
+                source="Mid-year update",
+                url="https://example.test/video",
+                resolved_url="https://example.test/video",
+                source_type="txt",
+                local_path=transcript,
+            )
+            work_dir = Path(temp_dir) / "work"
+            ingested = create_snapshot(source, work_dir)
+            snapshot_text = ingested.snapshot_text_path.read_text(encoding="utf-8")
+            meta = json.loads(
+                (work_dir / source.source_id / "ingest_meta.json").read_text(encoding="utf-8")
+            )
+        return ingested, snapshot_text, meta
+
+    def test_transcript_is_copied_and_snapshot_equals_the_file(self) -> None:
+        ingested, snapshot_text, meta = self._snapshot(self.BODY)
+
+        self.assertEqual(self.BODY, snapshot_text)
+        self.assertEqual("vanguard-update.txt", ingested.native_source_path.name)
+        self.assertEqual("txt", meta["source_type"])
+        self.assertIsNone(ingested.page_count)
+        self.assertFalse(ingested.visual_heavy)
+        self.assertFalse(ingested.printed_pdf)
+
+    def test_transcript_chunks_use_char_range_locators(self) -> None:
+        ingested, _, _ = self._snapshot(self.BODY)
+
+        self.assertEqual(1, len(ingested.chunks))
+        self.assertEqual(f"char:0-{len(self.BODY)}", ingested.chunks[0].locator)
+        self.assertEqual(
+            ingested.snapshot_text_path, ingested.chunks[0].source_path
+        )
+
+    def test_transcript_worded_date_is_extracted_with_txt_provenance(self) -> None:
+        ingested, _, meta = self._snapshot(self.BODY)
+
+        self.assertEqual("22/06/2026", ingested.source.date)
+        self.assertEqual("22/06/2026", meta["date"])
+        self.assertEqual("txt_text", meta["date_from"])
+
+    def test_transcript_without_worded_date_stays_blank(self) -> None:
+        ingested, _, meta = self._snapshot("No date is spoken in this video at all.")
+
+        self.assertEqual("", ingested.source.date)
+        self.assertEqual("", meta["date_from"])
 
 
 if __name__ == "__main__":

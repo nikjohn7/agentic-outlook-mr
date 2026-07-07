@@ -34,6 +34,7 @@ from src.ingest import (
     IngestedSource,
     SourceRecord,
     create_snapshot,
+    date_provenance,
     load_pilot_sources,
     load_target_sources,
 )
@@ -138,9 +139,8 @@ def sweep(
 
 def _ok_record(source: SourceRecord, ingested: IngestedSource) -> PreflightRecord:
     date = ingested.source.date
-    # Provenance mirrors ingest's own rule (document-only dates): a filled date
-    # comes from the PDF text for a PDF source, else from the HTML.
-    date_from = ("pdf_text" if source.source_type == "pdf" else "html") if date else ""
+    # Provenance mirrors ingest's own rule (document-only dates).
+    date_from = date_provenance(source.source_type) if date else ""
     char_count: int | None = None
     try:
         char_count = len(ingested.snapshot_text_path.read_text(encoding="utf-8"))
@@ -313,10 +313,12 @@ def render_report(records: list[PreflightRecord]) -> str:
     unchecked = [r for r in ok if r.content_check == "unchecked"]
     pdf_ok = [r for r in ok if r.source_type == "pdf"]
     html_ok = [r for r in ok if r.source_type == "html"]
+    txt_ok = [r for r in ok if r.source_type == "txt"]
     printed = [r for r in ok if r.printed_pdf]
     dated = [r for r in ok if r.date]
     from_html = [r for r in dated if r.date_from == "html"]
     from_pdf = [r for r in dated if r.date_from == "pdf_text"]
+    from_txt = [r for r in dated if r.date_from == "txt_text"]
     blank_dates = [r for r in ok if not r.date]
 
     lines: list[str] = ["# Link preflight report", ""]
@@ -324,7 +326,8 @@ def render_report(records: list[PreflightRecord]) -> str:
     lines.append(f"- Fetched OK: {len(ok)}")
     lines.append(f"- FAILED: {len(failed)}")
     lines.append(f"- OK by type: {len(pdf_ok)} PDF, {len(html_ok)} HTML "
-                 f"({len(printed)} print-captured visual-heavy)")
+                 f"({len(printed)} print-captured visual-heavy), "
+                 f"{len(txt_ok)} transcript (txt)")
     lines.append(f"- Content check: {len(suspects)} suspect, "
                  f"{len(unchecked)} unchecked, {len(ok) - len(suspects) - len(unchecked)} looks_right")
     lines.append("")
@@ -357,7 +360,8 @@ def render_report(records: list[PreflightRecord]) -> str:
     lines.append("## Date extraction")
     lines.append("")
     lines.append(f"- OK sources with a document date: {len(dated)} of {len(ok)} "
-                 f"({len(from_html)} from HTML, {len(from_pdf)} from PDF text)")
+                 f"({len(from_html)} from HTML, {len(from_pdf)} from PDF text, "
+                 f"{len(from_txt)} from transcript text)")
     lines.append(f"- Blank (no document date found): {len(blank_dates)}")
     lines.append("")
     lines.append("| Firm | Title | Type | Date | From |")

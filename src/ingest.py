@@ -179,9 +179,10 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
     each accept a few header aliases (see `_COLUMN_ALIASES`), so an export CSV
     using `Entity Name` / `Title` / `External link` loads with no editing.
     A row's `source_type` is `pdf` when it resolves to a local PDF (`local_file`)
-    or its URL points at a `.pdf` (fetched remotely); otherwise `html`. See
-    `_resolve_local_file` for the local_file contract. Any second test set is a
-    CSV of this family — pointing `--sources <path>` at it needs no code change.
+    or its URL points at a `.pdf` (fetched remotely); `txt` when local_file is a
+    plain-text transcript (video sources ship as transcripts); otherwise `html`.
+    See `_resolve_local_file` for the local_file contract. Any second test set is
+    a CSV of this family — pointing `--sources <path>` at it needs no code change.
     """
     rows = _read_csv(path)
     header = _map_source_headers(rows, path)
@@ -202,7 +203,11 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
                 source=title,
                 url=url,
                 resolved_url=resolved_url,
-                source_type="pdf" if local_path else detect_source_type(resolved_url),
+                source_type=(
+                    _local_source_type(local_path)
+                    if local_path
+                    else detect_source_type(resolved_url)
+                ),
                 local_path=local_path,
             )
         )
@@ -261,7 +266,11 @@ def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRec
                 source=title,
                 url=raw_url,
                 resolved_url=resolved_url,
-                source_type="pdf" if local_path else detect_source_type(resolved_url),
+                source_type=(
+                    _local_source_type(local_path)
+                    if local_path
+                    else detect_source_type(resolved_url)
+                ),
                 local_path=local_path,
             )
         )
@@ -301,6 +310,16 @@ def strip_tracking_params(url: str) -> str:
 def detect_source_type(locator: str) -> str:
     path = urlparse(locator).path if "://" in locator else locator
     return "pdf" if path.lower().endswith(".pdf") else "html"
+
+
+def _local_source_type(local_path: Path) -> str:
+    return "txt" if local_path.suffix.lower() == ".txt" else "pdf"
+
+
+def date_provenance(source_type: str) -> str:
+    """Where a filled document date came from, keyed by source type:
+    the PDF's first-page text, the transcript's text, or the HTML markup."""
+    return {"pdf": "pdf_text", "txt": "txt_text"}.get(source_type, "html")
 
 
 def extract_html_date(html: str) -> str:
@@ -357,7 +376,18 @@ def create_snapshot(
     ocr_note = ""
     fetched_via = ""
     document_date = ""
-    if source.source_type == "pdf":
+    if source.source_type == "txt":
+        # A local plain-text transcript (video sources): the text IS the
+        # document, so it doubles as the snapshot / quote-check corpus, and
+        # chunking/locators follow the HTML char-range convention.
+        native_path = output_dir / source.local_path.name
+        shutil.copy2(source.local_path, native_path)
+        snapshot_text = native_path.read_text(encoding="utf-8")
+        snapshot_path = output_dir / "snapshot.txt"
+        snapshot_path.write_text(snapshot_text, encoding="utf-8")
+        chunks = _html_chunks(snapshot_path, len(snapshot_text))
+        document_date = extract_pdf_text_date(snapshot_text)
+    elif source.source_type == "pdf":
         native_path = _copy_pdf(source, output_dir, downloader=downloader)
         snapshot_text, page_count, scrambled_pages, ocr_pages, ocr_note = _extract_pdf_text(
             native_path, ocr_runner=ocr_runner
@@ -397,10 +427,7 @@ def create_snapshot(
 
     # The source CSV's date is unreliable (client instruction) and is discarded
     # here: the run's Date comes only from the document itself, or stays blank.
-    if document_date:
-        date_from = "pdf_text" if source.source_type == "pdf" else "html"
-    else:
-        date_from = ""
+    date_from = date_provenance(source.source_type) if document_date else ""
     source = replace(source, date=document_date)
 
     (output_dir / "chunks.json").write_text(
@@ -548,12 +575,13 @@ def _read_csv(path: str | Path) -> list[dict[str, str]]:
 def _resolve_local_file(
     local_file: str | None, *, firm: str, title: str
 ) -> Path | None:
-    """Resolve a source row's optional `local_file` value to a local PDF.
+    """Resolve a source row's optional `local_file` value to a local PDF or
+    plain-text transcript (`.txt`, for video sources).
 
     `local_file` is a repo-relative path (resolved against PROJECT_ROOT). Its
     three-way contract, shared by every source CSV:
-      - present and the file exists  -> ingest that local PDF; the row's URL is
-        kept only as metadata (the mapped-local-PDF behavior);
+      - present and the file exists  -> ingest that local file; the row's URL is
+        kept only as metadata (the mapped-local-file behavior);
       - present but missing on disk  -> hard error naming the row (never a silent
         fall back to the URL — a typo would otherwise fetch the wrong thing);
       - absent or empty              -> None; fetch the URL (a `.pdf` URL is
@@ -569,6 +597,11 @@ def _resolve_local_file(
         raise FileNotFoundError(
             f"local_file '{raw}' for source '{firm} — {title}' does not exist "
             f"(resolved to {path}); fix the path or clear the column to fetch the URL"
+        )
+    if path.suffix.lower() not in {".pdf", ".txt"}:
+        raise ValueError(
+            f"local_file '{raw}' for source '{firm} — {title}' must be a .pdf "
+            f"or a .txt transcript; got '{path.suffix}'"
         )
     return path
 
