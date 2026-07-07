@@ -79,6 +79,18 @@ unittests pass.
 
 ## Recent Changes
 
+- 2026-07-07: **Split CSVs rebuilt from the local_file-wired master; J.P.
+  Morgan wired local.** The four split CSVs under
+  `client-runs/runs-07072026-37rows/splits/` predated the manual-download
+  wiring and still pointed 11 rows at blocked URLs; rebuilt all four from
+  `Target Ingestion List (with local_file).csv` by firm (Ids are unusable as
+  keys: 11 workbook rows have blank Ids), 10/9/9/9, all 37 verified through
+  `load_pilot_sources`. J.P. Morgan's mid-year PDF (preflight-3's one
+  failure, a transient connection error — re-download succeeded) was saved to
+  `manual-sources/` and wired as `local_file` in the master and split-3, so
+  all 37 sources now fetch-safe. Cost-slice instructions (set 8) updated to
+  read preflight-3 and to include Manulife in the slice (only source that
+  live-exercises the OCR evidence-gate path).
 - 2026-07-07: **Ingest hardening for production preflight.** Plain HTML/PDF
   fetches now share 3 attempts, 90s per-attempt timeouts, exponential backoff,
   retry on timeout/connection/5xx only, and no retry for 4xx. Blocked HTML
