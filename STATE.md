@@ -102,6 +102,14 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-08: 98-batch finalized for launch. BofA txt replaced with real
+  Private Bank content (no longer the Merrill duplicate); the unresolved
+  Vanguard "midyear market outlook" row wired to the same local update PDF
+  per Nikhil (the split-1 group collapses the two Vanguard rows into one
+  combined source — group-notes now REQUIRED on split-1). Splits repacked
+  per Nikhil's preference: TEN splits of ≤10 rows (9×10 + 1×8), firm-whole;
+  command sheet `tmp/98run-commands.md` rewritten (v2). All 98 rows
+  fetch-safe; 38 local files.
 - 2026-07-08: 98-batch manual round 2 wired: Allspring, Morgan Stanley,
   Nuveen, Carmignac, Schwab, RBC Wealth ×5 (PDFs), BofA Private Bank (txt —
   byte-identical to the Merrill transcript, both BofA CIO brands; flagged
