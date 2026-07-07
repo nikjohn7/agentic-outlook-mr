@@ -51,6 +51,9 @@
     }
     th { background: var(--wash); }
     td.col { white-space: nowrap; font-weight: 600; }
+    /* The failures labels can be long combined strings, so that column wraps
+       and is width-capped instead of pushing the Meaning column off-screen. */
+    table.wrap-first td.col { white-space: normal; width: 34%; }
     code { background: var(--wash); padding: 1px 4px; border-radius: 3px; }
     ul { padding-left: 20px; }
     li { margin: 5px 0; }
@@ -112,7 +115,7 @@
     plain labels:
   </p>
   <div class="table-scroll">
-  <table>
+  <table class="wrap-first">
     <thead><tr><th>What happened</th><th>Meaning</th></tr></thead>
     <tbody>
       <tr><td class="col">Duplicate — already covered</td><td>The same view for this asset appears in another of the firm's documents; kept once. No action needed.</td></tr>
