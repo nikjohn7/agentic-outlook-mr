@@ -59,6 +59,21 @@
     li { margin: 5px 0; }
     .note { color: var(--muted); font-size: 0.9rem; }
     .table-scroll { overflow-x: auto; }
+
+    @media print {
+      @page { margin: 14mm; }
+      body { padding: 0; background: #fff; font-size: 10.5pt; }
+      main { max-width: none; border: none; padding: 0; }
+      /* Let wide tables print in full instead of being clipped by the
+         on-screen scroll container. */
+      .table-scroll { overflow: visible; }
+      /* Keep headings with the content that follows, and never split a table
+         row across a page. */
+      h2 { break-after: avoid; }
+      tr, img { break-inside: avoid; }
+      thead { display: table-header-group; }  /* repeat header on each page */
+      a { color: inherit; text-decoration: none; }
+    }
   </style>
 </head>
 <body>
