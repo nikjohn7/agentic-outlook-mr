@@ -154,6 +154,36 @@ class LoadRunSourcesTests(unittest.TestCase):
             self.assertEqual(1, len(sources["trp-monthly"].kept_rows))
             self.assertEqual(1, len(sources["trp-uk"].kept_rows))
 
+    def test_out_root_run_resolves_the_sibling_work_dir(self) -> None:
+        # An --out-root run writes <out-root>/<id> with work at <out-root>/work/<id>
+        # (a sibling of the run dir), NOT under PROJECT_ROOT/work.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            run_dir = tmp / "client-runs" / "batch" / "demo"
+            work_dir = tmp / "client-runs" / "batch" / "work" / "demo"
+            run_dir.mkdir(parents=True)
+            sdir = work_dir / "acme-outlook"
+            sdir.mkdir(parents=True)
+            (sdir / "memory.md").write_text(
+                "# Acme — Acme Outlook 2026  (acme-outlook)\n\n## Chunk\nSummary: s\n",
+                encoding="utf-8",
+            )
+            (sdir / "acme.pdf").write_bytes(b"%PDF-1.4 stub")
+            (sdir / "chunks.json").write_text(
+                json.dumps([{"chunk_id": "p1", "locator": "p.1",
+                             "source_path": str(sdir / "acme.pdf")}]),
+                encoding="utf-8",
+            )
+            _write_output(
+                run_dir / "output.csv",
+                [_orow("Acme", "US Equities", "O", Source="Acme Outlook 2026")],
+            )
+            # PROJECT_ROOT deliberately NOT pointed at tmp: the sibling must win.
+
+            sources = load_run_sources(run_dir)
+
+        self.assertEqual(["acme-outlook"], [s.source_id for s in sources])
+
     def test_only_filter_and_unknown_id_raises(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

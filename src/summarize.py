@@ -88,8 +88,14 @@ class RunSource:
 def _work_dir_for(run_dir: Path) -> Path:
     """The run's work directory holds the per-source ingest artifacts + memory.
 
-    A run's outputs live in ``runs/<id>`` and its work artifacts in
-    ``work/<id>``; the id is the run directory's name."""
+    A default run writes outputs to ``runs/<id>`` and work to ``work/<id>``;
+    an ``--out-root`` run writes ``<out-root>/<id>`` and ``<out-root>/work/<id>``
+    (work is a sibling of the run dir). Prefer the sibling when it exists so
+    out-root runs resolve without symlink workarounds; a default-layout run has
+    no ``runs/work/<id>`` sibling, so it falls back to ``PROJECT_ROOT/work/<id>``."""
+    sibling = run_dir.resolve().parent / "work" / run_dir.name
+    if sibling.is_dir():
+        return sibling
     return PROJECT_ROOT / "work" / run_dir.name
 
 
