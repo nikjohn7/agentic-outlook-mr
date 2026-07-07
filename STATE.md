@@ -102,6 +102,14 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-08: Batch reduced to 97 rows: the Vanguard "midyear market
+  outlook" row was REMOVED (its link serves pre-2026 content; Nikhil
+  informing Kyle) — one Vanguard row remains on the local 2026 update PDF,
+  so no Vanguard group. Splits repacked (9×10 + 1×7, firm-whole); scout
+  re-run on the 97 list proposed 2 groups (Wellington Bond Credit+Rates,
+  RBC Wealth Global Insight regionals ×4) — wired as removable flags on
+  splits 1 and 5 in `tmp/98run-commands.md` (v3), Nikhil accepts/rejects at
+  launch.
 - 2026-07-08: 98-batch finalized for launch. BofA txt replaced with real
   Private Bank content (no longer the Merrill duplicate); the unresolved
   Vanguard "midyear market outlook" row wired to the same local update PDF
