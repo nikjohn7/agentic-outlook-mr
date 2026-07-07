@@ -1,0 +1,174 @@
+{
+  "firm": "Wellington Management",
+  "rows": [
+    {
+      "kind": "gt_only",
+      "leaf": "Japan Equities",
+      "model_view": "",
+      "gt_view": "N",
+      "classification": "recall_gap",
+      "cite": "monthly:printed.pdf p.2 EQUITIES grid — Japan row = N (NC), prose 'taking a neutral view on the US and Japan'",
+      "note": "emitted-but-evidence-gated: model emitted Japanese equities->Japan Equities N (failures.csv reason=evidence_check_failed, source=monthly, p.2 EQUITIES grid). Grounded ONLY in monthly; quarterly dashboard has 'Asia developed markets - Neutral', not a Japan row (kept in output as Asia Equities N, an adjacent leaf). The print-captured monthly dial grid was rejected by the visual-token evidence gate, not misread."
+    },
+    {
+      "kind": "gt_only",
+      "leaf": "US Treasuries",
+      "model_view": "",
+      "gt_view": "N",
+      "classification": "near_leaf_covered",
+      "cite": "monthly:printed.pdf p.3 GOVERNMENT BONDS grid — US row = N (upward arrow, moved from UW to neutral)",
+      "note": "Model kept the same call under the adjacent leaf US Duration N (output.csv, locator p.3 GOVERNMENT BONDS grid). Same N view, same underlying US-rates call; exact-leaf join missed only because taxonomy leaf differs (US Treasuries vs US Duration). Not evidence-gated (this dial call survived and was kept)."
+    },
+    {
+      "kind": "gt_only",
+      "leaf": "Euro Govt Bonds",
+      "model_view": "",
+      "gt_view": "N",
+      "classification": "near_leaf_covered",
+      "cite": "monthly:printed.pdf p.3 GOVERNMENT BONDS grid — Europe ex-UK row = N (downward arrow, moved from OW to neutral)",
+      "note": "Model kept the same call under the adjacent leaf Europe Duration N (output.csv, locator p.3 GOVERNMENT BONDS grid). Same N view; join missed only on leaf naming (Euro Govt Bonds vs Europe Duration). Not evidence-gated."
+    },
+    {
+      "kind": "gt_only",
+      "leaf": "UK Gilts",
+      "model_view": "",
+      "gt_view": "N",
+      "classification": "recall_gap",
+      "cite": "monthly:printed.pdf p.3 GOVERNMENT BONDS grid — UK row = N (NC), prose 'Our neutral view on UK rates is unchanged'",
+      "note": "emitted-but-evidence-gated: model emitted UK rates->UK Duration N (failures.csv reason=evidence_check_failed, source=monthly, p.3 GOVERNMENT BONDS grid). Unlike US/Europe, the UK rates call was NOT recovered anywhere else in output (no UK rate call kept), so this is a genuine absent row driven by the evidence gate rejecting the print-captured dial grid."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Credit - General / Multi-Sector / Broad",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "monthly:printed.pdf p.4 CREDIT summary box — 'A significant tightening in spreads has prompted us to shift our overall stance on credit to neutral ... across both investment grade and high yield'",
+      "note": "Grounded. Review flag stems from cross-doc arbitration (quarterly dashboard had credit Moderately OW; monthly, more recent as of 31 May 2026, moved to neutral) — model correctly took the more-recent monthly N. GT simply did not make a broad-credit call."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Europe Credit",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "quarterly:printed.pdf p.7 — 'we favor European credit including investment-grade and high-yield bonds'",
+      "note": "Grounded, explicit. GT has no Europe Credit leaf."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Commodities",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "quarterly:printed.pdf p.2 Key points — 'moderately overweight view on commodities, expressed in gold'; corroborated monthly p.4 COMMODITIES dial = OW(+)",
+      "note": "Grounded in both docs. GT did not score a Commodities aggregate leaf."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Asia Equities",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "near_leaf_of_gt",
+      "cite": "quarterly:printed.pdf p.3 Global equities dashboard — 'Asia developed markets — Neutral'",
+      "note": "Adjacent to GT's Japan Equities N (eval near-leaf-hint sim=0.333). Independently grounded in the quarterly dashboard row (Asia developed markets, which spans Japan/Aus/HK/Sing). Legitimate call that partially overlaps the Japan Equities GT miss."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Global IG Credit",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "monthly:printed.pdf p.4 CREDIT grid — Investment-grade credit row = N (downward arrow)",
+      "note": "Grounded. Review flag = cross-doc conflict (quarterly credit-spreads dashboard = Global IG Moderately OW; monthly grid = N). Model applied recency and took monthly N — defensible. GT did not score Global IG."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Global HY",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "monthly:printed.pdf p.4 CREDIT grid — High yield row = N (downward arrow)",
+      "note": "Grounded. Same recency arbitration as IG (quarterly had Global HY Moderately OW). GT did not score Global HY."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Japan Duration",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "quarterly:printed.pdf p.4 — 'Japan is the one market where we maintain a moderate duration underweight'",
+      "note": "Grounded in quarterly prose. CROSS-DOC CONFLICT the model did NOT arbitrate: monthly GOVERNMENT BONDS grid shows Japan = N (more recent). Model kept quarterly's U here while applying recency elsewhere (credit, US/Europe rates) — a minor grouping inconsistency. Not GT-scored so no eval impact."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "USD",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "quarterly:printed.pdf p.7 — 'a continued positive secular trend linked to our expectations for a weaker US dollar and a bias among central banks and investors to diversify away from the dollar'",
+      "note": "Grounded directional inference; review flag reflects inferred basis (Medium band), not lack of grounding. A weaker-USD expectation cleanly supports a USD underweight. GT has no USD leaf."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "US Mega-Cap (Tech)",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "quarterly:printed.pdf p.6 — 'US mega-cap tech companies have seen a big adjustment in relative valuations, making them attractive again from a PE perspective'",
+      "note": "Grounded, directional. GT did not score a mega-cap leaf."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Duration - Long",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "quarterly:printed.pdf p.7 — 'We have maintained our long-duration stance based on more attractive carry and two potential states of the world that could lead to lower yields'",
+      "note": "Grounded, explicit. GT did not score a generic long-duration leaf."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "US Duration",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "near_leaf_of_gt",
+      "cite": "monthly:printed.pdf p.3 GOVERNMENT BONDS grid — US row = N (upward arrow)",
+      "note": "This IS the near-leaf that covers the GT US Treasuries N miss (same call, adjacent leaf). Grounded in monthly dial + prose 'moved from an underweight to a neutral stance on US rates'."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Europe Duration",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "near_leaf_of_gt",
+      "cite": "monthly:printed.pdf p.3 GOVERNMENT BONDS grid — Europe ex-UK row = N (downward arrow)",
+      "note": "Near-leaf covering the GT Euro Govt Bonds N miss. Grounded in monthly dial + prose 'neutralised our stance for now'."
+    }
+  ],
+  "summary": {
+    "view_disagreements": {
+      "total": 0,
+      "reading_errors": 0,
+      "convention_disputes": 0,
+      "model_correct": 0,
+      "gt_correct": 0
+    },
+    "misses": {
+      "total": 4,
+      "recall_gap": 2,
+      "near_leaf_covered": 2,
+      "not_grounded": 0,
+      "defensible_omission": 0,
+      "emitted_but_evidence_gated": 2
+    },
+    "model_only": {
+      "total": 12,
+      "sound_breadth": 9,
+      "overreach": 0,
+      "near_leaf_of_gt": 3
+    },
+    "grouping_note": "Combining the two docs worked well overall. Cross-doc dedup handled numerous overlaps (US equities, EM, Europe, gold, global govt bonds all suppressed as duplicate_same_view in failures.csv). The one substantive conflict was credit: the quarterly credit-spreads dashboard printed Global IG/HY as Moderately OW, while the more-recent monthly (as of 31 May 2026) moved IG and broad credit to Neutral after spread tightening; the model correctly applied recency and kept the monthly N. One residual inconsistency: for Japan rates the model kept the quarterly's moderate duration UW (Japan Duration U) rather than the more-recent monthly grid's Japan = N, i.e. recency arbitration was applied to credit and US/Europe rates but not Japan. Not GT-scored, so no eval impact.",
+    "headline": "Wellington had zero view disagreements: every non-exact row is either grounded breadth, a taxonomy near-leaf, or an evidence-gate artifact — no reading errors. Of the 4 misses, 2 (US Treasuries N, Euro Govt Bonds N) were actually captured under adjacent duration leaves (near_leaf_covered), and the other 2 (Japan Equities N, UK Gilts N) were emitted by the model but rejected by the visual-token evidence gate on the print-captured monthly dial grid (emitted-but-evidence-gated) rather than missed on reading. All 12 model_only rows are grounded (9 sound_breadth, 3 near_leaf_of_gt), 0 overreach. The dominant fixable failure mode is the evidence gate rejecting the monthly HTML dial dashboard (7 monthly dial calls hit evidence_check_failed); recovering that grid would convert both recall_gap misses and add several corroborations."
+  }
+}
