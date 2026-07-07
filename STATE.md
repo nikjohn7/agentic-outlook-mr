@@ -102,6 +102,24 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-08: 98-batch prep. **(1)** `.txt` transcript local_file support in
+  ingest (video sources; text path, char-range locators, `date_from:
+  txt_text`; unsupported extensions hard-error) — commit ab4598d, suite 291 →
+  297. **(2)** `summarize._work_dir_for` now resolves an out-root run's
+  sibling `work/` dir (cost-slice finding fixed; 85663ad, suite 298).
+  **(3)** Wired master `client-runs/runs-07072026-98rows/Target Ingestion
+  List AI (with local_file).csv` (26 local files: 12 carried + 11 Nikhil
+  manual incl. 4 transcripts + Amundi/Seviora extension-less PDFs
+  auto-downloaded + JPM cdn PDF), splits 20/20/20/19/19 firm-whole, command
+  sheet `tmp/98run-commands.md`. **(4)** Scout over 98: 1 group proposed
+  (Vanguard transcript + midyear outlook) — moot until the wrong-year
+  content is fixed. **(5)** Preflight over 98: 88 ok / 10 failed; retry
+  sweep proved AB ×6 + JPM transient-DNS (now ok). Kyle's CSV had the four
+  Wellington URLs shuffled against titles — remapped in the wired master
+  (original untouched). Confirmed-broken/blocked, awaiting Nikhil manual
+  download: Allspring, Morgan Stanley, Nuveen, Carmignac, BofA Private
+  Bank, Schwab, RBC Wealth ×5; both Vanguard pieces carry wrong-year
+  content (URL serves July 2024; transcript reads as the 2025 video).
 - 2026-07-07: Cost slice ran clean — **GO** (run `cost-slice-01` under
   `client-runs/runs-07072026-37rows/`, 3 sources incl. Manulife, production
   config, ~24 min, ~8 min/source, ~2.7 analyze + 1 checker calls/source).
@@ -158,16 +176,12 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
   260 (incl. the document-date fallback tests folded into set 5's policy).
 ## Next / Open
 
-- **98-row batch prep (in progress)**: Nikhil downloads the 11 pre-flagged
-  PDFs → wire local_file (carrying over the 12 existing 37-batch mappings) →
-  preflight over all 98 → scout/group check → generate ~5–6 split CSVs +
-  filled-out commands for Nikhil to run himself (≤2 parallel, nohup).
-  Decision pending: re-run all 98 fresh vs run only the 61 new rows and
-  combine with the four 37-batch split outputs at crosscheck time (~2.6×
-  LLM-cost difference).
-- Fix `summarize._work_dir_for` for `--out-root` runs (derive work dir from
-  `run_dir.parent`) before running per-split digests, or use the
-  `work/<run-id>` symlink workaround.
+- **98-row batch prep (in progress)**: waiting on Nikhil's second manual
+  round (Allspring, Morgan Stanley, Nuveen, Carmignac, BofA Private Bank,
+  Schwab, RBC Wealth ×5, Vanguard ×2 wrong-year fixes) → re-wire +
+  regenerate splits → final confirmation sweep → Nikhil runs the five split
+  commands from `tmp/98run-commands.md` (≤2 parallel, nohup). The plan runs
+  all 98 fresh (rows 1–37 included).
 - One combined final deliverable across all batch outputs: combined CSV,
   crosscheck across every output.csv, firm pages + Word binder at the
   combine step.
