@@ -245,6 +245,7 @@ def run_pipeline(
     write_run_outputs(
         result,
         run_dir,
+        sources=source_infos,
         source_summaries=source_summaries,
         chunk_failures=chunk_failures,
         run_config=run_config,

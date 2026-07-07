@@ -45,10 +45,23 @@ without re-deriving the reasoning._
    *within the provided source set* may be considered (which the v1 scout +
    cross-check and the v1.2 reconcile stage cover by construction).
 9. **Combined two-document rows:** keep each document's title and date,
-   pipe-separated (`|`) in `Source` and `Date`. Already current behavior.
+   pipe-separated (`|`) in `Source` and `Date`. Titles/URLs join every member;
+   the `Date` join skips blanks (see decision 11 — dates are often blank), so a
+   grouped row never shows a stray `| ` around an empty date.
 10. **Reference capture** (page number + exact phrase for PDF; exact
     phrase(s) for HTML) and **confidence thresholds**: confirmed as-is;
     client defers threshold policy to us.
+11. **Dates come from the document only (2026-07-07).** The client stated the
+    dates in the source CSV are unreliable and must not be used. The `Date` on
+    every output row is extracted from the document itself, as strict
+    `DD/MM/YYYY`, or left blank — never taken from the source list. HTML uses
+    the stated publication date; PDF accepts only a full worded date near the
+    top of page 1 (a bare month-year → blank; numeric forms and file metadata
+    are not used). This supersedes the earlier document-date *fallback* (which
+    only filled a blank CSV date); the CSV date is now always discarded in
+    ingestion. Scout and the group resolver still read the CSV date at metadata
+    time (pre-ingest) — out of scope; the change is that ingestion outputs never
+    carry it.
 
 ## v1 pre-37 wave (in flight)
 

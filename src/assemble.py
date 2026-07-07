@@ -11,6 +11,11 @@ from typing import Callable
 
 from src.confidence import (
     CHECKER_FAIL_REASONS,
+    HARD_FAILURE_EVIDENCE,
+    HARD_FAILURE_MATERIALITY,
+    HARD_FAILURE_QUOTE,
+    HARD_FAILURE_TAXONOMY,
+    HARD_FAILURE_VISUAL_LOCATOR,
     ConfidenceResult,
     effective_call_language,
     normalize_quote_text,
@@ -69,6 +74,160 @@ FAILURE_COLUMNS = (
     "checker_strength",
     "call_language",
 )
+
+# Client-readable failures file. Same rows, same order as failures.csv, but with
+# a plain label + one-sentence explanation per reason code and no internal
+# jargon. See CLIENT_FAILURE_LABELS.
+CLIENT_FAILURE_COLUMNS = (
+    "Firm",
+    "Source",
+    "Sub-Asset Class",
+    "View (proposed)",
+    "What happened",
+    "Explanation",
+    "Evidence / notes",
+)
+
+# Authoritative registry of every failure `reason_code` that can reach
+# failures.csv. Codes raised by deterministic scoring live in `src.confidence`;
+# the rest are emitted here in assemble or by `run.py`'s chunk/checker paths.
+# CLIENT_FAILURE_LABELS must have an entry for every code in this set (a test
+# enforces it), so a new code fails the test instead of shipping unmapped.
+_CONFIDENCE_REASON_CODES = frozenset(
+    {
+        HARD_FAILURE_TAXONOMY,
+        HARD_FAILURE_QUOTE,
+        HARD_FAILURE_VISUAL_LOCATOR,
+        HARD_FAILURE_EVIDENCE,
+        HARD_FAILURE_MATERIALITY,
+        *CHECKER_FAIL_REASONS.values(),
+    }
+)
+_ASSEMBLE_REASON_CODES = frozenset(
+    {
+        "arbitrated_out",
+        "unresolved_conflict",
+        "duplicate_same_view",
+        "duplicate_cross_leaf",
+        "implied_challenges_stated",
+        "source_metadata_missing",
+    }
+)
+_RUN_REASON_CODES = frozenset({"json_parse_error", "engine_error", "checker_error"})
+ALL_REASON_CODES = _CONFIDENCE_REASON_CODES | _ASSEMBLE_REASON_CODES | _RUN_REASON_CODES
+
+# reason_code -> (What happened, Explanation), both written for a non-technical
+# reader. `What happened` is a short label; `Explanation` says in one plain
+# sentence what it means and what (if anything) the reader should do. This is a
+# mapping layer only — the internal reason codes are never renamed.
+CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
+    "duplicate_same_view": (
+        "Duplicate — already covered",
+        "The same view for this asset appears in another of this firm's "
+        "documents; it was kept once. No action needed.",
+    ),
+    "duplicate_cross_leaf": (
+        "Duplicate — same call, related asset",
+        "This repeats a view already kept for a closely related asset from the "
+        "same piece of text; it was kept once to avoid double-counting. No "
+        "action needed.",
+    ),
+    "arbitrated_out": (
+        "Conflicting views — other call kept",
+        "Two documents disagreed; the more current or more specific call was "
+        "kept. Review if the kept call looks wrong.",
+    ),
+    "unresolved_conflict": (
+        "Conflicting views — none kept",
+        "Two views for this asset disagreed and could not be reconciled "
+        "automatically, so neither was kept. A human should decide which is "
+        "correct.",
+    ),
+    "implied_challenges_stated": (
+        "Suggestion — review recommended",
+        "An implied reading challenges the firm's stated call; the stated call "
+        "was kept and this row records the challenge for review.",
+    ),
+    "source_metadata_missing": (
+        "Skipped — source details missing",
+        "The document's identifying details were unavailable, so this call "
+        "could not be attached to a source. Usually a processing issue; let us "
+        "know if it recurs.",
+    ),
+    "taxonomy_no_match": (
+        "Skipped — asset not on the list",
+        "The asset named didn't match any item on the approved asset list, so "
+        "it was left out. No action needed unless it should be on the list.",
+    ),
+    "quote_not_found": (
+        "Evidence could not be verified",
+        "The exact supporting text couldn't be found in the document, so the "
+        "call was dropped rather than kept unverified. A human can check the "
+        "cited page.",
+    ),
+    "visual_locator_missing": (
+        "Evidence location missing",
+        "A call from a chart or table didn't record where in the document it "
+        "came from, so it couldn't be verified. A human can check the document.",
+    ),
+    "evidence_check_failed": (
+        "Evidence could not be verified",
+        "The supporting evidence didn't hold up on a second check, so the call "
+        "was dropped rather than kept unverified. A human can check the cited "
+        "page.",
+    ),
+    "delta_below_materiality": (
+        "Change too small to call",
+        "The forecast change behind this call was too small to justify a view, "
+        "so it was left out. No action needed.",
+    ),
+    "checker_sign_mismatch": (
+        "Evidence points the other way",
+        "A second reader found the cited text doesn't support the direction of "
+        "this call, so it was dropped. A human can check the cited page.",
+    ),
+    "checker_not_forward_looking": (
+        "Not a forward-looking view",
+        "A second reader found the cited text isn't a forward-looking view "
+        "(e.g. it describes the past), so it was dropped. A human can check the "
+        "cited page.",
+    ),
+    "checker_asset_mismatch": (
+        "Evidence is about a different asset",
+        "A second reader found the cited text is about a different asset than "
+        "the call, so it was dropped. A human can check the cited page.",
+    ),
+    "json_parse_error": (
+        "Part of a document couldn't be read",
+        "A section of the document couldn't be processed automatically, so any "
+        "calls in it were skipped. Let us know so we can re-run it.",
+    ),
+    "engine_error": (
+        "Part of a document couldn't be processed",
+        "A section of the document failed during processing, so any calls in it "
+        "were skipped. Let us know so we can re-run it.",
+    ),
+    "checker_error": (
+        "Second-reader check couldn't run",
+        "The second-reader verification failed to run for this document, so "
+        "affected calls weren't confirmed. Let us know so we can re-run it.",
+    ),
+}
+
+# An unmapped code never crashes: it falls back to the raw code plus a generic,
+# still plain-language explanation (the test guards against this in practice).
+_CLIENT_FAILURE_FALLBACK = (
+    "This item was set aside during processing; the reason code is shown for "
+    "our reference. Let us know if it needs a closer look."
+)
+
+
+def client_failure_label(reason_code: str) -> tuple[str, str]:
+    """(What happened, Explanation) for a reason code, with a graceful fallback
+    for any code not in CLIENT_FAILURE_LABELS (raw code + generic sentence)."""
+    return CLIENT_FAILURE_LABELS.get(
+        reason_code, (reason_code, _CLIENT_FAILURE_FALLBACK)
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -608,12 +767,13 @@ def write_run_outputs(
     result: AssemblyResult,
     output_dir: str | Path,
     *,
+    sources: dict[str, SourceInfo] | None = None,
     source_summaries: list[dict[str, object]] | None = None,
     chunk_failures: list[FailureRecord] | None = None,
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
 ) -> None:
-    """Write the run's three review files.
+    """Write the run's review files.
 
     chunk_failures are whole-chunk failures (e.g. unparseable model output) that
     produced no candidate; they are recorded in failures.csv and counted
@@ -621,18 +781,49 @@ def write_run_outputs(
     run_config (engine/model/effort) is recorded in the manifest so a frozen
     run states exactly what produced it. grouping is the resolved group-notes
     plan (groups + warnings) so the manifest shows exactly what was combined.
+    sources maps source_id -> SourceInfo so the client-readable failures file can
+    show each firm/source title (absent -> the source_id is shown instead).
+
+    Alongside `failures.csv` (unchanged, internal) a `failures-client.csv` is
+    written with the same rows in the same order but plain labels/explanations.
     """
     chunk_failures = chunk_failures or []
     run_dir = Path(output_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
+    all_failures = [*result.failures, *chunk_failures]
     _write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
     _write_csv(
         run_dir / "failures.csv",
         FAILURE_COLUMNS,
-        [failure.to_row() for failure in [*result.failures, *chunk_failures]],
+        [failure.to_row() for failure in all_failures],
+    )
+    _write_csv(
+        run_dir / "failures-client.csv",
+        CLIENT_FAILURE_COLUMNS,
+        [_client_failure_row(failure, sources or {}) for failure in all_failures],
     )
     manifest = _manifest_text(result, source_summaries or [], chunk_failures, run_config, grouping)
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
+
+
+def _client_failure_row(
+    failure: FailureRecord, sources: dict[str, SourceInfo]
+) -> dict[str, str]:
+    """One failures-client.csv row: firm/source titles resolved from `sources`,
+    a plain What-happened label and Explanation, and the row's own message (or
+    reasoning) as human-readable evidence — no internal codes."""
+    what_happened, explanation = client_failure_label(failure.reason_code)
+    source_info = sources.get(failure.source_id)
+    notes = failure.message or failure.reasoning or failure.evidence_quote
+    return {
+        "Firm": source_info.firm if source_info else "",
+        "Source": source_info.source if source_info else failure.source_id,
+        "Sub-Asset Class": failure.sub_asset_class,
+        "View (proposed)": failure.view,
+        "What happened": what_happened,
+        "Explanation": explanation,
+        "Evidence / notes": notes,
+    }
 
 
 def _display_source(
@@ -655,7 +846,9 @@ def _display_source(
         SourceInfo(
             source_id=group_id,
             firm=members[0].firm,
-            date=" | ".join(member.date for member in members),
+            # Dates are document-extracted and often blank; join only the
+            # non-blank ones so a grouped row never shows a stray " | ".
+            date=" | ".join(member.date for member in members if member.date),
             source=" | ".join(member.source for member in members),
             url=" | ".join(member.url for member in members),
         ),

@@ -72,10 +72,50 @@ first with providers swapped: codex/gpt-5.5/high analyze, claude checker/
 arbiter/grouper). `POC_PLAN.md` locks the 3-phase build order and LLM-native
 ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 `trafilatura`, `htmldate`, `playwright` (+ chromium), and `python-docx` (the
-reader-summaries Word binder). 260 unittests pass.
+reader-summaries Word binder). 268 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-07: **Document-only dates, client-friendly failures file, and an
+  output guide (instruction set 5, no LLM calls).** Three deterministic
+  client-driven changes ahead of the 37-run. **(1) Dates come from the document
+  only — supersedes the 2026-07-07 fallback's precedence.** `create_snapshot`
+  now ALWAYS runs document-date extraction and sets `SourceRecord.date` to the
+  result (possibly ""), regardless of the source CSV — the CSV date is discarded
+  in ingestion (the `"csv"` branch of `date_from` is gone; `date_from` ∈
+  {`html`, `pdf_text`, `""`}). Format tightened to strict `DD/MM/YYYY` or blank:
+  `extract_pdf_text_date` no longer returns a bare month-year verbatim (a
+  month-year with no day now yields "", removing `_MONTH_YEAR_RE`); HTML keeps
+  htmldate's DD/MM/YYYY. The constants comment block and `ROADMAP.md`
+  (new client decision 11, amended decision 9) record the policy. Scout and the
+  group resolver still read the CSV date at metadata time (pre-ingest) —
+  unchanged. In `src/assemble.py` the grouped-row Date pipe-join now skips blanks
+  (join non-blank dates; all blank → blank field); titles/URLs still join every
+  member. **Live sanity check (3 real 37-list rows, no LLM):** Aberdeen HTML
+  (CSV 15/06/2026 → doc 15/06/2026, now sourced from the document not the CSV),
+  AEW PDF (CSV 01/04/2026 → blank; no full worded date on the cover, CSV date
+  correctly discarded), Columbia Threadneedle HTML (CSV 11/06/2026 → doc
+  03/07/2026, differs — document value used). **(2) `failures-client.csv`**
+  written alongside `failures.csv` (byte-identical internal file, proven by
+  test) from the same rows in the same order, with client-readable columns
+  (`Firm`, `Source`, `Sub-Asset Class`, `View (proposed)`, `What happened`,
+  `Explanation`, `Evidence / notes`). One module-level mapping
+  (`CLIENT_FAILURE_LABELS`) gives every internal `reason_code` a plain label +
+  one-sentence explanation (no jargon, no renames); an authoritative registry
+  `ALL_REASON_CODES` (built from `confidence`'s HARD_FAILURE/CHECKER_FAIL
+  constants + assemble/run literals) is test-enforced to be fully mapped, and a
+  scan test catches any new `from_candidate`/`from_chunk` literal reason code;
+  an unmapped code falls back to the raw code + a generic sentence (never a
+  crash). `write_run_outputs` gained a `sources` param so the client file can
+  show firm/source titles; `run.py` passes `source_infos`. **(3)
+  `output-guide.html`** at the repo root: one self-contained, plain-language
+  file (minimal inline CSS, no external assets) explaining every `output.csv`
+  column (incl. the View legend and that Date is the document's own date), the
+  `failures-client.csv` labels, and a short actions checklist. Full suite
+  `.venv/bin/python -m unittest discover -s tests` 260 → 268 green (updated
+  `DocumentDateFallbackTest` to the new precedence + a pipe-join-skips-blanks
+  test + 5 client-failures-file tests). `runs/`/`ground-truth/`/
+  `tmp/client-update/` untouched.
 - 2026-07-07: **Document-date fallback in ingest.** When a source CSV row has no
   date, `create_snapshot` now fills `SourceRecord.date` from the document itself
   (client requirement for the 37-run: search HTML/PDF for a date, else leave

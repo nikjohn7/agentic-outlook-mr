@@ -3,13 +3,18 @@ from __future__ import annotations
 import csv
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from src.assemble import (
+    ALL_REASON_CODES,
+    CLIENT_FAILURE_COLUMNS,
+    CLIENT_FAILURE_LABELS,
     FAILURE_COLUMNS,
     OUTPUT_COLUMNS,
     FailureRecord,
     assemble_candidates,
+    client_failure_label,
     write_run_outputs,
 )
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
@@ -126,6 +131,98 @@ class AssembleTest(unittest.TestCase):
         self.assertEqual([], result.output_rows)
         self.assertEqual(2, len(result.failures))
         self.assertEqual({"unresolved_conflict"}, {failure.reason_code for failure in result.failures})
+
+
+class ClientFailuresFileTest(unittest.TestCase):
+    """failures-client.csv: same rows as failures.csv, plain labels, every
+    reason code mapped, internal file unchanged."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1",
+                firm="Aberdeen Investments",
+                date="",
+                source="Emerging Markets Q2 2026 Outlook: Shifting Sands",
+                url="https://example.test/source",
+            )
+        }
+
+    def test_every_reason_code_is_mapped(self) -> None:
+        # A new code added anywhere in the codebase must be registered in
+        # ALL_REASON_CODES and given a client label, or this fails.
+        unmapped = ALL_REASON_CODES - set(CLIENT_FAILURE_LABELS)
+        self.assertEqual(set(), unmapped, f"reason codes with no client label: {unmapped}")
+        # No stray labels either — the mapping and the registry match exactly.
+        self.assertEqual(set(), set(CLIENT_FAILURE_LABELS) - ALL_REASON_CODES)
+
+    def test_source_from_candidate_reason_literals_are_registered(self) -> None:
+        # Guard against a new literal reason code slipping into failures without
+        # a registry entry: scan assemble.py/run.py for from_candidate/from_chunk
+        # string-literal first args and assert each is in ALL_REASON_CODES.
+        import re
+
+        root = Path(__file__).resolve().parents[1] / "src"
+        pattern = re.compile(
+            r'FailureRecord\.from_(?:candidate|chunk)\(\s*"([a-z_]+)"'
+        )
+        found: set[str] = set()
+        for name in ("assemble.py", "run.py"):
+            found |= set(pattern.findall((root / name).read_text(encoding="utf-8")))
+        self.assertTrue(found, "scan found no literal reason codes — pattern drifted")
+        self.assertEqual(set(), found - ALL_REASON_CODES, f"unregistered: {found - ALL_REASON_CODES}")
+
+    def test_unmapped_code_falls_back_gracefully(self) -> None:
+        what, explanation = client_failure_label("some_future_code")
+        self.assertEqual("some_future_code", what)
+        self.assertTrue(explanation)  # a real sentence, never a crash
+
+    def test_client_file_written_alongside_and_readable(self) -> None:
+        candidates = [_candidate(sub_asset_class="Not A Leaf", view="O")]
+        result = assemble_candidates(
+            candidates, sources=self.sources, taxonomy=self.taxonomy, snapshots={}
+        )
+        chunk_failure = FailureRecord.from_chunk(
+            "json_parse_error", "bad json", "source-1", "p6-10"
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(
+                result, temp_dir, sources=self.sources, chunk_failures=[chunk_failure]
+            )
+            internal = _read_csv(Path(temp_dir) / "failures.csv")
+            client = _read_csv(Path(temp_dir) / "failures-client.csv")
+
+        # Same rows, same order.
+        self.assertEqual(len(internal), len(client))
+        self.assertEqual(list(CLIENT_FAILURE_COLUMNS), list(client[0].keys()))
+        tax_row = client[0]
+        self.assertEqual("Aberdeen Investments", tax_row["Firm"])
+        self.assertEqual(
+            "Emerging Markets Q2 2026 Outlook: Shifting Sands", tax_row["Source"]
+        )
+        self.assertEqual("O", tax_row["View (proposed)"])
+        self.assertEqual("Skipped — asset not on the list", tax_row["What happened"])
+        self.assertTrue(tax_row["Explanation"])
+        # No internal jargon leaks into the reader columns.
+        self.assertNotIn("taxonomy_no_match", tax_row["What happened"])
+        self.assertNotIn("taxonomy_no_match", tax_row["Explanation"])
+
+    def test_internal_failures_file_is_unchanged_by_client_file(self) -> None:
+        # Writing with and without sources yields a byte-identical failures.csv.
+        candidates = [_candidate(sub_asset_class="Not A Leaf")]
+        result = assemble_candidates(
+            candidates, sources=self.sources, taxonomy=self.taxonomy, snapshots={}
+        )
+        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+            write_run_outputs(result, a)
+            write_run_outputs(result, b, sources=self.sources)
+            self.assertEqual(
+                (Path(a) / "failures.csv").read_bytes(),
+                (Path(b) / "failures.csv").read_bytes(),
+            )
 
 
 class CheckerAndArbiterAssemblyTest(unittest.TestCase):
@@ -373,6 +470,48 @@ class GroupedAssemblyTest(unittest.TestCase):
         self.assertEqual(
             result.candidate_count, len(result.output_rows) + len(result.failures)
         )
+
+    def test_grouped_date_pipe_join_skips_blank_dates(self) -> None:
+        # Document-extracted dates are often blank; a grouped row joins only the
+        # non-blank ones (no stray " | "), while titles/URLs still join every member.
+        sources = {
+            "source-1": replace(self.sources["source-1"], date=""),
+            "source-2": self.sources["source-2"],
+        }
+        candidates = [_candidate(), _candidate(source_id="source-2", locator="p.7")]
+
+        result = assemble_candidates(
+            candidates,
+            sources=sources,
+            taxonomy=self.taxonomy,
+            snapshots=self.snapshots,
+            page_counts=self.page_counts,
+            group_map=self.GROUP_MAP,
+        )
+
+        row = result.output_rows[0]
+        self.assertEqual("4/2/2026", row["Date"])
+        self.assertEqual(
+            "Quarterly Markets Review Q1 | Global Investment Outlook Q2", row["Source"]
+        )
+
+    def test_grouped_date_all_blank_yields_blank_field(self) -> None:
+        sources = {
+            "source-1": replace(self.sources["source-1"], date=""),
+            "source-2": replace(self.sources["source-2"], date=""),
+        }
+        candidates = [_candidate(), _candidate(source_id="source-2", locator="p.7")]
+
+        result = assemble_candidates(
+            candidates,
+            sources=sources,
+            taxonomy=self.taxonomy,
+            snapshots=self.snapshots,
+            page_counts=self.page_counts,
+            group_map=self.GROUP_MAP,
+        )
+
+        self.assertEqual("", result.output_rows[0]["Date"])
 
     def test_conflicting_views_across_grouped_docs_route_to_the_arbiter(self) -> None:
         candidates = [

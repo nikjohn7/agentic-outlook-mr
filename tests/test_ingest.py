@@ -307,8 +307,8 @@ class PrintToPdfIngestTest(unittest.TestCase):
 
 
 class DocumentDateFallbackTest(unittest.TestCase):
-    """A blank source-CSV date is filled from the document itself when the
-    document states one; otherwise Date stays blank. A CSV date always wins."""
+    """The source-CSV date is unreliable and never used: the run's Date always
+    comes from the document itself (strict DD/MM/YYYY) or stays blank."""
 
     DATED_HTML = (
         '<html><head><meta property="article:published_time" '
@@ -327,9 +327,10 @@ class DocumentDateFallbackTest(unittest.TestCase):
             "09/06/2026", extract_pdf_text_date("Mid-Year View\nJune 9, 2026")
         )
 
-    def test_pdf_month_year_is_kept_verbatim_not_fabricated(self) -> None:
+    def test_pdf_month_year_with_no_day_yields_blank(self) -> None:
+        # A bare month-year is not a full date; blank rather than a fabricated day.
         self.assertEqual(
-            "May 2026", extract_pdf_text_date("EMD review and outlook\nMay 2026")
+            "", extract_pdf_text_date("EMD review and outlook\nMay 2026")
         )
 
     def test_pdf_full_date_beats_month_year(self) -> None:
@@ -365,7 +366,9 @@ class DocumentDateFallbackTest(unittest.TestCase):
         self.assertEqual("10/06/2026", meta["date"])
         self.assertEqual("html", meta["date_from"])
 
-    def test_csv_date_wins_over_document_date(self) -> None:
+    def test_csv_date_is_ignored_document_date_used(self) -> None:
+        # The CSV row carries a date (_html_source: "6/1/2026"); ingestion must
+        # discard it and use the document's own date instead.
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch("src.ingest._fetch_html", return_value=self.DATED_HTML):
                 ingested = create_snapshot(_html_source(), temp_dir)
@@ -375,8 +378,23 @@ class DocumentDateFallbackTest(unittest.TestCase):
                 )
             )
 
-        self.assertEqual("6/1/2026", ingested.source.date)
-        self.assertEqual("csv", meta["date_from"])
+        self.assertEqual("10/06/2026", ingested.source.date)
+        self.assertEqual("html", meta["date_from"])
+
+    def test_csv_date_ignored_undated_document_leaves_blank(self) -> None:
+        # A CSV date must not survive even when the document has no date.
+        html = "<html><body><p>" + "undated prose " * 40 + "</p></body></html>"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html", return_value=html):
+                ingested = create_snapshot(_html_source(), temp_dir)
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual("", ingested.source.date)
+        self.assertEqual("", meta["date_from"])
 
     def test_undated_document_leaves_date_blank(self) -> None:
         source = replace(_html_source(), date="")

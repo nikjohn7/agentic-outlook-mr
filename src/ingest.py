@@ -54,17 +54,18 @@ _REQUIRED_SOURCE_FIELDS = ("firm", "source", "url")
 VISUAL_MARKUP_TAGS = ("img", "svg", "canvas", "figure")
 VISUAL_HEAVY_IMAGE_THRESHOLD = 5
 
-# Document-date fallback: when the source CSV has no date, the date the
-# document itself states is used; otherwise Date stays blank. For HTML the
-# fetched markup goes through htmldate (meta tags, JSON-LD, visible text —
-# publication date, not update date). For PDFs only the top of the first
-# page's text is scanned — cover/masthead territory — and only worded dates
-# are accepted: numeric forms (15/06/2026) are skipped as DD/MM-vs-MM/DD
-# ambiguous, and PDF metadata (CreationDate) is never used because a
+# Document dates: the source CSV's date is UNRELIABLE (client instruction,
+# 2026-07-07) and is never used for the run's outputs. The Date on every output
+# row comes only from the document itself, as strict DD/MM/YYYY, or stays blank.
+# For HTML the fetched markup goes through htmldate (meta tags, JSON-LD, visible
+# text — publication date, not update date), which already normalizes to
+# DD/MM/YYYY. For PDFs only the top of the first page's text is scanned —
+# cover/masthead territory — and only a full worded date (day + month + year)
+# is accepted: numeric forms (15/06/2026) are skipped as DD/MM-vs-MM/DD
+# ambiguous, a bare month-year ("June 2026") yields blank rather than
+# fabricating a day, and PDF metadata (CreationDate) is never used because a
 # downloaded or print-captured file carries the capture date, not the
-# publication date. A month-year ("June 2026") is kept verbatim rather than
-# fabricating a day. Full dates are normalized to DD/MM/YYYY, matching the
-# target ingestion list's format.
+# publication date. Result is always DD/MM/YYYY or "".
 PDF_DATE_SCAN_CHARS = 1500
 _MONTH_NAMES = (
     "January", "February", "March", "April", "May", "June",
@@ -78,7 +79,6 @@ _DAY_FIRST_DATE_RE = re.compile(
 _MONTH_FIRST_DATE_RE = re.compile(
     rf"\b({_MONTH_RE})\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+({_YEAR_RE})\b"
 )
-_MONTH_YEAR_RE = re.compile(rf"\b({_MONTH_RE})\s+({_YEAR_RE})\b")
 
 PRINTED_PDF_NAME = "printed.pdf"
 PRINT_NAVIGATION_TIMEOUT_MS = 60_000
@@ -295,8 +295,9 @@ def extract_html_date(html: str) -> str:
 
 def extract_pdf_text_date(snapshot_text: str) -> str:
     """Date stated near the top of a PDF's first page (see the constant block
-    above for what is and is not accepted). Full dates come back DD/MM/YYYY;
-    a bare month-year comes back verbatim ("June 2026"); otherwise ""."""
+    above for what is and is not accepted). Only a full worded date (day +
+    month + year) is returned, as DD/MM/YYYY; a bare month-year yields "" rather
+    than a fabricated day; otherwise ""."""
     window = snapshot_text[:PDF_DATE_SCAN_CHARS]
     day_first = _DAY_FIRST_DATE_RE.search(window)
     if day_first:
@@ -306,9 +307,6 @@ def extract_pdf_text_date(snapshot_text: str) -> str:
     if month_first:
         month_name, day, year = month_first.groups()
         return f"{int(day):02d}/{_MONTH_NAMES.index(month_name) + 1:02d}/{year}"
-    month_year = _MONTH_YEAR_RE.search(window)
-    if month_year:
-        return f"{month_year.group(1)} {month_year.group(2)}"
     return ""
 
 
@@ -336,16 +334,14 @@ def create_snapshot(
         snapshot_path = output_dir / "snapshot.txt"
         snapshot_path.write_text(snapshot_text, encoding="utf-8")
         chunks = _pdf_chunks(native_path, page_count)
-        if not source.date:
-            document_date = extract_pdf_text_date(snapshot_text)
+        document_date = extract_pdf_text_date(snapshot_text)
     else:
         html_path = output_dir / "snapshot.html"
         html = _fetch_html(source.resolved_url)
         html_path.write_text(html, encoding="utf-8")
         visual_markup = count_visual_markup(html)
         visual_heavy = is_visual_heavy(visual_markup)
-        if not source.date:
-            document_date = extract_html_date(html)
+        document_date = extract_html_date(html)
         snapshot_path = output_dir / "snapshot.txt"
         if visual_heavy:
             native_path = output_dir / PRINTED_PDF_NAME
@@ -360,13 +356,13 @@ def create_snapshot(
             snapshot_path.write_text(text, encoding="utf-8")
             chunks = _html_chunks(snapshot_path, len(text))
 
-    if source.date:
-        date_from = "csv"
-    elif document_date:
+    # The source CSV's date is unreliable (client instruction) and is discarded
+    # here: the run's Date comes only from the document itself, or stays blank.
+    if document_date:
         date_from = "pdf_text" if source.source_type == "pdf" else "html"
-        source = replace(source, date=document_date)
     else:
         date_from = ""
+    source = replace(source, date=document_date)
 
     (output_dir / "chunks.json").write_text(
         json.dumps([_chunk_to_dict(chunk) for chunk in chunks], indent=2),
