@@ -102,6 +102,11 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-08: Aegon row updated: Kyle's replacement link is a direct PDF —
+  downloaded through the ingest path (24p, real text layer, "July 2026
+  Global fixed income mid-year outlook"), saved to `manual-sources/` and
+  wired local (38 local files); splits regenerated, packing unchanged
+  (Aegon in split-10), groups intact.
 - 2026-07-08: Batch reduced to 97 rows: the Vanguard "midyear market
   outlook" row was REMOVED (its link serves pre-2026 content; Nikhil
   informing Kyle) — one Vanguard row remains on the local 2026 update PDF,
