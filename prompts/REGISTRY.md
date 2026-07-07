@@ -22,7 +22,10 @@ confidence numbers (house rule). Parsed by `summarize.parse_digest`. Default eng
 codex/gpt-5.5/medium (high-volume reading job; overridable). Inputs (appended JSON):
 source_id, firm, document_title, url, date, native_source_path, kept_calls[].
 
-### `summarize_firm_page.md` — v1 (2026-07-07)
+### `summarize_firm_page.md` — v1.1 (2026-07-07)
+
+v1.1: no em dashes anywhere in the page text (client style request after
+reviewing the smoke sample); use comma/colon/parentheses or split the sentence.
 
 Reader-summaries stage 2 (`src/summarize.py` `firmpages` command). One LLM call per
 FIRM, at the batch-combine step — reads that firm's stage-1 digests plus its

@@ -1,6 +1,6 @@
 # Per-firm reader page — reader-summary stage 2
 
-_Version: v1_
+_Version: v1.1_
 
 You are writing ONE reader-facing page summarizing a single firm's 2026 outlook,
 for a compiled publication of one-page-per-firm summaries. Your reader is an
@@ -56,6 +56,8 @@ This page is the highest-hallucination-risk output in the system. Therefore:
   alone.
 - Keep the whole page to roughly **500–800 words** — one printed page. Be dense
   and specific, not padded.
+- **Never use an em dash (—) anywhere in the page text.** Use a comma, a
+  colon, or parentheses instead, or split the sentence.
 
 ## Output contract
 
