@@ -91,16 +91,39 @@ local_file-wired list: 37/37 fetch-safe (12 manual PDFs wired incl. the
 image-only Manulife, OCR-validated 36 → 25,733 chars, date found), 36
 `looks_right` + 1 transient JPM error since wired local. Scout over the 37:
 0 groups proposed (all same-firm sources are distinct desk pieces). The
-operator command sheet is `tmp/37run-commands.md`; splits regenerate from the
-client's final CSV when it arrives. A second ~70-source batch follows; both
-batches combine into ONE deliverable (combined output CSV + crosscheck across
-all outputs + firm pages/binder at the combine step). Runs launch under
+operator command sheet is `tmp/37run-commands.md`. The client's FINAL list
+arrived 2026-07-07: `excel-file/Target Ingestion List AI.csv`, 98 rows (1–37 =
+the original batch, 38–98 = 61 new) — production planning now works from this
+file, and everything combines into ONE deliverable (combined output CSV +
+crosscheck across all outputs + firm pages/binder at the combine step). Runs launch under
 `nohup` (a wrapper teardown killed a run once on macOS), ≤2 parallel,
 staggered. `.venv` holds pdfplumber, pdfminer.six, trafilatura, htmldate,
 playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-07: Cost slice ran clean — **GO** (run `cost-slice-01` under
+  `client-runs/runs-07072026-37rows/`, 3 sources incl. Manulife, production
+  config, ~24 min, ~8 min/source, ~2.7 analyze + 1 checker calls/source).
+  Every 2026-07-07 change validated live: document-only dates proven
+  three-way (html / pdf_text / blank-inverts-CSV), OCR + scrambled
+  degradation capped at 74/review with correct commentary, failures-client
+  plain labels, digest grounded (4/4 spot-checked claims verbatim). One
+  finding: `src/summarize.py` `_work_dir_for` hardcodes `work/<run-id>` and
+  is incompatible with `--out-root` (bites digests/firmpages/bind only, not
+  runs; workaround = transient `work/<run-id>` symlink, fix = derive from
+  `run_dir.parent`). Billing window 12:00:30–12:29:21 UTC 2026-07-07.
+- 2026-07-07: Client sent the final list: `excel-file/Target Ingestion List
+  AI.csv`, **98 rows** (rows 1–37 = the original batch, 38–98 = 61 new;
+  header `Firm,Title,Source Link`, no date column). Supersedes the
+  "second ~70-source batch" plan — batch planning restarts from this file.
+  Kyle pre-flagged 11 sources for manual download (LSEG, OCBC, Allianz,
+  PIMCO, HSBC, Julius Baer, Man Group, Wells Fargo, Merrill, EFG
+  International, Vanguard); agreed filenames under
+  `client-runs/runs-07072026-98rows/manual-sources/`. Waiting on Nikhil's
+  downloads before wiring local_file, preflight over all 98, scout, and new
+  splits (~5–6 runs under the 20-cap). The 12 existing 37-batch local_file
+  mappings carry over.
 - 2026-07-07: Split CSVs rebuilt from the local_file-wired master (the four
   splits predated the manual-download wiring and pointed 11 rows at blocked
   URLs; rebuilt by firm — 11 workbook rows have blank Ids, so Ids are
@@ -133,33 +156,25 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
   digest/reconcile/firmpages/bind + python-docx binder; smoke over test2-01
   produced client-example-quality pages; sample later approved. Suite 250 →
   260 (incl. the document-date fallback tests folded into set 5's policy).
-- 2026-07-07: Checker-context wave (set 1): checker sees whole-file memory
-  (`{{memory}}`), implied calls always analyzed and never silently dropped,
-  deterministic stated-beats-implied with logged `implied_challenges_stated`
-  recommendation, dial-vs-commentary convention line (`conventions.md` v1.3,
-  `check_candidates.md` v1.7, `brain.md` v1.6).
-- 2026-07-07: Grouping layers 1 and 3 shipped (sets 2–3): `src/scout.py`
-  pre-run companion scout (37-list smoke: 0 groups, correctly conservative)
-  and `src/crosscheck.py` post-run firm cross-check (join key imported from
-  `src.eval`). Client's written answers recorded in `ROADMAP.md` the same
-  day. Suite 201 → 235.
-
 ## Next / Open
 
-- **Cost slice (set 8) is the GO/NO-GO gate before the splits**: launch
-  `tmp/instructions-8-cost-slice.md` (3 sources incl. Manulife, production
-  config, cost + first live pass of everything shipped 2026-07-07), review,
-  then Nikhil runs the four split commands from `tmp/37run-commands.md`
-  (≤2 parallel). Regenerate splits + re-run preflight/scout when the client's
-  final CSV arrives (wire local_file first).
-- Second ~70-source batch → one combined deliverable (combined CSV,
-  crosscheck across all batch outputs, firm pages + Word binder at the
-  combine step).
+- **98-row batch prep (in progress)**: Nikhil downloads the 11 pre-flagged
+  PDFs → wire local_file (carrying over the 12 existing 37-batch mappings) →
+  preflight over all 98 → scout/group check → generate ~5–6 split CSVs +
+  filled-out commands for Nikhil to run himself (≤2 parallel, nohup).
+  Decision pending: re-run all 98 fresh vs run only the 61 new rows and
+  combine with the four 37-batch split outputs at crosscheck time (~2.6×
+  LLM-cost difference).
+- Fix `summarize._work_dir_for` for `--out-root` runs (derive work dir from
+  `run_dir.parent`) before running per-split digests, or use the
+  `work/<run-id>` symlink workaround.
+- One combined final deliverable across all batch outputs: combined CSV,
+  crosscheck across every output.csv, firm pages + Word binder at the
+  combine step.
 - `runs/pilot-04` + `runs/pilot-04-rescored` remain disk-only (freeze
   pending user decision).
 - GT reconciliation with the Markets Recon team: test2 GT has ≥1 error (TRP
   UK IG Credit) + 6 not-grounded rows (`tmp/gt-reconciliation-test2.md`);
   earlier pilot GT disputes sent 2026-07-04, awaiting response.
-- Reconcile source count with client (user says 38, workbook CSV has 37).
 - Still open: fuller analyst-reviewed ground-truth set; acceptable model
   providers. Deferred work is tracked in `ROADMAP.md` (v1.2/v2 backlog).
