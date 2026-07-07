@@ -76,6 +76,25 @@ reader-summaries Word binder). 268 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-07: **37-batch prep, repo cleanup, and firm-page prompt v1.1.**
+  (1) Production-batch artifacts get their own tree: `client-runs/runs-07072026-37rows/`
+  (NOT `runs/`+`work/`, which stay test/pilot history) — the four split CSVs
+  (10/9/9/9 rows, every multi-source firm kept whole within one split) are
+  generated at `client-runs/runs-07072026-37rows/splits/`, and the fully
+  filled-out run/scout/preflight/digest/crosscheck commands are in
+  `tmp/37run-commands.md`; pending agent work: `tmp/instructions-6-preflight-37.md`
+  (adds `--out-root` to run.py + a 37-source link preflight) and
+  `tmp/instructions-8-cost-slice.md` (paid 2–3-source cost/health slice, the
+  GO/NO-GO gate before the splits). Split CSVs regenerate from the client's
+  final CSV when it arrives. (2) `prompts/summarize_firm_page.md` v1.1: em
+  dashes forbidden in page text (client style request after approving the
+  smoke sample; the sonnet/high tier passed review). (3) Disk cleanup
+  194M → 22M: deleted all pilot/smoke `work/` dirs (kept `work/test2-01`),
+  tmp page-render scratch, and executed instruction sets; the pilot-05 eval
+  spot-check pin now skips when its work snapshots are absent.
+  (4) `runs/test2-01` and `runs/pilot-05` force-added into git (both existed
+  only on disk); `runs/pilot-04`(+`-rescored`) remain disk-only. Suite 268
+  green (1 skip).
 - 2026-07-07: **Document-only dates, client-friendly failures file, and an
   output guide (instruction set 5, no LLM calls).** Three deterministic
   client-driven changes ahead of the 37-run. **(1) Dates come from the document
@@ -864,18 +883,18 @@ reader-summaries Word binder). 268 unittests pass.
   batch outputs — `src.crosscheck --outputs` already accepts multiple files
   for exactly this). Same-firm sources may straddle batches, so cross-batch
   overlap handling matters even more (see `ROADMAP.md`).
-- **Reader summaries (one-page-per-firm → Word doc): IMPLEMENTED 2026-07-07,
-  sample pending Nikhil's review.** `src/summarize.py` `digest`/`firmpages`/`bind`
-  (see the 2026-07-07 Recent Changes entry). The client compiles a document of
-  one-page-per-firm outlook summaries (example: `tmp/pdfs/Recons - 2026 Investment
-  Outlook Summaries - Markets Recon - Jan 2026 1.pdf`); design in `ROADMAP.md`
-  ("Reader summaries"). Smoke sample at `tmp/summaries-smoke/` (pages/ + sample.docx)
-  for review against the client example before running at scale; `claude/opus/medium`
-  is the agreed escalation if a page reads flat. Deferred: the v1.2 summary
-  verification pass (ROADMAP v1.2 item 7 — NOT built).
-- Freeze pending: `runs/pilot-05/` (and still `runs/pilot-04/` +
-  `runs/pilot-04-rescored/`) are on disk but not yet committed — `runs/` is
-  gitignored; freeze by force-add when the analyst review confirms.
+- **Reader summaries (one-page-per-firm → Word doc): IMPLEMENTED 2026-07-07
+  and sample APPROVED by Nikhil (sonnet/high tier stands; firm-page prompt
+  v1.1 adds the no-em-dash rule).** `src/summarize.py` `digest`/`firmpages`/
+  `bind` (see the 2026-07-07 Recent Changes entry); client example at
+  `tmp/pdfs/Recons - 2026 Investment Outlook Summaries - Markets Recon -
+  Jan 2026 1.pdf`; design in `ROADMAP.md` ("Reader summaries").
+  `claude/opus/medium` remains the escalation if a production page reads
+  flat. Deferred: the v1.2 summary verification pass (ROADMAP v1.2 item 7 —
+  NOT built).
+- Freeze pending: `runs/pilot-04/` + `runs/pilot-04-rescored/` are on disk
+  but not committed (`runs/` is gitignored). `runs/test2-01` and
+  `runs/pilot-05` were force-added 2026-07-07.
 - Pilot-05 fix list from the GT comparison (`runs/pilot-05/gt-comparison.md`):
   items (1)–(3) are **done** (2026-07-06, see Recent Changes). (1)
   materiality gate for forecast-delta evidence — DONE and CLOSED as
