@@ -339,6 +339,7 @@ def assemble_candidates(
     snapshots: dict[tuple[str, str], str],
     page_counts: dict[str, int] | None = None,
     scrambled_pages: dict[str, set[int]] | None = None,
+    ocr_pages: dict[str, set[int]] | None = None,
     visual_pages: dict[str, set[int]] | None = None,
     verdicts: dict[int, CheckVerdict] | None = None,
     arbiter: Arbiter | None = None,
@@ -349,6 +350,9 @@ def assemble_candidates(
     scrambled_pages maps source_id -> the set of column-interleaved page numbers
     (see src/ingest.detect_scrambled_page); a prose call citing one of them uses
     the degraded key-token check, capping confidence and forcing review.
+    ocr_pages maps source_id -> the set of image-only / low-text page numbers;
+    a prose call citing one gets the same degraded cap and review flag, with an
+    OCR-specific evidence message.
     visual_pages maps source_id -> pages from print-captured / visual-heavy
     sources where table/visual token misses should route to checker visual
     review instead of hard-failing on snapshot text.
@@ -370,6 +374,7 @@ def assemble_candidates(
         snapshot_text = snapshots.get((candidate.source_id, candidate.chunk_id), "")
         page_count = (page_counts or {}).get(candidate.source_id)
         source_scrambled = frozenset((scrambled_pages or {}).get(candidate.source_id, ()))
+        source_ocr = frozenset((ocr_pages or {}).get(candidate.source_id, ()))
         source_visual_pages = frozenset((visual_pages or {}).get(candidate.source_id, ()))
         verdict = (verdicts or {}).get(index)
         try:
@@ -380,6 +385,7 @@ def assemble_candidates(
                     snapshot_text=snapshot_text,
                     page_count=page_count,
                     scrambled_pages=source_scrambled,
+                    ocr_pages=source_ocr,
                     visual_pages=source_visual_pages,
                     verdict=verdict,
                     checker_enabled=checker_enabled,
@@ -873,11 +879,11 @@ def _output_row(
     if corroboration:
         commentary += f" {corroboration}"
     if scored.evidence_check.degraded:
-        commentary += (
-            " Evidence check: cited page detected as scrambled two-column text; "
-            "verbatim quote match degraded to key-token overlap "
-            "(confidence capped, review required)."
+        detail = scored.evidence_check.message or (
+            "cited page used degraded evidence verification "
+            "(confidence capped, review required)"
         )
+        commentary += f" Evidence check: {detail}."
     if scored.evidence_check.visual_unverified_by_text:
         commentary += (
             " Evidence check: snapshot text did not contain the table/visual tokens; "
@@ -1039,6 +1045,11 @@ def _manifest_text(
             scrambled = summary.get("scrambled_pages") or []
             if scrambled:
                 flag_text += f" [scrambled pages: {', '.join(f'p.{n}' for n in scrambled)}]"
+            ocr_pages = summary.get("ocr_pages") or []
+            if ocr_pages:
+                flag_text += f" [OCR pages: {', '.join(f'p.{n}' for n in ocr_pages)}]"
+            if summary.get("ocr_note"):
+                flag_text += f" [OCR note: {summary.get('ocr_note')}]"
             pages = summary.get("page_count")
             chunk_count = summary.get("chunk_count", 0)
             size = f"{pages}p / {chunk_count} chunks" if pages else f"{chunk_count} chunks"

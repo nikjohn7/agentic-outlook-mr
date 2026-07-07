@@ -129,6 +129,7 @@ def run_pipeline(
     snapshots: dict[tuple[str, str], str] = {}
     page_counts: dict[str, int] = {}
     scrambled_pages: dict[str, set[int]] = {}
+    ocr_pages: dict[str, set[int]] = {}
     visual_pages: dict[str, set[int]] = {}
     source_infos: dict[str, SourceInfo] = {}
     source_summaries: list[dict[str, object]] = []
@@ -143,6 +144,8 @@ def run_pipeline(
             page_counts[source.source_id] = ingested.page_count
         if ingested.scrambled_pages:
             scrambled_pages[source.source_id] = set(ingested.scrambled_pages)
+        if ingested.ocr_pages:
+            ocr_pages[source.source_id] = set(ingested.ocr_pages)
         source_visual_pages: set[int] = set()
         if (ingested.printed_pdf or ingested.visual_heavy) and ingested.page_count:
             source_visual_pages = set(range(1, ingested.page_count + 1))
@@ -219,6 +222,8 @@ def run_pipeline(
                 "visual_heavy": ingested.visual_heavy,
                 "printed_pdf": ingested.printed_pdf,
                 "scrambled_pages": list(ingested.scrambled_pages),
+                "ocr_pages": list(ingested.ocr_pages),
+                "ocr_note": ingested.ocr_note,
             }
         )
 
@@ -236,6 +241,7 @@ def run_pipeline(
         snapshots=snapshots,
         page_counts=page_counts,
         scrambled_pages=scrambled_pages,
+        ocr_pages=ocr_pages,
         visual_pages=visual_pages,
         verdicts=verdicts,
         arbiter=arbiter,

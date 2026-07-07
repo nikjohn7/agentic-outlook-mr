@@ -88,6 +88,7 @@ MIN_SPAN_MEANINGFUL_TOKENS = 4
 # (word order is no longer verified), so the score is capped just below the
 # High band and the row is flagged for review, and the degradation is recorded.
 SCRAMBLED_PROSE_CAP = 74
+DEGRADED_PROSE_CAP = SCRAMBLED_PROSE_CAP
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +222,7 @@ def evidence_passes(
     snapshot_text: str,
     *,
     scrambled_pages: frozenset[int] = frozenset(),
+    ocr_pages: frozenset[int] = frozenset(),
     visual_pages: frozenset[int] = frozenset(),
 ) -> EvidenceCheck:
     """Validate evidence according to its kind without using model judgment.
@@ -233,7 +235,32 @@ def evidence_passes(
     if candidate.evidence_kind == "prose":
         cited_page = _cited_page(candidate.locator)
         if cited_page is not None and cited_page in scrambled_pages:
-            return _degraded_prose_evidence_passes(candidate, snapshot_text, cited_page)
+            return _degraded_prose_evidence_passes(
+                candidate,
+                snapshot_text,
+                cited_page,
+                page_issue="scrambled",
+                message_detail="two-column interleave",
+            )
+        if cited_page is not None and cited_page in ocr_pages:
+            check = _prose_evidence_passes(candidate, snapshot_text)
+            if check.passed:
+                return EvidenceCheck(
+                    True,
+                    message=(
+                        f"page p.{cited_page} flagged OCR (image-only or low text layer); "
+                        "prose verbatim check passed on OCR text, but confidence is capped "
+                        "and review required"
+                    ),
+                    degraded=True,
+                )
+            return _degraded_prose_evidence_passes(
+                candidate,
+                snapshot_text,
+                cited_page,
+                page_issue="OCR",
+                message_detail="image-only or low text layer",
+            )
         return _prose_evidence_passes(candidate, snapshot_text)
     return _table_or_visual_evidence_passes(
         candidate,
@@ -249,6 +276,7 @@ def score_candidate(
     snapshot_text: str,
     page_count: int | None = None,
     scrambled_pages: frozenset[int] = frozenset(),
+    ocr_pages: frozenset[int] = frozenset(),
     visual_pages: frozenset[int] = frozenset(),
     verdict: CheckVerdict | None = None,
     checker_enabled: bool = False,
@@ -269,6 +297,7 @@ def score_candidate(
         candidate,
         snapshot_text,
         scrambled_pages=scrambled_pages,
+        ocr_pages=ocr_pages,
         visual_pages=visual_pages,
     )
     if not evidence_check.passed:
@@ -337,7 +366,7 @@ def score_candidate(
 
     # The verbatim guarantee was weakened to key-token overlap: cap below High.
     if evidence_check.degraded:
-        score = min(score, SCRAMBLED_PROSE_CAP)
+        score = min(score, DEGRADED_PROSE_CAP)
 
     if evidence_check.visual_unverified_by_text and not (
         checker_enabled and verdict is not None and verdict.all_pass
@@ -488,18 +517,30 @@ def _degraded_prose_evidence_passes(
     candidate: CandidateCall,
     snapshot_text: str,
     cited_page: int,
+    *,
+    page_issue: str,
+    message_detail: str,
 ) -> EvidenceCheck:
-    """Prose fallback for a scrambled (column-interleaved) page: the verbatim
-    check cannot succeed because the snapshot reorders the columns, so require
-    key-token overlap instead — the same weaker check table/visual evidence
-    uses. Every returned check is marked degraded so the score is capped and
-    the outcome is recorded for review."""
+    """Prose fallback for pages whose text layer cannot preserve source order.
+
+    Scrambled pages and OCR pages both get the same weaker key-token overlap
+    check. Every returned check is marked degraded so the score is capped and
+    the outcome is recorded for review.
+    """
     if _key_tokens_overlap(candidate.evidence_quote, snapshot_text):
-        return EvidenceCheck(True, degraded=True)
+        return EvidenceCheck(
+            True,
+            message=(
+                f"page p.{cited_page} flagged {page_issue} ({message_detail}); "
+                "prose verbatim check degraded to key-token overlap "
+                "(confidence capped, review required)"
+            ),
+            degraded=True,
+        )
     return EvidenceCheck(
         False,
         HARD_FAILURE_QUOTE,
-        f"page p.{cited_page} flagged scrambled (two-column interleave); "
+        f"page p.{cited_page} flagged {page_issue} ({message_detail}); "
         "prose verbatim check degraded to key-token overlap, which also failed",
         degraded=True,
     )

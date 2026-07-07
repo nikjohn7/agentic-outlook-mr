@@ -6,6 +6,9 @@ import csv
 import json
 import re
 import shutil
+import subprocess
+import tempfile
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -28,6 +31,13 @@ _BROWSER_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
+
+# Some manager sites are slow or intermittently reset requests. Plain fetches
+# get three 90s attempts, but 4xx anti-bot responses are not retried here.
+FETCH_TIMEOUT_SECONDS = 90
+FETCH_MAX_ATTEMPTS = 3
+FETCH_BACKOFF_SECONDS = (2, 8)
+FETCH_BROWSER_FALLBACK_STATUSES = frozenset({401, 403, 406, 429})
 
 # Source-CSV header aliases. A pilot-family CSV names five canonical fields;
 # each accepts any of these headers (case-insensitive, trimmed) so a real-world
@@ -115,6 +125,12 @@ SCRAMBLE_INTERIOR_MAX = 0.70  # not in the outer margins
 SCRAMBLE_MIN_SIDE_WORDS = 15  # each column must carry real text, not a sliver
 SCRAMBLE_COVERAGE_MAX = 0.12  # gutter is empty across ~all body rows
 
+# OCR candidates use the same 200 chars/page floor as confidence.py's PDF read
+# quality check. Pages below this are likely image-only, so their OCR text
+# replaces only that page's snapshot text when local OCR tools are available.
+OCR_MIN_CHARS_PER_PAGE = 200
+OCR_RENDER_DPI = 200
+
 
 @dataclass(frozen=True, slots=True)
 class SourceRecord:
@@ -146,6 +162,14 @@ class IngestedSource:
     visual_heavy: bool = False  # HTML likely carries views in graphics the text paths cannot see
     printed_pdf: bool = False  # visual_heavy HTML captured as print-to-PDF and analyzed as a PDF
     scrambled_pages: tuple[int, ...] = ()  # 1-indexed pages whose text layer is column-interleaved
+    ocr_pages: tuple[int, ...] = ()  # 1-indexed pages detected as image-only / low text layer
+    ocr_note: str = ""  # empty when no OCR issue; otherwise applied/skipped details
+
+
+@dataclass(frozen=True, slots=True)
+class HtmlFetchResult:
+    html: str
+    fetched_via: str
 
 
 def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
@@ -316,6 +340,8 @@ def create_snapshot(
     *,
     printer=None,
     downloader=None,
+    browser_fetcher=None,
+    ocr_runner=None,
 ) -> IngestedSource:
     """printer overrides the headless-browser print-to-PDF step, and downloader
     overrides the remote-PDF fetch (both for tests)."""
@@ -327,17 +353,28 @@ def create_snapshot(
     visual_heavy = False
     printed_pdf = False
     scrambled_pages: tuple[int, ...] = ()
+    ocr_pages: tuple[int, ...] = ()
+    ocr_note = ""
+    fetched_via = ""
     document_date = ""
     if source.source_type == "pdf":
         native_path = _copy_pdf(source, output_dir, downloader=downloader)
-        snapshot_text, page_count, scrambled_pages = _extract_pdf_text(native_path)
+        snapshot_text, page_count, scrambled_pages, ocr_pages, ocr_note = _extract_pdf_text(
+            native_path, ocr_runner=ocr_runner
+        )
         snapshot_path = output_dir / "snapshot.txt"
         snapshot_path.write_text(snapshot_text, encoding="utf-8")
         chunks = _pdf_chunks(native_path, page_count)
         document_date = extract_pdf_text_date(snapshot_text)
     else:
         html_path = output_dir / "snapshot.html"
-        html = _fetch_html(source.resolved_url)
+        html_result = _fetch_html(source.resolved_url, browser_fetcher=browser_fetcher)
+        if isinstance(html_result, str):  # Backcompat for tests that patch _fetch_html.
+            html = html_result
+            fetched_via = "requests"
+        else:
+            html = html_result.html
+            fetched_via = html_result.fetched_via
         html_path.write_text(html, encoding="utf-8")
         visual_markup = count_visual_markup(html)
         visual_heavy = is_visual_heavy(visual_markup)
@@ -346,7 +383,9 @@ def create_snapshot(
         if visual_heavy:
             native_path = output_dir / PRINTED_PDF_NAME
             (printer or print_url_to_pdf)(source.resolved_url, native_path)
-            snapshot_text, page_count, scrambled_pages = _extract_pdf_text(native_path)
+            snapshot_text, page_count, scrambled_pages, ocr_pages, ocr_note = _extract_pdf_text(
+                native_path, ocr_runner=ocr_runner
+            )
             snapshot_path.write_text(snapshot_text, encoding="utf-8")
             chunks = _pdf_chunks(native_path, page_count)
             printed_pdf = True
@@ -380,6 +419,9 @@ def create_snapshot(
                 "visual_heavy": visual_heavy,
                 "printed_pdf": printed_pdf,
                 "scrambled_pages": list(scrambled_pages),
+                "ocr_pages": list(ocr_pages),
+                "ocr_note": ocr_note,
+                "fetched_via": fetched_via,
             },
             indent=2,
         ),
@@ -395,6 +437,8 @@ def create_snapshot(
         visual_heavy=visual_heavy,
         printed_pdf=printed_pdf,
         scrambled_pages=scrambled_pages,
+        ocr_pages=ocr_pages,
+        ocr_note=ocr_note,
     )
 
 
@@ -422,14 +466,7 @@ def print_url_to_pdf(url: str, output_path: Path) -> None:
                 )
             except PlaywrightTimeoutError:
                 pass
-            for _ in range(MAX_CONSENT_DIALOGS):
-                try:
-                    page.get_by_role("button", name=CONSENT_BUTTON_PATTERN).first.click(
-                        timeout=2_000
-                    )
-                    page.wait_for_timeout(500)
-                except PlaywrightError:
-                    break
+            dismiss_consent_dialogs(page, playwright_error=PlaywrightError)
             # Scroll slowly enough for lazy images AND scroll-triggered JS
             # charts to render, then let chart animations finish before
             # printing (a fast pass leaves chart bodies blank in the PDF).
@@ -447,6 +484,39 @@ def print_url_to_pdf(url: str, output_path: Path) -> None:
             page.pdf(path=str(output_path), format="A4", print_background=True)
         finally:
             browser.close()
+
+
+def fetch_html_with_browser(url: str) -> str:
+    """Fetch rendered HTML via headless chromium for anti-bot-blocked pages."""
+    from playwright.sync_api import Error as PlaywrightError
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.goto(url, wait_until="load", timeout=PRINT_NAVIGATION_TIMEOUT_MS)
+            try:
+                page.wait_for_load_state(
+                    "networkidle", timeout=PRINT_NETWORK_IDLE_TIMEOUT_MS
+                )
+            except PlaywrightTimeoutError:
+                pass
+            dismiss_consent_dialogs(page, playwright_error=PlaywrightError)
+            return page.content()
+        finally:
+            browser.close()
+
+
+def dismiss_consent_dialogs(page, *, playwright_error=Exception) -> None:
+    """Best-effort shared dismissal for cookie/professional-investor overlays."""
+    for _ in range(MAX_CONSENT_DIALOGS):
+        try:
+            page.get_by_role("button", name=CONSENT_BUTTON_PATTERN).first.click(timeout=2_000)
+            page.wait_for_timeout(500)
+        except playwright_error:
+            break
 
 
 def count_visual_markup(html: str) -> dict[str, int]:
@@ -518,7 +588,7 @@ def _download_pdf(url: str, output_dir: Path) -> Path:
     """Fetch a remote PDF into output_dir, named from the URL path. Verifies the
     response is actually a PDF (`%PDF` magic) so an HTML error/consent page
     returned for a `.pdf` URL fails loudly instead of feeding pdfplumber junk."""
-    response = requests.get(url, timeout=60, headers={"User-Agent": _BROWSER_UA})
+    response = _request_get_with_retries(url)
     response.raise_for_status()
     if not response.content[:4] == b"%PDF":
         raise ValueError(
@@ -535,19 +605,100 @@ def _pdf_filename_from_url(url: str) -> str:
     return name if name.lower().endswith(".pdf") else f"{name}.pdf"
 
 
-def _extract_pdf_text(path: Path) -> tuple[str, int, tuple[int, ...]]:
+def _extract_pdf_text(
+    path: Path,
+    *,
+    ocr_runner=None,
+) -> tuple[str, int, tuple[int, ...], tuple[int, ...], str]:
     with pdfplumber.open(path) as pdf:
         text_parts: list[str] = []
         scrambled: list[int] = []
+        ocr_candidates: list[int] = []
         for page_number, page in enumerate(pdf.pages, start=1):
-            text_parts.append(page.extract_text() or "")
+            page_text = page.extract_text() or ""
+            text_parts.append(page_text)
+            if len(page_text.strip()) < OCR_MIN_CHARS_PER_PAGE:
+                ocr_candidates.append(page_number)
             if detect_scrambled_page(
                 page.extract_words(use_text_flow=False),
                 float(page.width),
                 float(page.height),
             ):
                 scrambled.append(page_number)
-        return "\n\n".join(text_parts), len(pdf.pages), tuple(scrambled)
+
+    ocr_note = ""
+    if ocr_candidates:
+        ocr_text, ocr_note = _ocr_pdf_pages(path, ocr_candidates, runner=ocr_runner)
+        for page_number, text in ocr_text.items():
+            if text.strip():
+                text_parts[page_number - 1] = text
+    return (
+        "\n\n".join(text_parts),
+        len(text_parts),
+        tuple(scrambled),
+        tuple(ocr_candidates),
+        ocr_note,
+    )
+
+
+def _ocr_pdf_pages(
+    path: Path,
+    pages: list[int],
+    *,
+    runner=None,
+) -> tuple[dict[int, str], str]:
+    """OCR selected PDF pages. Missing tools or page-level failures never crash.
+
+    Uses Poppler `pdftoppm` for page rendering and Tesseract for OCR. The caller
+    records the detected page numbers even when OCR cannot run.
+    """
+    missing = [tool for tool in ("pdftoppm", "tesseract") if shutil.which(tool) is None]
+    if missing:
+        return {}, f"ocr skipped: missing tool(s): {', '.join(missing)}"
+
+    runner = runner or subprocess.run
+    texts: dict[int, str] = {}
+    failures: list[str] = []
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+        for page_number in pages:
+            prefix = temp_path / f"page-{page_number}"
+            render = runner(
+                [
+                    "pdftoppm",
+                    "-f",
+                    str(page_number),
+                    "-l",
+                    str(page_number),
+                    "-r",
+                    str(OCR_RENDER_DPI),
+                    "-png",
+                    "-singlefile",
+                    str(path),
+                    str(prefix),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if render.returncode != 0:
+                failures.append(f"p.{page_number} render failed: {render.stderr.strip()[:120]}")
+                continue
+            image_path = prefix.with_suffix(".png")
+            ocr = runner(
+                ["tesseract", str(image_path), "stdout", "--psm", "6"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if ocr.returncode != 0:
+                failures.append(f"p.{page_number} OCR failed: {ocr.stderr.strip()[:120]}")
+                continue
+            texts[page_number] = ocr.stdout
+    note = f"ocr applied to pages: {', '.join(f'p.{page}' for page in sorted(texts))}"
+    if failures:
+        note = f"{note}; skipped: {'; '.join(failures)}" if texts else "ocr skipped: " + "; ".join(failures)
+    return texts, note
 
 
 def detect_scrambled_page(
@@ -632,10 +783,55 @@ def _html_chunks(
     return chunks
 
 
-def _fetch_html(url: str) -> str:
-    response = requests.get(url, timeout=30, headers={"User-Agent": _BROWSER_UA})
-    response.raise_for_status()
-    return response.text
+def _request_get_with_retries(url: str, *, session=None):
+    """GET with bounded retries for transient network and 5xx failures.
+
+    4xx responses are returned immediately after raise_for_status() fails; they
+    are not retried because auth/anti-bot blocks do not heal with repetition.
+    """
+    client = session or requests
+    last_error: Exception | None = None
+    for attempt in range(FETCH_MAX_ATTEMPTS):
+        try:
+            response = client.get(
+                url,
+                timeout=FETCH_TIMEOUT_SECONDS,
+                headers={"User-Agent": _BROWSER_UA},
+            )
+            if 500 <= response.status_code < 600 and attempt < FETCH_MAX_ATTEMPTS - 1:
+                _sleep_before_retry(attempt)
+                continue
+            response.raise_for_status()
+            return response
+        except requests.exceptions.HTTPError:
+            raise
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as exc:
+            last_error = exc
+            if attempt >= FETCH_MAX_ATTEMPTS - 1:
+                raise
+            _sleep_before_retry(attempt)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("request retry helper exhausted without a response")
+
+
+def _sleep_before_retry(attempt: int) -> None:
+    if attempt < len(FETCH_BACKOFF_SECONDS):
+        time.sleep(FETCH_BACKOFF_SECONDS[attempt])
+
+
+def _fetch_html(url: str, *, session=None, browser_fetcher=None) -> HtmlFetchResult:
+    try:
+        response = _request_get_with_retries(url, session=session)
+        return HtmlFetchResult(response.text, "requests")
+    except requests.exceptions.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        if status not in FETCH_BROWSER_FALLBACK_STATUSES:
+            raise
+    except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+        pass
+    html = (browser_fetcher or fetch_html_with_browser)(url)
+    return HtmlFetchResult(html, "browser")
 
 
 def _chunk_to_dict(chunk: Chunk) -> dict[str, str]:

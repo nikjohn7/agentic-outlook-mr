@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import requests
 import shutil
+import subprocess
 import tempfile
 import unittest
 from dataclasses import replace
@@ -9,10 +11,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.ingest import (
+    FETCH_MAX_ATTEMPTS,
+    HtmlFetchResult,
     PDF_DATE_SCAN_CHARS,
     SourceRecord,
     _download_pdf,
+    _extract_pdf_text,
+    _fetch_html,
+    _ocr_pdf_pages,
     _pdf_filename_from_url,
+    _request_get_with_retries,
     count_visual_markup,
     create_snapshot,
     detect_scrambled_page,
@@ -306,6 +314,142 @@ class PrintToPdfIngestTest(unittest.TestCase):
         self.assertTrue(all(chunk.chunk_id.startswith("char:") for chunk in ingested.chunks))
 
 
+class FetchRetryTest(unittest.TestCase):
+    class FakeResponse:
+        def __init__(
+            self,
+            status_code: int = 200,
+            *,
+            text: str = "<html>ok</html>",
+            content: bytes = b"%PDF body",
+        ) -> None:
+            self.status_code = status_code
+            self.text = text
+            self.content = content
+            self.headers = {"Content-Type": "application/pdf"}
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                error = requests.exceptions.HTTPError(f"{self.status_code} error")
+                error.response = self
+                raise error
+
+    class FakeSession:
+        def __init__(self, outcomes: list[object]) -> None:
+            self.outcomes = outcomes
+            self.calls = 0
+
+        def get(self, *args, **kwargs):
+            self.calls += 1
+            outcome = self.outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    def test_retry_succeeds_on_second_try(self) -> None:
+        session = self.FakeSession(
+            [requests.exceptions.Timeout("slow"), self.FakeResponse(text="ok")]
+        )
+
+        with patch("src.ingest.time.sleep"):
+            response = _request_get_with_retries("https://x.test/a", session=session)
+
+        self.assertEqual("ok", response.text)
+        self.assertEqual(2, session.calls)
+
+    def test_retry_exhausts_and_raises_last_timeout(self) -> None:
+        session = self.FakeSession(
+            [requests.exceptions.Timeout("slow")] * FETCH_MAX_ATTEMPTS
+        )
+
+        with patch("src.ingest.time.sleep"):
+            with self.assertRaises(requests.exceptions.Timeout):
+                _request_get_with_retries("https://x.test/a", session=session)
+
+        self.assertEqual(FETCH_MAX_ATTEMPTS, session.calls)
+
+    def test_4xx_raises_immediately(self) -> None:
+        session = self.FakeSession(
+            [self.FakeResponse(403), self.FakeResponse(200, text="should not fetch")]
+        )
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            _request_get_with_retries("https://x.test/a", session=session)
+
+        self.assertEqual(1, session.calls)
+
+    def test_5xx_retries(self) -> None:
+        session = self.FakeSession(
+            [self.FakeResponse(503), self.FakeResponse(200, text="recovered")]
+        )
+
+        with patch("src.ingest.time.sleep"):
+            response = _request_get_with_retries("https://x.test/a", session=session)
+
+        self.assertEqual("recovered", response.text)
+        self.assertEqual(2, session.calls)
+
+
+class BrowserFallbackFetchTest(unittest.TestCase):
+    def test_blocked_status_uses_browser_fallback(self) -> None:
+        session = FetchRetryTest.FakeSession([FetchRetryTest.FakeResponse(403)])
+        browser_calls: list[str] = []
+
+        def browser_fetcher(url: str) -> str:
+            browser_calls.append(url)
+            return "<html><p>browser body</p></html>"
+
+        result = _fetch_html(
+            "https://x.test/blocked",
+            session=session,
+            browser_fetcher=browser_fetcher,
+        )
+
+        self.assertEqual("browser", result.fetched_via)
+        self.assertIn("browser body", result.html)
+        self.assertEqual(["https://x.test/blocked"], browser_calls)
+
+    def test_requests_success_never_touches_browser(self) -> None:
+        session = FetchRetryTest.FakeSession(
+            [FetchRetryTest.FakeResponse(text="<html><p>request body</p></html>")]
+        )
+
+        def forbidden_browser(url: str) -> str:
+            raise AssertionError("browser fallback must not run")
+
+        result = _fetch_html(
+            "https://x.test/ok",
+            session=session,
+            browser_fetcher=forbidden_browser,
+        )
+
+        self.assertEqual("requests", result.fetched_via)
+        self.assertIn("request body", result.html)
+
+    def test_fallback_result_flows_into_snapshot_meta(self) -> None:
+        browser_result = "<html><body><p>" + "browser prose " * 50 + "</p></body></html>"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html") as fetch:
+                fetch.side_effect = lambda url, browser_fetcher=None: (
+                    HtmlFetchResult(browser_result, "browser")
+                )
+                ingested = create_snapshot(
+                    _html_source(),
+                    temp_dir,
+                    browser_fetcher=lambda url: browser_result,
+                )
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            snapshot = ingested.snapshot_text_path.read_text(encoding="utf-8")
+
+        self.assertEqual("browser", meta["fetched_via"])
+        self.assertIn("browser prose", snapshot)
+
+
 class DocumentDateFallbackTest(unittest.TestCase):
     """The source-CSV date is unreliable and never used: the run's Date always
     comes from the document itself (strict DD/MM/YYYY) or stays blank."""
@@ -501,6 +645,7 @@ class RemotePdfTest(unittest.TestCase):
         # A .pdf URL that actually returns an HTML consent/error page must fail
         # loudly, not feed junk to pdfplumber.
         class FakeResponse:
+            status_code = 200
             content = b"<!doctype html><html>Access denied</html>"
             headers = {"Content-Type": "text/html"}
 
@@ -513,6 +658,40 @@ class RemotePdfTest(unittest.TestCase):
                     _download_pdf("https://x.test/a.pdf", Path(temp_dir))
 
         self.assertIn("did not return a PDF", str(ctx.exception))
+
+
+class OcrPdfTest(unittest.TestCase):
+    def test_extract_pdf_text_records_low_text_pages_and_replaces_with_ocr(self) -> None:
+        def fake_runner(command, **kwargs):
+            if command[0] == "pdftoppm":
+                Path(command[-1]).with_suffix(".png").write_text("image", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+            if command[0] == "tesseract":
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout="OCR text says Global Equities are overweight.",
+                    stderr="",
+                )
+            raise AssertionError(command)
+
+        text, page_count, scrambled_pages, ocr_pages, ocr_note = _extract_pdf_text(
+            FIXTURE_PRINTED_PDF,
+            ocr_runner=fake_runner,
+        )
+
+        self.assertEqual(1, page_count)
+        self.assertEqual((), scrambled_pages)
+        self.assertEqual((1,), ocr_pages)
+        self.assertIn("Global Equities", text)
+        self.assertIn("ocr applied", ocr_note)
+
+    def test_ocr_missing_tools_gracefully_returns_no_text(self) -> None:
+        with patch("src.ingest.shutil.which", return_value=None):
+            text_by_page, note = _ocr_pdf_pages(FIXTURE_PRINTED_PDF, [1])
+
+        self.assertEqual({}, text_by_page)
+        self.assertIn("missing tool", note)
 
 
 if __name__ == "__main__":

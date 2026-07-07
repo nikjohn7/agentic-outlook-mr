@@ -22,7 +22,9 @@ check with a confidence cap + review flag), `src/assemble.py`
 source-CSV loading via the optional `local_file` column, snapshots, chunk
 boundaries, visual-heavy detection,
 deterministic scrambled-page (column-interleave) detection, Playwright
-print-to-PDF capture of visual-heavy HTML),
+print-to-PDF capture of visual-heavy HTML, retry-hardened plain fetches,
+browser fallback for blocked HTML, and per-page OCR for image-only PDF text
+layers),
 and `src/llm.py` (swappable headless `claude -p` / `codex exec`, with
 `{{name}}` template-var injection). Output rows are the 10 workbook columns
 plus `confidence`, `band`, `review_flag`, `basis`, `checker_strength`, and
@@ -72,10 +74,26 @@ first with providers swapped: codex/gpt-5.5/high analyze, claude checker/
 arbiter/grouper). `POC_PLAN.md` locks the 3-phase build order and LLM-native
 ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 `trafilatura`, `htmldate`, `playwright` (+ chromium), and `python-docx` (the
-reader-summaries Word binder). 268 unittests pass.
+reader-summaries Word binder). Tesseract 5.5.2 is installed for OCR. 291
+unittests pass.
 
 ## Recent Changes
 
+- 2026-07-07: **Ingest hardening for production preflight.** Plain HTML/PDF
+  fetches now share 3 attempts, 90s per-attempt timeouts, exponential backoff,
+  retry on timeout/connection/5xx only, and no retry for 4xx. Blocked HTML
+  statuses (401/403/406/429) and exhausted timeout/connection failures fall
+  back to Playwright HTML capture with shared consent-dialog handling, recording
+  `fetched_via` in `ingest_meta.json`. PDF extraction now detects pages below
+  the 200 chars/page floor, OCRs them with Poppler `pdftoppm` + Tesseract, writes
+  post-OCR snapshot text, records `ocr_pages`/`ocr_note`, and threads OCR pages
+  through `run.py` -> `assemble.py` -> `confidence.py` for the same degraded
+  prose cap/review path as scrambled pages, with OCR-specific commentary.
+  Manulife live validation: 19 pages, 36 pre-OCR chars -> 25,733 post-OCR chars,
+  all pages OCR'd, document date 22/06/2026 found. `preflight-3` over the
+  local-file-wired 37-source list: 36 ok / 1 failed / 0 suspect; Eastspring fixed,
+  AEW and Manulife moved from suspect to looks_right, and J.P. Morgan's PDF was
+  the only new failed connection. Suite 279 -> 291 green (1 skip).
 - 2026-07-07: **`--out-root` for run.py, `client-runs/` convention, and the
   37-source link preflight (`src/preflight.py`, instruction set 6).** **(1)
   `--out-root <dir>`** threaded through `run_pipeline`: when given, a run writes

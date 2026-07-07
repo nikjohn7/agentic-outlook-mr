@@ -434,6 +434,59 @@ class ScrambledPageProseTest(unittest.TestCase):
         self.assertFalse(check.degraded)
 
 
+class OcrPageProseTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def test_ocr_page_prose_verbatim_pass_is_capped_and_flagged(self) -> None:
+        quote = "global equities remain attractive"
+        candidate = _candidate(locator="p.3", evidence_quote=quote)
+
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(f"We think {quote} in the current cycle."),
+            ocr_pages=frozenset({3}),
+        )
+
+        self.assertEqual(SCRAMBLED_PROSE_CAP, result.confidence)
+        self.assertEqual("review", result.review_flag)
+        self.assertTrue(result.evidence_check.degraded)
+        self.assertIn("OCR", result.evidence_check.message)
+
+    def test_ocr_page_prose_falls_back_to_key_tokens(self) -> None:
+        candidate = _candidate(
+            locator="p.3",
+            evidence_quote="global equities remain attractive",
+            taxonomy_match="semantic",
+            call_language="directional",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("attractive global equities remain a stated stance"),
+            ocr_pages=frozenset({3}),
+        )
+
+        self.assertTrue(check.passed)
+        self.assertTrue(check.degraded)
+        self.assertIn("OCR", check.message)
+
+    def test_ocr_page_prose_failure_has_ocr_specific_message(self) -> None:
+        candidate = _candidate(locator="p.3", evidence_quote="platinum rhodium palladium")
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("unrelated source text about rates"),
+            ocr_pages=frozenset({3}),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertTrue(check.degraded)
+        self.assertIn("OCR", check.message)
+
+
 class VisualUnverifiedByTextTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
