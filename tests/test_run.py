@@ -13,6 +13,7 @@ from src.run import (
     analyze_source,
     load_sources,
     resolve_engine_settings,
+    run_pipeline,
     _check_candidates,
     _chunk_content,
     _html_chunk_text,
@@ -20,6 +21,9 @@ from src.run import (
     _resolve_groups,
 )
 from src.schemas import CandidateCall
+
+
+FIXTURE_PRINTED_PDF = Path(__file__).parent / "fixtures" / "printed_page.pdf"
 
 
 def _pdf_source() -> SourceRecord:
@@ -427,6 +431,90 @@ class GroupResolutionTest(unittest.TestCase):
 
         self.assertEqual([], groups)
         self.assertIn("proceeds ungrouped", warnings[0])
+
+
+class RunPipelineOutRootTest(unittest.TestCase):
+    """--out-root reroots both the run dir and the work dir; absent keeps the
+    default runs/<id> + work/<id> paths."""
+
+    def _source(self) -> SourceRecord:
+        return SourceRecord(
+            source_id="fixture-doc",
+            firm="Fixture Firm",
+            date="",
+            source="Fixture Outlook",
+            url="https://example.test/fixture",
+            resolved_url="https://example.test/fixture",
+            source_type="pdf",
+            local_path=FIXTURE_PRINTED_PDF,
+        )
+
+    def _runner(self):
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            # The checker prompt is the only one carrying native_source_path in
+            # its appended inputs; everything else is an analyze chunk call.
+            if "native_source_path" in prompt:
+                out = json.dumps(
+                    {
+                        "verdicts": [
+                            {
+                                "index": 0,
+                                "supports_view": "pass",
+                                "forward_looking": "pass",
+                                "asset_match": "pass",
+                                "evidence_strength": "decisive",
+                                "note": "",
+                            }
+                        ]
+                    }
+                )
+            else:
+                out = _candidate_json("p1-1")
+            return subprocess.CompletedProcess(command, 0, stdout=out, stderr="")
+
+        return runner
+
+    def test_out_root_reroots_run_and_work_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            out_root = Path(temp_dir) / "client-runs" / "batch"
+            result, _failures, run_dir = run_pipeline(
+                sources=[self._source()],
+                run_id="pf-01",
+                engine="claude",
+                model="fable",
+                effort="high",
+                runner=self._runner(),
+                out_root=out_root,
+            )
+
+            self.assertEqual(out_root / "pf-01", run_dir)
+            self.assertTrue((out_root / "pf-01" / "output.csv").exists())
+            self.assertTrue((out_root / "work" / "pf-01" / "fixture-doc").is_dir())
+            # Nothing leaked into the default trees.
+            self.assertFalse((Path(temp_dir) / "runs").exists())
+            self.assertFalse((Path(temp_dir) / "work").exists())
+
+    def test_default_paths_are_runs_and_work(self) -> None:
+        import os
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cwd = os.getcwd()
+            os.chdir(temp_dir)
+            try:
+                _result, _failures, run_dir = run_pipeline(
+                    sources=[self._source()],
+                    run_id="pf-02",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    runner=self._runner(),
+                )
+            finally:
+                os.chdir(cwd)
+
+            self.assertEqual(Path("runs") / "pf-02", run_dir)
+            self.assertTrue((Path(temp_dir) / "runs" / "pf-02" / "output.csv").exists())
+            self.assertTrue((Path(temp_dir) / "work" / "pf-02" / "fixture-doc").is_dir())
 
 
 def _call_candidate() -> CandidateCall:

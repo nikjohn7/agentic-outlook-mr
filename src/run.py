@@ -68,6 +68,7 @@ def run_pipeline(
     analyze_prompt: str | Path = ANALYZE_PROMPT,
     brain_text: str | None = None,
     conventions_text: str | None = None,
+    out_root: str | Path | None = None,
 ):
     """Ingest each source, analyze every chunk, then check, score, and assemble.
 
@@ -89,7 +90,16 @@ def run_pipeline(
     taxonomy_block = taxonomy.grouped_block()
     brain = brain_text if brain_text is not None else _brain_text()
     conventions = conventions_text if conventions_text is not None else _conventions_text()
-    work_dir = Path("work") / run_id
+    # Default paths (out_root absent) are exactly today's: work/<id> and runs/<id>.
+    # An out_root reroots both under it: <out_root>/work/<id> and <out_root>/<id> —
+    # so a production batch keeps all its artifacts out of the test/pilot trees.
+    if out_root is not None:
+        base = Path(out_root)
+        work_dir = base / "work" / run_id
+        run_dir = base / run_id
+    else:
+        work_dir = Path("work") / run_id
+        run_dir = Path("runs") / run_id
 
     group_map: dict[str, str] = {}
     grouping: dict[str, object] | None = None
@@ -241,7 +251,6 @@ def run_pipeline(
     if group_notes_text:
         run_config["grouper"] = f"{grouper_engine}/{grouper_model}/{grouper_effort}"
         run_config["group notes"] = group_notes_path or "(inline)"
-    run_dir = Path("runs") / run_id
     write_run_outputs(
         result,
         run_dir,
@@ -701,6 +710,13 @@ def main() -> int:
         default="low",
         help="reasoning effort for the group-notes resolver (default low)",
     )
+    parser.add_argument(
+        "--out-root",
+        help="optional root for this run's artifacts: writes to <out-root>/<run-id>/ "
+        "and <out-root>/work/<run-id>/ instead of runs/<run-id> and work/<run-id> "
+        "(used to keep a production batch out of the test/pilot trees). Default keeps "
+        "today's paths.",
+    )
     parser.add_argument("--ingest-only", action="store_true")
     args = parser.parse_args()
 
@@ -708,7 +724,11 @@ def main() -> int:
     enforce_source_limit(sources)
 
     if args.ingest_only:
-        work_dir = Path("work") / args.run_id
+        work_dir = (
+            Path(args.out_root) / "work" / args.run_id
+            if args.out_root
+            else Path("work") / args.run_id
+        )
         for source in sources:
             create_snapshot(source, work_dir)
         return 0
@@ -758,6 +778,7 @@ def main() -> int:
         grouper_engine=args.grouper_engine,
         grouper_model=grouper_model,
         grouper_effort=grouper_effort,
+        out_root=args.out_root,
     )
     kept = len(result.output_rows)
     failed = len(result.failures) + len(chunk_failures)

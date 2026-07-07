@@ -5,6 +5,24 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `preflight_content_check.md` — v1 (2026-07-07)
+
+The link preflight's one content-sanity step (`src/preflight.py`, instruction
+set 6). Runs once, batched over every SUCCESSFULLY fetched source in a sweep.
+Per source it gets the firm, the expected title, and the first ~400 characters
+of the captured snapshot text, and returns a categorical verdict only —
+`looks_right` (the opening text plausibly belongs to the titled document) or
+`suspect` (looks like a consent/cookie wall, professional-investor gate, login /
+404 / access-denied page, bare listing/nav page, marketing teaser, or a
+different document/firm than the title claims) plus one short reason. No scores
+or numbers (house rule: deterministic scoring; the LLM never emits numbers), and
+it judges only that the fetch landed on the right content, never the document's
+quality. A failed call degrades every source to `unchecked` in
+`src/preflight.py`, never a crash. Default engine codex/gpt-5.5/medium
+(overridable; the only live call in the tool). Parsed by
+`preflight.parse_content_verdicts`. No template vars. Inputs (appended JSON):
+`sources[]` with `index`, `firm`, `expected_title`, `snapshot_head`.
+
 ### `summarize_digest.md` — v1 (2026-07-07)
 
 Reader-summaries stage 1 (`src/summarize.py` `digest` command). One LLM call per

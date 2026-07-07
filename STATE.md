@@ -76,6 +76,50 @@ reader-summaries Word binder). 268 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-07: **`--out-root` for run.py, `client-runs/` convention, and the
+  37-source link preflight (`src/preflight.py`, instruction set 6).** **(1)
+  `--out-root <dir>`** threaded through `run_pipeline`: when given, a run writes
+  to `<out-root>/<run-id>/` and `<out-root>/work/<run-id>/` instead of
+  `runs/<run-id>` / `work/<run-id>` (honoured by `--ingest-only` too); absent
+  keeps today's paths byte-for-byte. This is how the production batch keeps its
+  artifacts out of the test/pilot trees. **(2) `client-runs/` gitignored** (same
+  convention as `runs/`: ignored, frozen deliverables force-added when the batch
+  is committed). **(3) `src/preflight.py`** — a standalone sweep (NOT a pipeline
+  run, so the 20-source cap does NOT apply and is not weakened for real runs):
+  `python -m src.preflight --sources <csv> --out-dir <dir> [--engine/--model/
+  --effort] [--no-llm]`. It loops `create_snapshot` per source (ingest reused
+  wholesale — no new fetch logic), each wrapped so one failure never stops the
+  sweep, recording ok/FAILED (+exception message), source_type, page_count or
+  snapshot char count, visual_heavy/printed_pdf, and the document-extracted date
+  + provenance (`date`/`date_from`). Loader prefers `load_target_sources`
+  (preserving `Id`s), falling back to `load_pilot_sources` for other pilot-family
+  CSVs. Then ONE batched codex/gpt-5.5/medium content-sanity call (new prompt
+  `prompts/preflight_content_check.md` + REGISTRY): per successfully-fetched
+  source it sees firm + expected title + first ~400 chars and returns a
+  categorical `looks_right`/`suspect`(+reason) only — no scores (house rule); a
+  failed call degrades every source to `unchecked`, never a crash. Outputs
+  `preflight.csv` (15 cols incl. `content_check`) + `preflight-report.md`
+  (summary, FAILED list first, then suspects, then a date-extraction table);
+  downloaded PDFs / printed pages stay under `<out-dir>/work/`. **Live 37-sweep**
+  (`client-runs/runs-07072026-37rows/preflight/`, the only live LLM call): **30
+  ok / 7 FAILED / 3 suspect / 0 unchecked**; 12 native PDFs + 16 print-captured
+  = 28 PDFs on disk. **FAILED (7):** all 6 Invesco APAC links (5 HTML + 1 PDF)
+  return **HTTP 406 Not Acceptable** and Manulife's macro outlook returns **403
+  Forbidden** — anti-bot gates on `requests.get`, not bad links per se (a
+  browser fetch or different links may be needed; out of scope here). **Suspect
+  (3):** AllianceBernstein Equity Outlook (audience gate), CI Global BoC note
+  (seismic.com server-unavailable body), Federated Hermes Eurozone (investor
+  gate) — all consent/audience walls, correctly flagged. **Date extraction
+  (validates the document-only policy at scale):** 17/30 dated, **all 17 from
+  HTML** (htmldate), **0 from PDF text** — every one of the 12 fetched PDFs came
+  back blank because none carries a full worded day-month-year in the first
+  1500 chars of page 1 (numeric/month-year covers correctly rejected), exactly
+  as the strict policy intends; 13 blank total. Ran against the workbook copy of
+  the list; re-run cheaply when the client's final CSV (possibly different links)
+  arrives. Suite 268 → **279 green** (1 skip): +2 out-root (rerooted vs default
+  paths) +9 preflight (sweep ok/FAILED-continues, content-check mapping +
+  degrade + parser, CSV/report shape, loader). `client-runs/` uncommitted;
+  `runs/`/`ground-truth/`/`tmp/client-update/` untouched.
 - 2026-07-07: **37-batch prep, repo cleanup, and firm-page prompt v1.1.**
   (1) Production-batch artifacts get their own tree: `client-runs/runs-07072026-37rows/`
   (NOT `runs/`+`work/`, which stay test/pilot history) — the four split CSVs
