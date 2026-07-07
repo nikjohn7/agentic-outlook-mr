@@ -5,6 +5,42 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `summarize_digest.md` — v1 (2026-07-07)
+
+Reader-summaries stage 1 (`src/summarize.py` `digest` command). One LLM call per
+source, generated with each run — the ONLY reader-summary stage that reads
+documents. Receives the native document (attached as an absolute
+`native_source_path` the prompt instructs the model to open, mirroring the
+checker's visual route), that source's kept output rows (`kept_calls`), and the
+source's rolling `memory.md` (via `{{memory}}`). Emits a structured JSON digest —
+firm/document_title/url/date, `themes[]` (label + summary + named specifics and
+figures), and `stances[]` (asset_class + categorical stance word + detail) — an
+internal artifact optimized for faithful density, not prose. Hard grounding: state
+only what the document/calls/memory contain; every figure/name/quote must appear
+in the source material; the stance summary must agree with the kept calls; no
+confidence numbers (house rule). Parsed by `summarize.parse_digest`. Default engine
+codex/gpt-5.5/medium (high-volume reading job; overridable). Inputs (appended JSON):
+source_id, firm, document_title, url, date, native_source_path, kept_calls[].
+
+### `summarize_firm_page.md` — v1 (2026-07-07)
+
+Reader-summaries stage 2 (`src/summarize.py` `firmpages` command). One LLM call per
+FIRM, at the batch-combine step — reads that firm's stage-1 digests plus its
+RECONCILED final calls (Task 2 deterministic reconcile over the run outputs +
+cross-check verdicts), NEVER the original documents. Writes a one-page markdown
+summary in the client publication's format: `# Firm` heading, a framing paragraph,
+themed `## ` sections chosen to fit the firm's material with bullets carrying named
+specifics/figures, and a `## Sources` list of `[title](url)` links. Hard grounding:
+introduce no content absent from the digests; stance statements must match the
+reconciled calls; an `unresolved` final call (the firm's documents differ) is
+described in-line as a divergence, never silently collapsed to one side. Length
+disciplined to ~500–800 words (one printed page). Single-source firms pass through
+the same call for a consistent voice. Parsed by `summarize.parse_firm_page` (requires
+the `# ` heading + a `## Sources` section). Default engine claude/sonnet/high (digest
+synthesis + editorial prose); the agreed escalation if a sample reads flat is
+claude/opus/medium. Inputs (appended JSON): firm, digests[], final_calls[] (with
+`unresolved`/`views`/`divergence` for unresolved keys), sources[].
+
 ### `crosscheck_conflicts.md` — v1 (2026-07-07)
 
 The post-run firm cross-check's one agent step (`src/crosscheck.py`, v1 pre-37

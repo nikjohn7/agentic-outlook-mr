@@ -68,6 +68,12 @@ gitignored):
    outputs; same-view overlaps auto-marked; conflicting groups reviewed by
    one cheap agent pass into a "similar" report with a needs-human flag.
    Purely additive report; never modifies run outputs.
+4. `tmp/instructions-4-reader-summaries.md` — the reader-summaries feature
+   (see "Reader summaries" section below): per-source digest, deterministic
+   reconciled-calls stopgap over the crosscheck verdicts, per-firm page
+   synthesis, `python-docx` binder, smoke run on the frozen second test.
+   Fully unattended — `needs_human` conflicts surface as in-page divergence
+   notes, nothing blocks.
 
 Layering rationale: the scout catches genuine companions *before* the run so
 in-run assembly/arbitration resolves overlap with full context (as it did for
@@ -75,6 +81,54 @@ the T. Rowe Price and Wellington pairs in the second test); the cross-check is
 the post-hoc safety net for everything the scout conservatively left
 ungrouped, and it works across runs (the 20-items-per-run cap means the 37
 sources span at least two runs).
+
+## Production batches (context, 2026-07-07)
+
+The client sends the ~37-source list first, then a second CSV of roughly 70
+more sources. **The final outputs of both batches are combined into one
+deliverable.** Consequences: the post-run firm cross-check (and later the
+v1.2 firm-reconcile) must run across ALL batch outputs, not per batch —
+`src.crosscheck --outputs` accepting multiple output files is the designed
+entry point; same-firm sources may straddle batches as well as runs; and the
+one-page reader summaries (below) are generated per run but bound into a
+single Word document at the combine step.
+
+## Reader summaries (client request, 2026-07-07)
+
+The client compiles a reader-facing document of one-page firm summaries
+(example: `tmp/pdfs/Recons - 2026 Investment Outlook Summaries - Markets
+Recon - Jan 2026 1.pdf`) and asked for a Word-document output of a one-page
+summary per document analysed, to feed that compilation. Assessment:
+**add-on, not a new build**, but the example's editorial density (themed
+sections, named specifics, figures) exceeds what the call-extraction
+artifacts retain, so:
+
+- **One page per FIRM — confirmed 2026-07-07.** Two-stage design:
+  - **Stage 1, per-source digest (runs with each run):** one LLM call per
+    source — reads the native document (checker-style visual read),
+    grounded by that source's kept calls (quote-verified) and `memory.md`,
+    emits a structured digest (themes, named specifics, figures, stance per
+    asset class, title/URL). The only stage that reads documents.
+  - **Stage 2, per-firm synthesis (once, at the batch-combine step):** one
+    LLM call per firm — receives all that firm's stage-1 digests plus the
+    firm's RECONCILED final calls (post-crosscheck, never raw per-run
+    rows, so the narrative cannot contradict the combined CSV), writes the
+    one-page narrative (framing paragraph, themed sections, Sources list
+    linking every document). Reads digests only — cheap even for Aberdeen
+    ×7. Single-source firms still pass through stage 2 for a consistent
+    voice.
+  - Rationale for two stages over one-call-per-firm: a firm's sources can
+    straddle runs and batches, so document reading must happen
+    incrementally per run while firm-page writing happens once at the end;
+    also avoids stuffing 7 PDFs into one degraded-attention call.
+- **Word assembly is deterministic**: `python-docx` merge of all per-firm
+  pages into one file (page break per firm), done once at the
+  batch-combine step. POC delivers clean structure (title, headings,
+  bullets, hyperlinks); client branding is applied by their team, not us.
+- Honesty note: a reader-facing narrative is the highest hallucination-risk
+  artifact in the system. v1 mitigation is grounding (calls + memory in the
+  prompt, instruction to state only what the document says) + analyst skim;
+  a verification pass over summaries is the v1.2 item below.
 
 ## v1.2 backlog
 
@@ -113,6 +167,11 @@ sources span at least two runs).
 6. **Near-leaf / fuzzy matching in the cross-check** (v1 joins on exact
    firm+leaf only): catch "US Duration" vs "US Treasuries"-style adjacent
    overlaps across same-firm sources.
+7. **Summary verification pass:** spot-check each one-page reader summary's
+   claims (names, figures, quotes) against the source document,
+   checker-style, before it ships — the reader summaries are the
+   highest-hallucination-risk output and v1 relies on grounding + analyst
+   skim only.
 
 ## v2 backlog
 

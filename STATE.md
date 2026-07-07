@@ -71,10 +71,69 @@ of visual-heavy HTML), `pilot-03` (first with checker + arbiter), `pilot-04`
 first with providers swapped: codex/gpt-5.5/high analyze, claude checker/
 arbiter/grouper). `POC_PLAN.md` locks the 3-phase build order and LLM-native
 ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`, `playwright` (+ chromium). 144 unittests pass.
+`trafilatura`, `htmldate`, `playwright` (+ chromium), and `python-docx` (the
+reader-summaries Word binder). 250 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-07: **Shipped the reader-summaries feature (pre-37 wave instruction set
+  4): two LLM stages plus a deterministic binder, in `src/summarize.py`.** Produces
+  the reader-facing Word document of one-page-per-FIRM outlook summaries the client
+  requested (modeled on `tmp/pdfs/Recons - 2026 Investment Outlook Summaries...pdf`).
+  Two stages plus a code-only reconcile and binder, because a firm's sources can
+  straddle runs and batches. **(1) `digest` command — stage 1, per-source, run-time,
+  the only document-reading stage.** One LLM call per source (or a `--sources`
+  subset): attaches the native document the way the checker's visual route does (an
+  absolute `native_source_path` in the JSON inputs the prompt opens), grounded by
+  that source's kept `output.csv` rows + rolling `memory.md`, emits a structured
+  digest JSON (themes / named specifics+figures / per-asset stances). Sources are
+  mapped back from the run's OWN artifacts — `work/<id>/<source>/memory.md` header
+  gives firm+title+source_id, `chunks.json` locates the native doc, and kept rows
+  (with per-source url/date de-pipe-joined from grouped combined rows) come from
+  `output.csv`; no ad-hoc re-parse. Default codex/gpt-5.5/medium. **(2) Task 2
+  deterministic reconcile (pure code, no LLM).** N run outputs + the `crosscheck.csv`
+  over them → one final call set per (firm, leaf): single→final; all-same-view→that
+  view once (keep highest-confidence row, stable tie-break); conflicting+`superseded`
+  →the more-current row (most recent date, then confidence); conflicting+`same_call`
+  →shared substance kept once (highest confidence); conflicting+`needs_human`/failed/
+  absent-verdict→BOTH views kept, flagged `unresolved` and never silently
+  side-picked. Firm/leaf keying reuses `src.eval` normalization (imported). This is
+  the v1 stopgap for the v1.2 dual-confidence firm-reconcile (ROADMAP item 1) — kept
+  small, not grown toward dual-confidence. **(3) `firmpages` command — stage 2, per
+  firm, batch-combine time.** One claude/sonnet/high call per firm: the firm's
+  digests + reconciled calls → a one-page markdown summary (framing paragraph, themed
+  `## ` sections, bullets, `unresolved` divergences noted in-line, `## Sources` link
+  list) in the example's format. Reads digests only, never documents. **No human
+  intervention**: `needs_human`/unresolved flows through as an in-page divergence
+  note, nothing blocks. A multi-source firm with no `--crosscheck` **fails loudly**
+  (never synthesizes conflicting rows without verdicts); single-source firms pass
+  through the same call. **(4) `bind` command — deterministic `python-docx` merge**
+  (no LLM): title page + one firm per page (page break between), firm as H1, sections
+  as H2, bullets as Word lists, Sources as hyperlinked titles; content byte-stable
+  across runs (proven by test). Clean structure only — client applies branding.
+  Every command takes an explicit `--out-dir`/`--out`; nothing writes under `runs/`.
+  New prompts `summarize_digest.md` v1 + `summarize_firm_page.md` v1 (both hard-
+  require grounding: no unsourced figures/names/quotes, stances match calls; no
+  confidence numbers). **New dependency `python-docx` (1.2.0) installed into `.venv`.**
+  **Smoke run** over frozen `runs/test2-01` into `tmp/summaries-smoke/` (5 live LLM
+  calls, the only ones): crosscheck `--no-llm` over the single output (0 conflicts) →
+  `digest` for T. Rowe Price's 2 sources + BlackRock (3 codex calls) → `firmpages`
+  for both firms (2 claude/sonnet/high calls) → `bind` to `sample.docx`. Pages 698
+  (BlackRock) / 648 (T. Rowe Price) words, both inside the ~500–800 target; the docx
+  carried 2 firm H1s + themed H2s + Sources. The T. Rowe Price page reads at the
+  client-example quality — dense, themed, grounded figures (WTI toward $100/bbl,
+  Energy +25.7% YTD), stances matching the reconciled calls, and the April-vs-March
+  positioning shift described as a temporal evolution rather than a silent
+  side-pick. One digest echoed a corrected title ("Q3 2026" read off the BlackRock
+  document body vs the run metadata's "Q2 2026") — worth an eye at scale but a faithful
+  read, not a hallucination. Sample pending Nikhil's review before running at scale;
+  `claude/opus/medium` is the agreed escalation if a page reads flat. 15 new
+  stub-runner tests (digest plumbing: native doc + calls + memory reach the prompt;
+  reconcile: one per bucket incl. unresolved-keeps-both and conflicting-without-
+  crosscheck; firmpages loud-fail on multi-source-without-crosscheck + single-source
+  pass-through; binder page/heading count + content-stability). Full suite
+  `.venv/bin/python -m unittest discover -s tests` 235 → 250 green.
+  `tmp/summaries-smoke/` stays uncommitted; `runs/` untouched (read-only inputs).
 - 2026-07-07: **Shipped the checker-context wave (pre-37 wave instruction set
   1): checker sees whole-file memory, deterministic stated-beats-implied, and a
   dial-vs-commentary convention line.** Implements the three client decisions
@@ -738,6 +797,22 @@ ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
   post-run firm cross-check are all implemented and unit-tested. Then: API cost
   test on a small slice (measures the final v1 system), then the 37-source run
   (≥2 runs under the 20-item cap).
+- **Two production batches, one combined deliverable** (client, 2026-07-07):
+  after the ~37-source batch, the client sends a second CSV of ~70 sources;
+  the final outputs of both batches are combined into ONE deliverable
+  (combined output CSV, and the post-run firm cross-check runs across ALL
+  batch outputs — `src.crosscheck --outputs` already accepts multiple files
+  for exactly this). Same-firm sources may straddle batches, so cross-batch
+  overlap handling matters even more (see `ROADMAP.md`).
+- **Reader summaries (one-page-per-firm → Word doc): IMPLEMENTED 2026-07-07,
+  sample pending Nikhil's review.** `src/summarize.py` `digest`/`firmpages`/`bind`
+  (see the 2026-07-07 Recent Changes entry). The client compiles a document of
+  one-page-per-firm outlook summaries (example: `tmp/pdfs/Recons - 2026 Investment
+  Outlook Summaries - Markets Recon - Jan 2026 1.pdf`); design in `ROADMAP.md`
+  ("Reader summaries"). Smoke sample at `tmp/summaries-smoke/` (pages/ + sample.docx)
+  for review against the client example before running at scale; `claude/opus/medium`
+  is the agreed escalation if a page reads flat. Deferred: the v1.2 summary
+  verification pass (ROADMAP v1.2 item 7 — NOT built).
 - Freeze pending: `runs/pilot-05/` (and still `runs/pilot-04/` +
   `runs/pilot-04-rescored/`) are on disk but not yet committed — `runs/` is
   gitignored; freeze by force-add when the analyst review confirms.

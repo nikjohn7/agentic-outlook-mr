@@ -2,3 +2,4 @@ pdfplumber
 trafilatura
 htmldate
 requests
+python-docx
