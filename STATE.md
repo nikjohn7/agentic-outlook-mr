@@ -102,6 +102,14 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-08: 98-batch manual round 2 wired: Allspring, Morgan Stanley,
+  Nuveen, Carmignac, Schwab, RBC Wealth ×5 (PDFs), BofA Private Bank (txt —
+  byte-identical to the Merrill transcript, both BofA CIO brands; flagged
+  for Kyle), Vanguard update replaced by the 3-Jul-2026 PDF. Master now
+  wires 37 local files; splits regenerated (20/20/20/19/19). Confirmation
+  sweep (`preflight-confirm/`): 15/15 ok, 0 suspect. Sole unresolved row:
+  Vanguard "midyear market outlook" URL serves wrong-year content (htmldate
+  09/05/2023) — must be fixed or consciously dropped before split-3.
 - 2026-07-08: 98-batch prep. **(1)** `.txt` transcript local_file support in
   ingest (video sources; text path, char-range locators, `date_from:
   txt_text`; unsupported extensions hard-error) — commit ab4598d, suite 291 →
