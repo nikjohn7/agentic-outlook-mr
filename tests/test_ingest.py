@@ -4,10 +4,12 @@ import json
 import shutil
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 from src.ingest import (
+    PDF_DATE_SCAN_CHARS,
     SourceRecord,
     _download_pdf,
     _pdf_filename_from_url,
@@ -16,6 +18,8 @@ from src.ingest import (
     detect_scrambled_page,
     detect_source_type,
     enforce_source_limit,
+    extract_html_date,
+    extract_pdf_text_date,
     is_visual_heavy,
     load_pilot_sources,
     resolve_url,
@@ -300,6 +304,95 @@ class PrintToPdfIngestTest(unittest.TestCase):
         self.assertFalse(ingested.printed_pdf)
         self.assertIsNone(ingested.page_count)
         self.assertTrue(all(chunk.chunk_id.startswith("char:") for chunk in ingested.chunks))
+
+
+class DocumentDateFallbackTest(unittest.TestCase):
+    """A blank source-CSV date is filled from the document itself when the
+    document states one; otherwise Date stays blank. A CSV date always wins."""
+
+    DATED_HTML = (
+        '<html><head><meta property="article:published_time" '
+        'content="2026-06-10T09:00:00+00:00"/></head><body><p>'
+        + "outlook prose " * 40
+        + "</p></body></html>"
+    )
+
+    def test_pdf_day_first_date_is_normalized(self) -> None:
+        self.assertEqual(
+            "15/06/2026", extract_pdf_text_date("Published 15 June 2026\nOutlook")
+        )
+
+    def test_pdf_month_first_date_is_normalized(self) -> None:
+        self.assertEqual(
+            "09/06/2026", extract_pdf_text_date("Mid-Year View\nJune 9, 2026")
+        )
+
+    def test_pdf_month_year_is_kept_verbatim_not_fabricated(self) -> None:
+        self.assertEqual(
+            "May 2026", extract_pdf_text_date("EMD review and outlook\nMay 2026")
+        )
+
+    def test_pdf_full_date_beats_month_year(self) -> None:
+        self.assertEqual(
+            "15/06/2026",
+            extract_pdf_text_date("May 2026 review, published 15 June 2026"),
+        )
+
+    def test_pdf_numeric_and_absent_dates_stay_blank(self) -> None:
+        self.assertEqual("", extract_pdf_text_date("Published 15/06/2026"))
+        self.assertEqual("", extract_pdf_text_date("2026 Midyear Outlook"))
+
+    def test_pdf_date_beyond_first_page_window_is_ignored(self) -> None:
+        text = "x" * PDF_DATE_SCAN_CHARS + " 15 June 2026"
+        self.assertEqual("", extract_pdf_text_date(text))
+
+    def test_html_meta_date_is_extracted_day_first(self) -> None:
+        self.assertEqual("10/06/2026", extract_html_date(self.DATED_HTML))
+
+    def test_blank_csv_date_is_filled_from_html(self) -> None:
+        source = replace(_html_source(), date="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html", return_value=self.DATED_HTML):
+                ingested = create_snapshot(source, temp_dir)
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual("10/06/2026", ingested.source.date)
+        self.assertEqual("10/06/2026", meta["date"])
+        self.assertEqual("html", meta["date_from"])
+
+    def test_csv_date_wins_over_document_date(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html", return_value=self.DATED_HTML):
+                ingested = create_snapshot(_html_source(), temp_dir)
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual("6/1/2026", ingested.source.date)
+        self.assertEqual("csv", meta["date_from"])
+
+    def test_undated_document_leaves_date_blank(self) -> None:
+        source = replace(_html_source(), date="")
+        html = "<html><body><p>" + "undated prose " * 40 + "</p></body></html>"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html", return_value=html):
+                ingested = create_snapshot(source, temp_dir)
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual("", ingested.source.date)
+        self.assertEqual("", meta["date_from"])
 
 
 class HeaderAliasTest(unittest.TestCase):

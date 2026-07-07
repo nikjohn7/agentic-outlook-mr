@@ -72,10 +72,30 @@ first with providers swapped: codex/gpt-5.5/high analyze, claude checker/
 arbiter/grouper). `POC_PLAN.md` locks the 3-phase build order and LLM-native
 ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
 `trafilatura`, `htmldate`, `playwright` (+ chromium), and `python-docx` (the
-reader-summaries Word binder). 250 unittests pass.
+reader-summaries Word binder). 260 unittests pass.
 
 ## Recent Changes
 
+- 2026-07-07: **Document-date fallback in ingest.** When a source CSV row has no
+  date, `create_snapshot` now fills `SourceRecord.date` from the document itself
+  (client requirement for the 37-run: search HTML/PDF for a date, else leave
+  blank). HTML (incl. visual-heavy print-captured pages) goes through
+  `htmldate.find_date` on the fetched markup (`original_date=True` — publication,
+  not update date), normalized to DD/MM/YYYY (the target list's format). PDFs
+  scan only the first `PDF_DATE_SCAN_CHARS` (1500) of first-page text for worded
+  dates: "15 June 2026"/"June 15, 2026" → DD/MM/YYYY; a bare month-year ("May
+  2026") is kept verbatim rather than fabricating a day; numeric forms
+  (15/06/2026) are skipped as DD/MM-vs-MM/DD ambiguous. PDF metadata
+  (CreationDate) is deliberately never used — verified that downloaded/
+  print-captured files carry the capture date, not publication. A CSV date
+  always wins; provenance recorded in `ingest_meta.json` (`date`, `date_from`:
+  csv/html/pdf_text/""). `run.py` builds `SourceInfo` from `ingested.source`
+  so the filled date flows into `output.csv`; scout and the group resolver
+  stay metadata-time (pre-fetch) and unchanged. Live check on two real
+  no-date rows from the 37 list: Aberdeen House View → 05/05/2026, State
+  Street courage-to-follow-the-fundamentals → 29/05/2026. 10 new tests
+  (extraction rules, window cap, csv-wins, blank-stays-blank, meta
+  provenance); suite 250 → 260 green.
 - 2026-07-07: **Shipped the reader-summaries feature (pre-37 wave instruction set
   4): two LLM stages plus a deterministic binder, in `src/summarize.py`.** Produces
   the reader-facing Word document of one-page-per-FIRM outlook summaries the client

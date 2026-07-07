@@ -140,7 +140,9 @@ def run_pipeline(
         source_infos[source.source_id] = SourceInfo(
             source_id=source.source_id,
             firm=source.firm,
-            date=source.date,
+            # ingested.source, not source: create_snapshot fills a blank date
+            # from the document itself (see ingest's document-date fallback).
+            date=ingested.source.date,
             source=source.source,
             url=source.url,
         )
