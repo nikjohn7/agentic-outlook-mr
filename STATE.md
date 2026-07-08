@@ -1,6 +1,6 @@
 # Markets Recon / Allocator Pro POC — State
 
-_Last updated: 2026-07-07_
+_Last updated: 2026-07-08_
 
 ## Current State
 
@@ -16,41 +16,53 @@ categorical judgments, never numbers.
 
 The deterministic spine: `src/taxonomy.py` (exact 396-leaf validation),
 `src/schemas.py` (LLM candidate contract; `basis` stated/forecast_delta/
-inferred; multi-span `evidence_quote`), `src/confidence.py` (verbatim quote /
-table-visual key-token evidence gates, Rubric v2 scoring off the checker's
-categorical `evidence_strength`, read-quality floors, and degraded-prose paths
-for scrambled and OCR pages: key-token fallback, cap 74, forced review),
+inferred; multi-span `evidence_quote`), `src/confidence.py` (tiered prose
+quote gate: exact → normalized (NFKC, dehyphenate, drop glyph-only lines) →
+bounded ordered-token subsequence (cap 74/review), recorded as `quote_match`;
+table-visual key-token route; Rubric v2 scoring off the checker's categorical
+`evidence_strength`, read-quality floors, and degraded-prose paths for
+scrambled and OCR pages: key-token fallback, cap 74, forced review),
 `src/assemble.py` (`output.csv`/`failures.csv`/`failures-client.csv`/
 `manifest.md`; cross-leaf dedup; deterministic stated-beats-implied with
 `implied_challenges_stated` logged; O-vs-U sibling tripwire), `src/ingest.py`
 (header-alias CSV loading with optional `local_file`, snapshots, chunking,
 visual-heavy detection + Playwright print-to-PDF, scrambled-page detection,
-retry-hardened fetches with browser fallback for blocked HTML, per-page OCR
-for image-only PDFs, document-date extraction), and `src/llm.py` (headless
-`claude -p` / `codex exec`, `{{name}}` template vars). Dates are
+retry-hardened fetches with browser fallback for blocked HTML — the browser
+path retries too — per-page OCR for image-only PDFs, document-date
+extraction; a per-source ingest failure becomes an `ingest_error` failure
+row and the run continues), and `src/llm.py` (headless `claude -p` /
+`codex exec`, `{{name}}` template vars). Dates are
 document-only (client decision 11): the CSV date is discarded; HTML via
 htmldate, PDF via a first-page worded-date scan; strict DD/MM/YYYY or blank;
 `date_from` ∈ {html, pdf_text, ""}; PDF metadata never used (carries capture
 dates). Output rows are the 10 workbook columns plus `confidence`, `band`,
-`review_flag`, `basis`, `checker_strength`, `call_language`; grouped rows
-pipe-join Source/URL and non-blank Dates; one-hot columns intentionally
-omitted. `output-guide.html` (repo root) explains the output and
-failures-client files to the client. A `.claude/settings.json` hook blocks
-commits containing Claude/Anthropic self-attribution — commit messages stay
-plain. Tests: `.venv/bin/python -m unittest discover -s tests` (the `-s
-tests` is required); 291 pass (1 skip).
+`review_flag`, `basis`, `checker_strength`, `call_language`, `quote_match`;
+grouped rows pipe-join Source/URL and non-blank Dates; one-hot columns
+intentionally omitted. `output-guide.html` (repo root) explains the output
+and failures-client files to the client (plain-language labels for every
+internal reason_code, mapping test-enforced complete). A
+`.claude/settings.json` hook blocks commits containing Claude/Anthropic
+self-attribution — commit messages stay plain. Tests: `.venv/bin/python -m
+unittest discover -s tests` (the `-s tests` is required); 311 pass (1 skip).
 
 The run pipeline (`src/run.py`, ≤20 sources per run, `--out-root` to redirect
-artifacts) runs up to four LLM steps with per-step engine/model/effort flags:
+artifacts) runs up to five LLM steps with per-step engine/model/effort flags:
 analyze (per-chunk, rolling `memory.md`, `prompts/analyze_chunk.md` +
 `conventions.md` + `brain.md`), checker (`check_candidates.md`, one call per
 source, sees the whole-file memory; any `fail` hard-fails, `thin` caps below
-High), conflict arbiter (`arbitrate_conflict.md`), and a group-notes resolver
-(`resolve_groups.md`). Both engine CLIs read PDF pages visually, so image
-content reaches the model even when snapshot text is thin. The proven
-production config (pilot-05 onward): analyze codex/gpt-5.5/high, checker
-claude/opus/medium, arbiter claude/sonnet/high, grouper claude/sonnet/medium.
-Prompts are versioned in `prompts/REGISTRY.md`.
+High), conflict arbiter (`arbitrate_conflict.md`), a group-notes resolver
+(`resolve_groups.md`), and a tier-3 visual quote verifier
+(`verify_quote_visual.md`, default claude/sonnet/medium) that fires only for
+quotes failing the deterministic tiers: categorical present_verbatim /
+present_paraphrase / absent, fail-closed, verbatim kept capped+review as
+`quote_match: visual`, paraphrase dropped, absent dropped as
+`quote_not_found_visual`; tier counts and invocations logged in manifest.md.
+Both engine CLIs read PDF pages visually, so image content reaches the model
+even when snapshot text is thin. The proven production config (pilot-05
+onward): analyze codex/gpt-5.5/high, checker claude/opus/medium, arbiter
+claude/sonnet/high, grouper claude/sonnet/medium; the cost slice
+(`cost-slice-01`, 3 sources incl. Manulife) validated it live at ~8
+min/source. Prompts are versioned in `prompts/REGISTRY.md`.
 
 Standalone tools around the pipeline: `src/eval.py` (deterministic GT
 comparison harness + judgment worksheet; never influences a run),
@@ -71,8 +83,9 @@ Run history (all blind; GT never opened during a run): pilots 01–06 over the
 multi-span quotes, scrambled-page rescue, the visual/dial evidence route for
 print-captured grids, Rubric v2, the inference tier, cross-leaf dedup, the
 reduce/neutralize→resulting-stance convention, and country-granularity
-inference. The materiality gate is code-live but CLOSED as unexercised (0
-forecast_delta in three runs). Quality at close of phase 2: pilot-06 true
+inference. The materiality gate is live and first fired in production
+98b-split1 (1 forecast_delta kept, 1 delta_below_materiality dropped).
+Quality at close of phase 2: pilot-06 true
 recall 85.4% (view agreement 92.5%, overreach 1/106); test2-01 raw recall
 76.4% / grounded-adjusted ~90.4%, view agreement 92.6%, quote check 142/142,
 precision 1 overreach / 74 model_only. GT sets: `ground-truth/pilot-*.csv`
@@ -80,28 +93,44 @@ precision 1 overreach / 74 model_only. GT sets: `ground-truth/pilot-*.csv`
 not-grounded rows pending analyst reconciliation). Frozen in git:
 `runs/test2-01`, `runs/test2-01-rescored`, `runs/pilot-05`, pilot-06
 judgment artifacts; disk-only: `runs/pilot-04`(+`-rescored`); `work/` keeps
-only `test2-01`. `runs/` and `client-runs/` are gitignored; frozen artifacts
-are force-added.
+only `test2-01` (pilot work dirs deleted in the 194M→22M cleanup; the
+pilot-05 eval spot-check skips without its snapshots). `runs/` and
+`client-runs/` are gitignored; frozen artifacts are force-added.
 
-Production batch state: the ~37-source batch (18 firms; Aberdeen ×7, Invesco
-×6, State Street ×5, Columbia ×3, PGIM ×2, Impax ×2 + 12 singles) runs as 4
-splits (10/9/9/9, every multi-source firm whole within one split) under
-`client-runs/runs-07072026-37rows/` via `--out-root`. Preflight-3 over the
-local_file-wired list: 37/37 fetch-safe (12 manual PDFs wired incl. the
-image-only Manulife, OCR-validated 36 → 25,733 chars, date found), 36
-`looks_right` + 1 transient JPM error since wired local. Scout over the 37:
-0 groups proposed (all same-firm sources are distinct desk pieces). The
-operator command sheet is `tmp/37run-commands.md`. The client's FINAL list
-arrived 2026-07-07: `excel-file/Target Ingestion List AI.csv`, 98 rows (1–37 =
-the original batch, 38–98 = 61 new) — production planning now works from this
-file, and everything combines into ONE deliverable (combined output CSV +
-crosscheck across all outputs + firm pages/binder at the combine step). Runs launch under
-`nohup` (a wrapper teardown killed a run once on macOS), ≤2 parallel,
-staggered. `.venv` holds pdfplumber, pdfminer.six, trafilatura, htmldate,
-playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
+Production batch state: the client's FINAL list arrived 2026-07-07
+(`excel-file/Target Ingestion List AI.csv`, 98 rows; supersedes the earlier
+37-row plan under `client-runs/runs-07072026-37rows/`) and was reduced to 97
+rows (Vanguard "midyear market outlook" removed, wrong-year content). It
+runs as TEN firm-whole splits (9×10 + 1×7) from the wired master
+`client-runs/runs-07072026-98rows/Target Ingestion List AI (with
+local_file).csv` (44 local files under `manual-sources/`), command sheet
+`tmp/98run-commands.md`; everything combines into ONE deliverable (combined
+output CSV + crosscheck across all outputs + firm pages/binder at the
+combine step). Execution: split 1 DONE (104 kept / 32 failed, ~4.2 h, RBC
+Global Insight 4-way group applied; deliverable is `98b-split1-rescored/`,
+110 rows); split 2 relaunch pending after its first attempt died on a
+transient AB DNS error (fixed by phase-3 fault tolerance; 6 AB PDFs now
+local); splits 3–10 queued. Runs launch under `nohup` (a wrapper teardown
+killed a run once on macOS), ≤2 parallel, staggered. `.venv` holds
+pdfplumber, pdfminer.six, trafilatura, htmldate, playwright (+ chromium),
+python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-08: Splits 1–2 first launch + phase-3 validation. Split 1 completed
+  (104 kept / 32 failed; materiality gate fired for the first time); split 2
+  died mid-run on a transient AB DNS error — the defect phase-3 fixed. Review
+  of split 1 found 8 Janus Henderson quote_not_found drops all with real
+  evidence (glyph-artifact lines + two-column interleaving), driving the
+  tiered quote gate; deliverable for split 1 is `98b-split1-rescored/` (110
+  rows). A fresh smoke (`tmp/phase3-smoke2/`) then validated everything
+  end-to-end live: ingest_error continuation on an unreachable source,
+  quote-gate tier counts in manifest, subsequence + visual tiers fired
+  (visual: 3 kept present_verbatim, 1 dropped fail-closed), stale-work-dir
+  rerun re-ingests fresh with no stale reuse. The earlier "CLIs unusable"
+  smoke blocker was an agent-sandbox artifact (Codex sandbox blocks the
+  macOS Keychain that holds claude CLI auth) — both CLIs work from normal
+  sessions. Verdict: GO for relaunching split 2 and running splits 3–10.
 - 2026-07-08: Phase 3 hardening for the 98-row batch defects: AB split-2
   local PDFs wired; per-source ingest errors now continue the run with
   `ingest_error` failures/client labels/manifest entries; browser fallback
@@ -111,10 +140,8 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
   (claude/sonnet/medium default, categorical only, fail-closed, paraphrase
   dropped); `98b-split1-rescored` verifies all 8 Janus quote drops, appends 6
   new rows, and suppresses 2 duplicate same-source/same-leaf rows. Full suite:
-  311 pass / 1 skip. Scratch smoke ingested AB local + Impax remote after
-  escalation and produced analyzer memory, but complete end-to-end smoke was
-  blocked by local headless CLI state/login behavior (Claude not logged in;
-  Codex child calls hung in checker/analyzer).
+  311 pass / 1 skip. (The build agent's own smoke stalled on CLI auth inside
+  its sandbox; superseded by the passing smoke-2 above.)
 - 2026-07-08: Aegon row updated: Kyle's replacement link is a direct PDF —
   downloaded through the ingest path (24p, real text layer, "July 2026
   Global fixed income mid-year outlook"), saved to `manual-sources/` and
@@ -162,71 +189,22 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
   download: Allspring, Morgan Stanley, Nuveen, Carmignac, BofA Private
   Bank, Schwab, RBC Wealth ×5; both Vanguard pieces carry wrong-year
   content (URL serves July 2024; transcript reads as the 2025 video).
-- 2026-07-07: Cost slice ran clean — **GO** (run `cost-slice-01` under
-  `client-runs/runs-07072026-37rows/`, 3 sources incl. Manulife, production
-  config, ~24 min, ~8 min/source, ~2.7 analyze + 1 checker calls/source).
-  Every 2026-07-07 change validated live: document-only dates proven
-  three-way (html / pdf_text / blank-inverts-CSV), OCR + scrambled
-  degradation capped at 74/review with correct commentary, failures-client
-  plain labels, digest grounded (4/4 spot-checked claims verbatim). One
-  finding: `src/summarize.py` `_work_dir_for` hardcodes `work/<run-id>` and
-  is incompatible with `--out-root` (bites digests/firmpages/bind only, not
-  runs; workaround = transient `work/<run-id>` symlink, fix = derive from
-  `run_dir.parent`). Billing window 12:00:30–12:29:21 UTC 2026-07-07.
-- 2026-07-07: Client sent the final list: `excel-file/Target Ingestion List
-  AI.csv`, **98 rows** (rows 1–37 = the original batch, 38–98 = 61 new;
-  header `Firm,Title,Source Link`, no date column). Supersedes the
-  "second ~70-source batch" plan — batch planning restarts from this file.
-  Kyle pre-flagged 11 sources for manual download (LSEG, OCBC, Allianz,
-  PIMCO, HSBC, Julius Baer, Man Group, Wells Fargo, Merrill, EFG
-  International, Vanguard); agreed filenames under
-  `client-runs/runs-07072026-98rows/manual-sources/`. Waiting on Nikhil's
-  downloads before wiring local_file, preflight over all 98, scout, and new
-  splits (~5–6 runs under the 20-cap). The 12 existing 37-batch local_file
-  mappings carry over.
-- 2026-07-07: Split CSVs rebuilt from the local_file-wired master (the four
-  splits predated the manual-download wiring and pointed 11 rows at blocked
-  URLs; rebuilt by firm — 11 workbook rows have blank Ids, so Ids are
-  unusable as keys). J.P. Morgan's PDF (transient connection error in
-  preflight-3) re-downloaded and wired as the 12th `local_file`. Cost-slice
-  instructions (set 8) updated to read preflight-3 and include Manulife (the
-  only source exercising the OCR evidence-gate path live).
-- 2026-07-07: Ingest hardening (set 9, commit 93ad0e9): fetch retries (3
-  attempts, 90s, backoff, no 4xx retry), Playwright HTML fallback on
-  401/403/406/429 with shared consent handling (`fetched_via` in meta), and
-  per-page OCR (pdftoppm + Tesseract) for image-only PDFs with `ocr_pages`
-  threaded into the evidence gate (scrambled-style cap + review). Preflight-3:
-  Eastspring timeout fixed, AEW + Manulife suspect → looks_right. Suite 279 →
-  291.
-- 2026-07-07: `--out-root` for run.py, the `client-runs/` convention, and
-  `src/preflight.py` (set 6). First live 37-sweep: 30 ok / 7 blocked (6
-  Invesco 406, Manulife 403) / 3 consent-wall suspects; 17/30 dated, all from
-  HTML — led to manual local_file wiring and set 9. Suite 268 → 279.
-- 2026-07-07: 37-batch prep: split CSVs generated, run/scout/digest/
-  crosscheck commands filled out in `tmp/37run-commands.md`; repo cleanup
-  194M → 22M (pilot work/ dirs and tmp scratch deleted; pilot-05 eval
-  spot-check now skips without its snapshots); `runs/test2-01` +
-  `runs/pilot-05` force-added; `summarize_firm_page.md` v1.1 (no em dashes).
-- 2026-07-07: Document-only dates (set 5; supersedes the same-day CSV-fallback
-  version): ingestion always extracts the date from the document and discards
-  the CSV value; strict DD/MM/YYYY or blank. Plus `failures-client.csv`
-  (plain-language labels for every internal reason_code, mapping
-  test-enforced complete) and `output-guide.html`. Suite 260 → 268.
-- 2026-07-07: Reader summaries shipped (set 4): `src/summarize.py`
-  digest/reconcile/firmpages/bind + python-docx binder; smoke over test2-01
-  produced client-example-quality pages; sample later approved. Suite 250 →
-  260 (incl. the document-date fallback tests folded into set 5's policy).
+
 ## Next / Open
 
-- **98-row batch prep (in progress)**: waiting on Nikhil's second manual
-  round (Allspring, Morgan Stanley, Nuveen, Carmignac, BofA Private Bank,
-  Schwab, RBC Wealth ×5, Vanguard ×2 wrong-year fixes) → re-wire +
-  regenerate splits → final confirmation sweep → Nikhil runs the five split
-  commands from `tmp/98run-commands.md` (≤2 parallel, nohup). The plan runs
-  all 98 fresh (rows 1–37 included).
+- **97-row batch execution (in progress)**: relaunch split 2 (delete stale
+  `work/98b-split2/` + `98b-split2.log` first for a clean slate), then splits
+  3–10 from `tmp/98run-commands.md` (≤2 parallel, nohup, ~2–4 h each).
+  Group-note flags: RBC ×4 applied on split 1; Wellington pair pending on
+  split 5.
 - One combined final deliverable across all batch outputs: combined CSV,
   crosscheck across every output.csv, firm pages + Word binder at the
-  combine step.
+  combine step. Use `98b-split1-rescored/output.csv` for split 1, not the
+  original.
+- Split-1 client cosmetics to decide before the combine: 30 undated Janus
+  Henderson rows (docs carry no parseable worded date) and grouped rows
+  pipe-joining identical dates (`15/06/2026 | ×4`) — dedupe would read
+  better.
 - `runs/pilot-04` + `runs/pilot-04-rescored` remain disk-only (freeze
   pending user decision).
 - GT reconciliation with the Markets Recon team: test2 GT has ≥1 error (TRP
