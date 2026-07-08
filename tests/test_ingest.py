@@ -453,6 +453,30 @@ class BrowserFallbackFetchTest(unittest.TestCase):
         self.assertEqual("requests", result.fetched_via)
         self.assertIn("request body", result.html)
 
+    def test_browser_fallback_retries_transient_failures(self) -> None:
+        session = FetchRetryTest.FakeSession(
+            [requests.exceptions.Timeout("slow")] * FETCH_MAX_ATTEMPTS
+        )
+        browser_calls = 0
+
+        def flaky_browser(url: str) -> str:
+            nonlocal browser_calls
+            browser_calls += 1
+            if browser_calls < 3:
+                raise RuntimeError("ERR_NAME_NOT_RESOLVED")
+            return "<html><p>browser recovered</p></html>"
+
+        with patch("src.ingest.time.sleep"):
+            result = _fetch_html(
+                "https://x.test/flaky",
+                session=session,
+                browser_fetcher=flaky_browser,
+            )
+
+        self.assertEqual("browser", result.fetched_via)
+        self.assertIn("browser recovered", result.html)
+        self.assertEqual(3, browser_calls)
+
     def test_fallback_result_flows_into_snapshot_meta(self) -> None:
         browser_result = "<html><body><p>" + "browser prose " * 50 + "</p></body></html>"
 

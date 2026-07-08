@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import csv
 import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from types import SimpleNamespace
 
@@ -515,6 +517,119 @@ class RunPipelineOutRootTest(unittest.TestCase):
             self.assertEqual(Path("runs") / "pf-02", run_dir)
             self.assertTrue((Path(temp_dir) / "runs" / "pf-02" / "output.csv").exists())
             self.assertTrue((Path(temp_dir) / "work" / "pf-02" / "fixture-doc").is_dir())
+
+
+class RunPipelineIngestFaultToleranceTest(unittest.TestCase):
+    def _source(self, source_id: str, title: str) -> SourceRecord:
+        return SourceRecord(
+            source_id=source_id,
+            firm="Fixture Firm",
+            date="",
+            source=title,
+            url=f"https://example.test/{source_id}",
+            resolved_url=f"https://example.test/{source_id}",
+            source_type="pdf",
+            local_path=FIXTURE_PRINTED_PDF,
+        )
+
+    def test_one_ingest_failure_does_not_sink_multi_source_run(self) -> None:
+        good = self._source("good-doc", "Good Outlook")
+        bad = self._source("bad-doc", "Bad Outlook")
+
+        def fake_snapshot(source: SourceRecord, work_dir: Path) -> IngestedSource:
+            source_dir = Path(work_dir) / source.source_id
+            source_dir.mkdir(parents=True, exist_ok=True)
+            if source.source_id == "bad-doc":
+                raise RuntimeError("playwright ERR_NAME_NOT_RESOLVED")
+            snapshot_path = source_dir / "snapshot.txt"
+            snapshot_path.write_text("We are overweight the segment.", encoding="utf-8")
+            native_path = source_dir / "native.pdf"
+            native_path.write_bytes(b"%PDF fixture")
+            return IngestedSource(
+                source=source,
+                snapshot_text_path=snapshot_path,
+                native_source_path=native_path,
+                chunks=[Chunk(chunk_id="p1-1", locator="p.1", source_path=native_path)],
+                page_count=1,
+            )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            if "native_source_path" in prompt:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "verdicts": [
+                                {
+                                    "index": 0,
+                                    "supports_view": "pass",
+                                    "forward_looking": "pass",
+                                    "asset_match": "pass",
+                                    "evidence_strength": "decisive",
+                                    "note": "",
+                                }
+                            ]
+                        }
+                    ),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=json.dumps(
+                    {
+                        "summary": "one supported view",
+                        "candidates": [
+                            {
+                                "source_id": "good-doc",
+                                "chunk_id": "p1-1",
+                                "sub_asset_raw": "EM equities",
+                                "sub_asset_class": "Emerging Markets Equities",
+                                "taxonomy_match": "exact",
+                                "view": "O",
+                                "call_language": "explicit_stance",
+                                "evidence_kind": "prose",
+                                "evidence_quote": "We are overweight the segment.",
+                                "locator": "p.1",
+                                "reasoning": "The source states an overweight.",
+                                "conflict": False,
+                            }
+                        ],
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            out_root = Path(temp_dir) / "out"
+            with patch("src.run.create_snapshot", side_effect=fake_snapshot):
+                result, failures, run_dir = run_pipeline(
+                    sources=[good, bad],
+                    run_id="ingest-fault",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    runner=runner,
+                    out_root=out_root,
+                )
+            with (run_dir / "output.csv").open(newline="", encoding="utf-8") as handle:
+                output_rows = list(csv.DictReader(handle))
+            with (run_dir / "failures.csv").open(newline="", encoding="utf-8") as handle:
+                failure_rows = list(csv.DictReader(handle))
+            client_text = (run_dir / "failures-client.csv").read_text(encoding="utf-8")
+            manifest = (run_dir / "manifest.md").read_text(encoding="utf-8")
+
+        self.assertEqual(1, len(result.output_rows))
+        self.assertEqual(1, len(output_rows))
+        self.assertEqual("bad-doc", failures[0].source_id)
+        ingest_rows = [row for row in failure_rows if row["reason_code"] == "ingest_error"]
+        self.assertEqual(1, len(ingest_rows))
+        self.assertEqual("bad-doc", ingest_rows[0]["source_id"])
+        self.assertIn("ERR_NAME_NOT_RESOLVED", ingest_rows[0]["message"])
+        self.assertIn("Document could not be ingested", client_text)
+        self.assertIn("bad-doc (pdf, 0 chunks): 0 candidates emitted [ingest-failed:", manifest)
+        self.assertIn("good-doc (pdf, 1p / 1 chunks): 1 candidates emitted", manifest)
 
 
 def _call_candidate() -> CandidateCall:

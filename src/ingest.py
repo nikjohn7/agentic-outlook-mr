@@ -863,8 +863,32 @@ def _fetch_html(url: str, *, session=None, browser_fetcher=None) -> HtmlFetchRes
             raise
     except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
         pass
-    html = (browser_fetcher or fetch_html_with_browser)(url)
+    html = _browser_fetch_with_retries(url, browser_fetcher=browser_fetcher)
     return HtmlFetchResult(html, "browser")
+
+
+def _browser_fetch_with_retries(url: str, *, browser_fetcher=None) -> str:
+    """Browser fallback retry discipline mirrors the requests path.
+
+    The browser path is used only after requests is blocked or transiently
+    broken, so retrying all browser exceptions is appropriate: Playwright DNS,
+    navigation timeout, and browser startup failures all arrive as exceptions
+    rather than HTTP statuses. Permanent 4xx decisions still come only from the
+    requests path and are not retried before falling back.
+    """
+    fetcher = browser_fetcher or fetch_html_with_browser
+    last_error: Exception | None = None
+    for attempt in range(FETCH_MAX_ATTEMPTS):
+        try:
+            return fetcher(url)
+        except Exception as exc:
+            last_error = exc
+            if attempt >= FETCH_MAX_ATTEMPTS - 1:
+                raise
+            _sleep_before_retry(attempt)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("browser retry helper exhausted without a response")
 
 
 def _chunk_to_dict(chunk: Chunk) -> dict[str, str]:

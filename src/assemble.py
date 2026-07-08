@@ -113,7 +113,9 @@ _ASSEMBLE_REASON_CODES = frozenset(
         "source_metadata_missing",
     }
 )
-_RUN_REASON_CODES = frozenset({"json_parse_error", "engine_error", "checker_error"})
+_RUN_REASON_CODES = frozenset(
+    {"json_parse_error", "engine_error", "checker_error", "ingest_error"}
+)
 ALL_REASON_CODES = _CONFIDENCE_REASON_CODES | _ASSEMBLE_REASON_CODES | _RUN_REASON_CODES
 
 # reason_code -> (What happened, Explanation), both written for a non-technical
@@ -211,6 +213,12 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "Second-reader check couldn't run",
         "The second-reader verification failed to run for this document, so "
         "affected calls weren't confirmed. Let us know so we can re-run it.",
+    ),
+    "ingest_error": (
+        "Document could not be ingested",
+        "This source could not be fetched or converted into text, so it was "
+        "skipped while the rest of the run continued. Let us know so we can "
+        "re-run it.",
     ),
 }
 
@@ -1039,9 +1047,12 @@ def _manifest_text(
     if source_summaries:
         lines.append("## Sources processed")
         for summary in source_summaries:
+            ingest_error = summary.get("ingest_error") or ""
             flag_text = " [visual_heavy]" if summary.get("visual_heavy") else ""
             if summary.get("printed_pdf"):
                 flag_text += " [printed-to-pdf]"
+            if ingest_error:
+                flag_text += f" [ingest-failed: {ingest_error}]"
             scrambled = summary.get("scrambled_pages") or []
             if scrambled:
                 flag_text += f" [scrambled pages: {', '.join(f'p.{n}' for n in scrambled)}]"

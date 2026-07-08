@@ -136,7 +136,38 @@ def run_pipeline(
     group_ledgers: dict[str, str] = {}
 
     for source in sources:
-        ingested = create_snapshot(source, work_dir)
+        source_infos[source.source_id] = SourceInfo(
+            source_id=source.source_id,
+            firm=source.firm,
+            date=source.date,
+            source=source.source,
+            url=source.url,
+        )
+        try:
+            ingested = create_snapshot(source, work_dir)
+        except Exception as exc:
+            message = _exception_summary(exc)
+            chunk_failures.append(
+                FailureRecord.from_chunk(
+                    "ingest_error", message, source.source_id, "ingest"
+                )
+            )
+            source_summaries.append(
+                {
+                    "source_id": source.source_id,
+                    "source_type": source.source_type,
+                    "page_count": None,
+                    "chunk_count": 0,
+                    "candidates": 0,
+                    "visual_heavy": False,
+                    "printed_pdf": False,
+                    "scrambled_pages": [],
+                    "ocr_pages": [],
+                    "ocr_note": "",
+                    "ingest_error": message,
+                }
+            )
+            continue
         snapshot_text = ingested.snapshot_text_path.read_text(encoding="utf-8")
         for chunk in ingested.chunks:
             snapshots[(source.source_id, chunk.chunk_id)] = snapshot_text
@@ -267,6 +298,11 @@ def run_pipeline(
         grouping=grouping,
     )
     return result, chunk_failures, run_dir
+
+
+def _exception_summary(exc: Exception) -> str:
+    summary = f"{type(exc).__name__}: {exc}".strip()
+    return summary[:300]
 
 
 def analyze_source(
