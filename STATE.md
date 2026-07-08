@@ -102,6 +102,19 @@ playwright (+ chromium), python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-08: Phase 3 hardening for the 98-row batch defects: AB split-2
+  local PDFs wired; per-source ingest errors now continue the run with
+  `ingest_error` failures/client labels/manifest entries; browser fallback
+  fetches retry before failing; prose quote verification now records
+  `quote_match` and uses exact -> normalized -> bounded subsequence tiers
+  (subsequence cap 74/review); tier-3 visual quote verification added
+  (claude/sonnet/medium default, categorical only, fail-closed, paraphrase
+  dropped); `98b-split1-rescored` verifies all 8 Janus quote drops, appends 6
+  new rows, and suppresses 2 duplicate same-source/same-leaf rows. Full suite:
+  311 pass / 1 skip. Scratch smoke ingested AB local + Impax remote after
+  escalation and produced analyzer memory, but complete end-to-end smoke was
+  blocked by local headless CLI state/login behavior (Claude not logged in;
+  Codex child calls hung in checker/analyzer).
 - 2026-07-08: Aegon row updated: Kyle's replacement link is a direct PDF —
   downloaded through the ingest path (24p, real text layer, "July 2026
   Global fixed income mid-year outlook"), saved to `manual-sources/` and
