@@ -55,6 +55,7 @@ OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + (
     "basis",
     "checker_strength",
     "call_language",
+    "quote_match",
 )
 
 FAILURE_COLUMNS = (
@@ -938,6 +939,7 @@ def _output_row(
         "basis": candidate.basis,
         "checker_strength": scored.checker_strength,
         "call_language": scored.call_language,
+        "quote_match": scored.evidence_check.quote_match,
     }
 
 
@@ -1032,6 +1034,15 @@ def _manifest_text(
         lines.extend(
             f"- {language}: {count}"
             for language, count in sorted(call_language_counts.items())
+        )
+        lines.append("")
+    quote_match_counts = Counter(
+        row.get("quote_match") or "(none)" for row in result.output_rows
+    )
+    if quote_match_counts:
+        lines.append("## Quote match tier (kept rows)")
+        lines.extend(
+            f"- {tier}: {count}" for tier, count in sorted(quote_match_counts.items())
         )
         lines.append("")
     reason_counts = Counter(

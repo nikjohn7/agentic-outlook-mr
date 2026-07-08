@@ -90,6 +90,16 @@ MIN_SPAN_MEANINGFUL_TOKENS = 4
 SCRAMBLED_PROSE_CAP = 74
 DEGRADED_PROSE_CAP = SCRAMBLED_PROSE_CAP
 
+# Tier 2b quote verification: tolerate only bounded injected extraction noise
+# between the quote's own tokens. Every quote token must appear in order, each
+# gap may contain at most 15 snapshot-only tokens, and the enclosing window may
+# be no wider than 3x the quote length. This recovers rendered-page prose broken
+# by column sidebars while still rejecting fabricated or reordered quotes. It is
+# weaker than exact/normalized substring matching, so it uses the degraded prose
+# cap and forces review.
+SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP = 15
+SUBSEQUENCE_MAX_WINDOW_MULTIPLE = 3
+
 
 @dataclass(frozen=True, slots=True)
 class EvidenceCheck:
@@ -105,6 +115,9 @@ class EvidenceCheck:
     # is not a deterministic pass; it routes the candidate to checker visual
     # review instead of hard-failing on the text snapshot.
     visual_unverified_by_text: bool = False
+    # Prose quote verification tier for audit: exact, normalized, subsequence,
+    # visual, or key_tokens for legacy degraded scrambled/OCR fallback.
+    quote_match: str = ""
 
 
 class EvidenceFailure(ValueError):
@@ -198,6 +211,7 @@ def normalize_quote_text(value: str) -> str:
             }
         )
     )
+    text = "\n".join(line for line in text.splitlines() if re.search(r"[A-Za-z0-9]", line))
     text = re.sub(f"[{_DASH_VARIANTS}]", "-", text)
     text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)  # hyphen consumed by a line break
     text = re.sub(r"\s+", " ", text)
@@ -234,6 +248,28 @@ def evidence_passes(
         return EvidenceCheck(False, HARD_FAILURE_EVIDENCE, "snapshot text is empty")
     if candidate.evidence_kind == "prose":
         cited_page = _cited_page(candidate.locator)
+        check = _prose_evidence_passes(candidate, snapshot_text)
+        if check.passed:
+            if cited_page is not None and cited_page in ocr_pages:
+                return EvidenceCheck(
+                    True,
+                    message=(
+                        f"page p.{cited_page} flagged OCR (image-only or low text layer); "
+                        "prose quote check passed on OCR text, but confidence is capped "
+                        "and review required"
+                    ),
+                    degraded=True,
+                    quote_match=check.quote_match,
+                )
+            return check
+        if cited_page is not None and cited_page in ocr_pages:
+            return _degraded_prose_evidence_passes(
+                candidate,
+                snapshot_text,
+                cited_page,
+                page_issue="OCR",
+                message_detail="image-only or low text layer",
+            )
         if cited_page is not None and cited_page in scrambled_pages:
             return _degraded_prose_evidence_passes(
                 candidate,
@@ -242,26 +278,7 @@ def evidence_passes(
                 page_issue="scrambled",
                 message_detail="two-column interleave",
             )
-        if cited_page is not None and cited_page in ocr_pages:
-            check = _prose_evidence_passes(candidate, snapshot_text)
-            if check.passed:
-                return EvidenceCheck(
-                    True,
-                    message=(
-                        f"page p.{cited_page} flagged OCR (image-only or low text layer); "
-                        "prose verbatim check passed on OCR text, but confidence is capped "
-                        "and review required"
-                    ),
-                    degraded=True,
-                )
-            return _degraded_prose_evidence_passes(
-                candidate,
-                snapshot_text,
-                cited_page,
-                page_issue="OCR",
-                message_detail="image-only or low text layer",
-            )
-        return _prose_evidence_passes(candidate, snapshot_text)
+        return check
     return _table_or_visual_evidence_passes(
         candidate,
         snapshot_text,
@@ -474,16 +491,17 @@ def review_flag_for(score: int, candidate: CandidateCall) -> str:
 
 
 def _prose_evidence_passes(candidate: CandidateCall, snapshot_text: str) -> EvidenceCheck:
-    """Every span must match the snapshot verbatim (after normalize_quote_text),
-    and the spans must appear in document order. A single span is the original
-    contiguous-quote contract; multiple spans (an honest elision) additionally
-    obey the join guardrails so a paraphrase or reversed stitch cannot slip by.
+    """Every span must match the snapshot in order through deterministic tiers.
+
+    Tier 1 is raw exact substring matching. Tier 2a is symmetric deterministic
+    normalization. Tier 2b is an ordered token subsequence with bounded injected
+    noise between quote tokens and a bounded total window. A single span keeps
+    the original contiguous-quote contract through tiers 1-2a; multiple spans
+    still obey the join guardrails so a paraphrase or reversed stitch cannot
+    slip by.
     """
-    spans = [
-        normalized
-        for span in candidate.evidence_spans
-        if (normalized := normalize_quote_text(span))
-    ]
+    raw_spans = [span.strip() for span in candidate.evidence_spans if span.strip()]
+    spans = [normalized for span in raw_spans if (normalized := normalize_quote_text(span))]
     if not spans:
         return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote is empty")
     if len(spans) > MAX_PROSE_SPANS:
@@ -497,7 +515,40 @@ def _prose_evidence_passes(candidate: CandidateCall, snapshot_text: str) -> Evid
                     False, HARD_FAILURE_QUOTE, "a prose quote span is too short to verify"
                 )
 
+    exact = _spans_in_order(snapshot_text, raw_spans)
+    if exact == "matched":
+        return EvidenceCheck(True, quote_match="exact")
+    if exact == "out_of_order":
+        return EvidenceCheck(
+            False, HARD_FAILURE_QUOTE, "prose quote spans are out of document order"
+        )
+
     source = normalize_quote_text(snapshot_text)
+    normalized = _spans_in_order(source, spans)
+    if normalized == "matched":
+        return EvidenceCheck(True, quote_match="normalized")
+    if normalized == "out_of_order":
+        return EvidenceCheck(
+            False, HARD_FAILURE_QUOTE, "prose quote spans are out of document order"
+        )
+
+    if _spans_match_ordered_subsequence(source, spans):
+        return EvidenceCheck(
+            True,
+            message=(
+                "prose quote matched as ordered token subsequence "
+                f"(max {SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP} injected tokens per gap, "
+                f"window <= {SUBSEQUENCE_MAX_WINDOW_MULTIPLE}x quote length); "
+                "confidence capped, review required"
+            ),
+            degraded=True,
+            quote_match="subsequence",
+        )
+
+    return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote was not found")
+
+
+def _spans_in_order(source: str, spans: list[str]) -> str:
     cursor = 0
     for span in spans:
         index = source.find(span, cursor)
@@ -505,12 +556,59 @@ def _prose_evidence_passes(candidate: CandidateCall, snapshot_text: str) -> Evid
             # Present but only before the cursor => the spans are stitched out of
             # document order; genuinely absent => a paraphrase or fabrication.
             if span in source:
-                return EvidenceCheck(
-                    False, HARD_FAILURE_QUOTE, "prose quote spans are out of document order"
-                )
-            return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote was not found")
+                return "out_of_order"
+            return "missing"
         cursor = index + len(span)
-    return EvidenceCheck(True)
+    return "matched"
+
+
+def _spans_match_ordered_subsequence(source: str, spans: list[str]) -> bool:
+    source_tokens = _quote_match_tokens(source)
+    cursor = 0
+    for span in spans:
+        quote_tokens = _quote_match_tokens(span)
+        if not quote_tokens:
+            return False
+        match = _find_ordered_subsequence(source_tokens, quote_tokens, start=cursor)
+        if match is None:
+            return False
+        cursor = match[1] + 1
+    return True
+
+
+def _find_ordered_subsequence(
+    source_tokens: list[str], quote_tokens: list[str], *, start: int = 0
+) -> tuple[int, int] | None:
+    max_window = max(len(quote_tokens), len(quote_tokens) * SUBSEQUENCE_MAX_WINDOW_MULTIPLE)
+    for start_index in range(start, len(source_tokens)):
+        if source_tokens[start_index] != quote_tokens[0]:
+            continue
+        previous = start_index
+        matched = 1
+        for token in quote_tokens[1:]:
+            next_index = _next_token_index(source_tokens, token, previous + 1)
+            if next_index is None:
+                break
+            if next_index - previous - 1 > SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP:
+                break
+            if next_index - start_index + 1 > max_window:
+                break
+            previous = next_index
+            matched += 1
+        if matched == len(quote_tokens):
+            return start_index, previous
+    return None
+
+
+def _next_token_index(tokens: list[str], token: str, start: int) -> int | None:
+    for index in range(start, len(tokens)):
+        if tokens[index] == token:
+            return index
+    return None
+
+
+def _quote_match_tokens(value: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", normalize_quote_text(value).lower())
 
 
 def _degraded_prose_evidence_passes(
@@ -536,6 +634,7 @@ def _degraded_prose_evidence_passes(
                 "(confidence capped, review required)"
             ),
             degraded=True,
+            quote_match="key_tokens",
         )
     return EvidenceCheck(
         False,

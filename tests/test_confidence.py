@@ -15,6 +15,8 @@ from src.confidence import (
     MIN_HTML_SNAPSHOT_CHARS,
     MIN_PDF_CHARS_PER_PAGE,
     SCRAMBLED_PROSE_CAP,
+    SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP,
+    SUBSEQUENCE_MAX_WINDOW_MULTIPLE,
     VISUAL_UNVERIFIED_BY_TEXT,
     evidence_passes,
     normalize_quote_text,
@@ -184,6 +186,167 @@ class ConfidenceTest(unittest.TestCase):
         self.assertTrue(
             evidence_passes(candidate, "We hold a long-term overweight stance today.").passed
         )
+
+    def test_exact_quote_match_tier_is_recorded(self) -> None:
+        check = evidence_passes(
+            _candidate(evidence_quote="a long-term overweight stance"),
+            "We hold a long-term overweight stance today.",
+        )
+
+        self.assertTrue(check.passed)
+        self.assertEqual("exact", check.quote_match)
+
+    def test_normalized_quote_match_tier_is_recorded(self) -> None:
+        check = evidence_passes(
+            _candidate(evidence_quote="AI-related spending is set to move up a gear"),
+            "We think that as AI-\nrelated spending is set to move up a gear this year.",
+        )
+
+        self.assertTrue(check.passed)
+        self.assertEqual("normalized", check.quote_match)
+
+
+class JanusHendersonQuoteGateFixtureTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    # Actual snapshot excerpts from
+    # client-runs/runs-07072026-98rows/work/98b-split1/
+    # janus-henderson-investors-market-gps-investment-outlook-mid-year-2026/snapshot.txt.
+    SNAPSHOT_EXCERPTS = """
+We also continue to believe inflation could be a more sizable risk than the acceleration
+current consensus suggests. This implies fixed income portfolios may
+Ex-U.S.: Balanced opportunity
+>
+benefit from a focus on shorter-duration instruments and superior
+set, attractive valuations
+income, rather than overall total return.
+Enhanced cash, securitized strategies, and opportunistic fixed FIXED INCOME
+income strategies seem most relevant for a potentially changing Securitized credit:
+>
+inflation paradigm. Income with resilience
+
+Investor considerations
+Infrastructure – the US$106 trillion opportunity: The AI buildout has extended into power, utilities, materials,
+>
+and energy. A cumulative US$106 trillion will be needed for new and updated infrastructure through 2040.3
+Demand is already exceeding supply across semiconductors, memory, cooling systems, optical, and power
+equipment. Companies operating at these bottlenecks, where capital expenditure shows no sign of slowing,
+merit consideration.
+
+Investor considerations
+Catalysts across biopharma: Through Q1, all biopharma transactions have been below US$10 billion, creating
+>
+potential for a record-breaking year of M&A if larger deals come to market.6 The sector has an expected 1,200
+potential "events" this year7 - from anticipated FDA decisions to trial enrollments and data readouts - that discerning
+investors may be able to capitalize on.
+Beneficiaries of structural change: Smaller companies have a relatively large presence in the industrials and
+>
+materials sectors, providing valuable exposure to both the AI buildout and nearshoring trends. Innovative solutions
+may present attractive investment opportunities.
+"""
+
+    PREVIOUSLY_DROPPED = (
+        (
+            "Duration - Short",
+            "This implies fixed income portfolios may benefit from a focus on shorter-duration instruments and superior income, rather than overall total return.",
+            "subsequence",
+        ),
+        (
+            "Cash/Money Markets",
+            "Enhanced cash, securitized strategies, and opportunistic fixed income strategies seem most relevant for a potentially changing inflation paradigm.",
+            "subsequence",
+        ),
+        (
+            "Securitized/Structured (ABS/MBS/CDS/Swaps/CLOs)",
+            "Enhanced cash, securitized strategies, and opportunistic fixed income strategies seem most relevant for a potentially changing inflation paradigm.",
+            "subsequence",
+        ),
+        (
+            "Infrastructure Theme",
+            "Infrastructure – the US$106 trillion opportunity: The AI buildout has extended into power, utilities, materials, and energy.",
+            "normalized",
+        ),
+        (
+            "Energy Sector",
+            "Infrastructure – the US$106 trillion opportunity: The AI buildout has extended into power, utilities, materials, and energy.",
+            "normalized",
+        ),
+        (
+            "Healthcare/Pharma",
+            "Catalysts across biopharma: Through Q1, all biopharma transactions have been below US$10 billion, creating potential for a record-breaking year of M&A if larger deals come to market.",
+            "normalized",
+        ),
+        (
+            "Industrials",
+            "Smaller companies have a relatively large presence in the industrials and materials sectors, providing valuable exposure to both the AI buildout and nearshoring trends. Innovative solutions may present attractive investment opportunities.",
+            "normalized",
+        ),
+        (
+            "Materials",
+            "Smaller companies have a relatively large presence in the industrials and materials sectors, providing valuable exposure to both the AI buildout and nearshoring trends. Innovative solutions may present attractive investment opportunities.",
+            "normalized",
+        ),
+    )
+
+    def test_all_eight_split1_janus_quote_drops_verify_deterministically(self) -> None:
+        for label, quote, expected_tier in self.PREVIOUSLY_DROPPED:
+            with self.subTest(label=label):
+                check = evidence_passes(
+                    _candidate(evidence_quote=quote),
+                    self.SNAPSHOT_EXCERPTS,
+                )
+
+                self.assertTrue(check.passed)
+                self.assertEqual(expected_tier, check.quote_match)
+
+    def test_subsequence_match_is_capped_and_review_flagged(self) -> None:
+        quote = self.PREVIOUSLY_DROPPED[0][1]
+        result = score_candidate(
+            _candidate(
+                evidence_quote=quote,
+                taxonomy_match="semantic",
+                call_language="directional",
+            ),
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(self.SNAPSHOT_EXCERPTS),
+        )
+
+        self.assertEqual(SCRAMBLED_PROSE_CAP, result.confidence)
+        self.assertEqual("Medium", result.band)
+        self.assertEqual("review", result.review_flag)
+        self.assertEqual("subsequence", result.evidence_check.quote_match)
+        self.assertIn(
+            f"max {SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP} injected tokens",
+            result.evidence_check.message,
+        )
+        self.assertIn(
+            f"window <= {SUBSEQUENCE_MAX_WINDOW_MULTIPLE}x",
+            result.evidence_check.message,
+        )
+
+    def test_fabricated_quote_still_fails(self) -> None:
+        check = evidence_passes(
+            _candidate(evidence_quote="Platinum rhodium palladium outperform together."),
+            self.SNAPSHOT_EXCERPTS,
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+
+    def test_reordered_quote_still_fails(self) -> None:
+        check = evidence_passes(
+            _candidate(
+                evidence_quote=(
+                    "Benefit may portfolios income fixed implies this from instruments shorter-duration."
+                )
+            ),
+            self.SNAPSHOT_EXCERPTS,
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
 
     def test_semantic_implied_call_scores_medium_under_v2(self) -> None:
         candidate = _candidate(taxonomy_match="semantic", call_language="implied")

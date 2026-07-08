@@ -54,6 +54,7 @@ class AssembleTest(unittest.TestCase):
                 "basis",
                 "checker_strength",
                 "call_language",
+                "quote_match",
             ),
             OUTPUT_COLUMNS,
         )
@@ -84,8 +85,10 @@ class AssembleTest(unittest.TestCase):
         self.assertEqual("High", output_rows[0]["band"])
         self.assertEqual("none", output_rows[0]["review_flag"])
         self.assertEqual("", output_rows[0]["checker_strength"])
+        self.assertEqual("exact", output_rows[0]["quote_match"])
         self.assertEqual("taxonomy_no_match", failure_rows[0]["reason_code"])
         self.assertIn("count check: pass", manifest)
+        self.assertIn("## Quote match tier (kept rows)", manifest)
 
     def test_failure_columns_place_evidence_quote_after_evidence_kind(self) -> None:
         index = FAILURE_COLUMNS.index("evidence_kind")
