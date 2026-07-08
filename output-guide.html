@@ -126,33 +126,38 @@
     are healthy: duplicates that were kept once, near-duplicate calls, or views
     whose supporting text could not be verified and so were dropped rather than
     kept unconfirmed. A large failures file is normal and usually means the
-    filtering is working. The <strong>What happened</strong> column uses these
-    plain labels:
+    filtering is working. Rows are grouped by their <strong>What happened</strong>
+    label and sorted with the most important labels first: entries that may need
+    a decision or a re-run are at the top, and no-action housekeeping entries
+    (duplicates, too-small changes) are at the bottom. The table below lists the
+    labels in that same order:
   </p>
   <div class="table-scroll">
   <table class="wrap-first">
     <thead><tr><th>What happened</th><th>Meaning</th></tr></thead>
     <tbody>
-      <tr><td class="col">Duplicate — already covered</td><td>The same view for this asset appears in another of the firm's documents; kept once. No action needed.</td></tr>
-      <tr><td class="col">Duplicate — same call, related asset</td><td>Repeats a view already kept for a closely related asset from the same text; kept once. No action needed.</td></tr>
-      <tr><td class="col">Conflicting views — other call kept</td><td>Two documents disagreed; the more current/specific call was kept. Review if the kept call looks wrong.</td></tr>
+      <tr><td class="col">Document could not be ingested</td><td>A whole source couldn't be fetched or converted into text, so it was skipped while the rest of the run continued. Let us know so we can re-run it.</td></tr>
       <tr><td class="col">Conflicting views — none kept</td><td>Two views disagreed and could not be reconciled automatically; neither was kept. A human should decide.</td></tr>
+      <tr><td class="col">Part of a document couldn't be read or processed / Second-reader check couldn't run / Skipped — source details missing</td><td>A processing issue affected part of a document. Let us know so we can re-run it.</td></tr>
       <tr><td class="col">Suggestion — review recommended</td><td>An implied reading challenges the firm's stated call; the stated call was kept and the challenge recorded for review.</td></tr>
-      <tr><td class="col">Evidence could not be verified</td><td>The supporting text couldn't be confirmed, so the call was dropped rather than kept unverified. A human can check the cited page.</td></tr>
-      <tr><td class="col">Evidence points the other way / Not a forward-looking view / Evidence is about a different asset</td><td>A second reader found the cited text doesn't back the call as made, so it was dropped. A human can check the cited page.</td></tr>
+      <tr><td class="col">Conflicting views — other call kept</td><td>Two documents disagreed; the more current/specific call was kept. Review if the kept call looks wrong.</td></tr>
+      <tr><td class="col">Evidence could not be verified (or "… verified visually")</td><td>The supporting text couldn't be confirmed — even after a visual page check, for the "visually" variant — so the call was dropped rather than kept unverified. A human can check the cited page.</td></tr>
       <tr><td class="col">Evidence location missing</td><td>A chart/table call didn't record where it came from, so it couldn't be verified.</td></tr>
+      <tr><td class="col">Evidence points the other way / Evidence is about a different asset / Not a forward-looking view</td><td>A second reader found the cited text doesn't back the call as made, so it was dropped. A human can check the cited page.</td></tr>
       <tr><td class="col">Skipped — asset not on the list</td><td>The asset named didn't match the approved list, so it was left out.</td></tr>
       <tr><td class="col">Change too small to call</td><td>The forecast change behind the call was too small to justify a view.</td></tr>
-      <tr><td class="col">Skipped — source details missing / Part of a document couldn't be read or processed / Second-reader check couldn't run</td><td>A processing issue affected part of a document. Let us know so we can re-run it.</td></tr>
+      <tr><td class="col">Duplicate — already covered</td><td>The same view for this asset appears in another of the firm's documents; kept once. No action needed.</td></tr>
+      <tr><td class="col">Duplicate — same call, related asset</td><td>Repeats a view already kept for a closely related asset from the same text; kept once. No action needed.</td></tr>
     </tbody>
   </table>
   </div>
   <p class="note">
     The <strong>Explanation</strong> and <strong>Evidence / notes</strong> columns
     in the file give the one-line meaning and the underlying text for each row.
-    Act when you see "Conflicting views — none kept", "Suggestion — review
-    recommended", or a repeated "Part of a document couldn't be…" for a document
-    you expected calls from.
+    Because the file is sorted most-important-first, start at the top: act when
+    you see "Document could not be ingested", "Conflicting views — none kept",
+    "Suggestion — review recommended", or a repeated "Part of a document
+    couldn't be…" for a document you expected calls from.
   </p>
 
   <h2>What to do with the output</h2>

@@ -15,6 +15,7 @@ from src.assemble import (
     FailureRecord,
     assemble_candidates,
     client_failure_label,
+    client_failure_rank,
     write_run_outputs,
 )
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
@@ -137,8 +138,9 @@ class AssembleTest(unittest.TestCase):
 
 
 class ClientFailuresFileTest(unittest.TestCase):
-    """failures-client.csv: same rows as failures.csv, plain labels, every
-    reason code mapped, internal file unchanged."""
+    """failures-client.csv: same rows as failures.csv but grouped by label and
+    sorted most-important-first, plain labels, every reason code mapped,
+    internal file unchanged."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -198,10 +200,15 @@ class ClientFailuresFileTest(unittest.TestCase):
             internal = _read_csv(Path(temp_dir) / "failures.csv")
             client = _read_csv(Path(temp_dir) / "failures-client.csv")
 
-        # Same rows, same order.
+        # Same rows, sorted by importance: the processing failure
+        # (json_parse_error) outranks the housekeeping taxonomy skip, so it
+        # comes first even though it was appended last.
         self.assertEqual(len(internal), len(client))
         self.assertEqual(list(CLIENT_FAILURE_COLUMNS), list(client[0].keys()))
-        tax_row = client[0]
+        self.assertEqual(
+            "Part of a document couldn't be read", client[0]["What happened"]
+        )
+        tax_row = client[1]
         self.assertEqual("Aberdeen Investments", tax_row["Firm"])
         self.assertEqual(
             "Emerging Markets Q2 2026 Outlook: Shifting Sands", tax_row["Source"]
@@ -212,6 +219,56 @@ class ClientFailuresFileTest(unittest.TestCase):
         # No internal jargon leaks into the reader columns.
         self.assertNotIn("taxonomy_no_match", tax_row["What happened"])
         self.assertNotIn("taxonomy_no_match", tax_row["Explanation"])
+
+    def test_client_file_grouped_and_sorted_by_importance(self) -> None:
+        # Scrambled input order: housekeeping first, whole-document failures
+        # last. The client file must come back grouped by label with the most
+        # important labels first; the internal file keeps the input order.
+        scrambled = [
+            "duplicate_same_view",
+            "taxonomy_no_match",
+            "ingest_error",
+            "quote_not_found",
+            "duplicate_same_view",
+            "unresolved_conflict",
+        ]
+        chunk_failures = [
+            FailureRecord.from_chunk(code, f"msg-{index}", "source-1", "p1-5")
+            for index, code in enumerate(scrambled)
+        ]
+        result = assemble_candidates(
+            [], sources=self.sources, taxonomy=self.taxonomy, snapshots={}
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(
+                result, temp_dir, sources=self.sources, chunk_failures=chunk_failures
+            )
+            internal = _read_csv(Path(temp_dir) / "failures.csv")
+            client = _read_csv(Path(temp_dir) / "failures-client.csv")
+
+        self.assertEqual(scrambled, [row["reason_code"] for row in internal])
+        self.assertEqual(
+            [
+                "Document could not be ingested",
+                "Conflicting views — none kept",
+                "Evidence could not be verified",
+                "Skipped — asset not on the list",
+                "Duplicate — already covered",
+                "Duplicate — already covered",
+            ],
+            [row["What happened"] for row in client],
+        )
+        # Stable within a label: the two duplicate rows keep their input order.
+        self.assertEqual(
+            ["msg-0", "msg-4"], [row["Evidence / notes"] for row in client[-2:]]
+        )
+
+    def test_unmapped_code_sorts_to_the_top(self) -> None:
+        self.assertLess(
+            client_failure_rank("some_future_code"),
+            client_failure_rank("ingest_error"),
+        )
 
     def test_internal_failures_file_is_unchanged_by_client_file(self) -> None:
         # Writing with and without sources yields a byte-identical failures.csv.

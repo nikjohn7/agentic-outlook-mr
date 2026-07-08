@@ -78,9 +78,10 @@ FAILURE_COLUMNS = (
     "call_language",
 )
 
-# Client-readable failures file. Same rows, same order as failures.csv, but with
-# a plain label + one-sentence explanation per reason code and no internal
-# jargon. See CLIENT_FAILURE_LABELS.
+# Client-readable failures file. Same rows as failures.csv, but with a plain
+# label + one-sentence explanation per reason code and no internal jargon, and
+# grouped by label in importance order (most attention-worthy first). See
+# CLIENT_FAILURE_LABELS.
 CLIENT_FAILURE_COLUMNS = (
     "Firm",
     "Source",
@@ -126,88 +127,24 @@ ALL_REASON_CODES = _CONFIDENCE_REASON_CODES | _ASSEMBLE_REASON_CODES | _RUN_REAS
 # reader. `What happened` is a short label; `Explanation` says in one plain
 # sentence what it means and what (if anything) the reader should do. This is a
 # mapping layer only — the internal reason codes are never renamed.
+#
+# ORDER MATTERS: dict order is the importance order (most attention-worthy
+# first), and failures-client.csv is sorted by it — whole-document and
+# needs-a-human-decision entries at the top, no-action housekeeping (duplicates,
+# too-small changes) at the bottom. Codes sharing a label sit adjacent so the
+# client file groups cleanly. failures.csv (internal) is never re-ordered.
 CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
-    "duplicate_same_view": (
-        "Duplicate — already covered",
-        "The same view for this asset appears in another of this firm's "
-        "documents; it was kept once. No action needed.",
-    ),
-    "duplicate_cross_leaf": (
-        "Duplicate — same call, related asset",
-        "This repeats a view already kept for a closely related asset from the "
-        "same piece of text; it was kept once to avoid double-counting. No "
-        "action needed.",
-    ),
-    "arbitrated_out": (
-        "Conflicting views — other call kept",
-        "Two documents disagreed; the more current or more specific call was "
-        "kept. Review if the kept call looks wrong.",
+    "ingest_error": (
+        "Document could not be ingested",
+        "This source could not be fetched or converted into text, so it was "
+        "skipped while the rest of the run continued. Let us know so we can "
+        "re-run it.",
     ),
     "unresolved_conflict": (
         "Conflicting views — none kept",
         "Two views for this asset disagreed and could not be reconciled "
         "automatically, so neither was kept. A human should decide which is "
         "correct.",
-    ),
-    "implied_challenges_stated": (
-        "Suggestion — review recommended",
-        "An implied reading challenges the firm's stated call; the stated call "
-        "was kept and this row records the challenge for review.",
-    ),
-    "source_metadata_missing": (
-        "Skipped — source details missing",
-        "The document's identifying details were unavailable, so this call "
-        "could not be attached to a source. Usually a processing issue; let us "
-        "know if it recurs.",
-    ),
-    "taxonomy_no_match": (
-        "Skipped — asset not on the list",
-        "The asset named didn't match any item on the approved asset list, so "
-        "it was left out. No action needed unless it should be on the list.",
-    ),
-    "quote_not_found": (
-        "Evidence could not be verified",
-        "The exact supporting text couldn't be found in the document, so the "
-        "call was dropped rather than kept unverified. A human can check the "
-        "cited page.",
-    ),
-    "quote_not_found_visual": (
-        "Evidence could not be verified visually",
-        "The exact supporting text could not be confirmed even after a visual "
-        "page check, so the call was dropped rather than kept unverified. A "
-        "human can check the cited page.",
-    ),
-    "visual_locator_missing": (
-        "Evidence location missing",
-        "A call from a chart or table didn't record where in the document it "
-        "came from, so it couldn't be verified. A human can check the document.",
-    ),
-    "evidence_check_failed": (
-        "Evidence could not be verified",
-        "The supporting evidence didn't hold up on a second check, so the call "
-        "was dropped rather than kept unverified. A human can check the cited "
-        "page.",
-    ),
-    "delta_below_materiality": (
-        "Change too small to call",
-        "The forecast change behind this call was too small to justify a view, "
-        "so it was left out. No action needed.",
-    ),
-    "checker_sign_mismatch": (
-        "Evidence points the other way",
-        "A second reader found the cited text doesn't support the direction of "
-        "this call, so it was dropped. A human can check the cited page.",
-    ),
-    "checker_not_forward_looking": (
-        "Not a forward-looking view",
-        "A second reader found the cited text isn't a forward-looking view "
-        "(e.g. it describes the past), so it was dropped. A human can check the "
-        "cited page.",
-    ),
-    "checker_asset_mismatch": (
-        "Evidence is about a different asset",
-        "A second reader found the cited text is about a different asset than "
-        "the call, so it was dropped. A human can check the cited page.",
     ),
     "json_parse_error": (
         "Part of a document couldn't be read",
@@ -224,12 +161,87 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "The second-reader verification failed to run for this document, so "
         "affected calls weren't confirmed. Let us know so we can re-run it.",
     ),
-    "ingest_error": (
-        "Document could not be ingested",
-        "This source could not be fetched or converted into text, so it was "
-        "skipped while the rest of the run continued. Let us know so we can "
-        "re-run it.",
+    "source_metadata_missing": (
+        "Skipped — source details missing",
+        "The document's identifying details were unavailable, so this call "
+        "could not be attached to a source. Usually a processing issue; let us "
+        "know if it recurs.",
     ),
+    "implied_challenges_stated": (
+        "Suggestion — review recommended",
+        "An implied reading challenges the firm's stated call; the stated call "
+        "was kept and this row records the challenge for review.",
+    ),
+    "arbitrated_out": (
+        "Conflicting views — other call kept",
+        "Two documents disagreed; the more current or more specific call was "
+        "kept. Review if the kept call looks wrong.",
+    ),
+    "quote_not_found": (
+        "Evidence could not be verified",
+        "The exact supporting text couldn't be found in the document, so the "
+        "call was dropped rather than kept unverified. A human can check the "
+        "cited page.",
+    ),
+    "evidence_check_failed": (
+        "Evidence could not be verified",
+        "The supporting evidence didn't hold up on a second check, so the call "
+        "was dropped rather than kept unverified. A human can check the cited "
+        "page.",
+    ),
+    "quote_not_found_visual": (
+        "Evidence could not be verified visually",
+        "The exact supporting text could not be confirmed even after a visual "
+        "page check, so the call was dropped rather than kept unverified. A "
+        "human can check the cited page.",
+    ),
+    "visual_locator_missing": (
+        "Evidence location missing",
+        "A call from a chart or table didn't record where in the document it "
+        "came from, so it couldn't be verified. A human can check the document.",
+    ),
+    "checker_sign_mismatch": (
+        "Evidence points the other way",
+        "A second reader found the cited text doesn't support the direction of "
+        "this call, so it was dropped. A human can check the cited page.",
+    ),
+    "checker_asset_mismatch": (
+        "Evidence is about a different asset",
+        "A second reader found the cited text is about a different asset than "
+        "the call, so it was dropped. A human can check the cited page.",
+    ),
+    "checker_not_forward_looking": (
+        "Not a forward-looking view",
+        "A second reader found the cited text isn't a forward-looking view "
+        "(e.g. it describes the past), so it was dropped. A human can check the "
+        "cited page.",
+    ),
+    "taxonomy_no_match": (
+        "Skipped — asset not on the list",
+        "The asset named didn't match any item on the approved asset list, so "
+        "it was left out. No action needed unless it should be on the list.",
+    ),
+    "delta_below_materiality": (
+        "Change too small to call",
+        "The forecast change behind this call was too small to justify a view, "
+        "so it was left out. No action needed.",
+    ),
+    "duplicate_same_view": (
+        "Duplicate — already covered",
+        "The same view for this asset appears in another of this firm's "
+        "documents; it was kept once. No action needed.",
+    ),
+    "duplicate_cross_leaf": (
+        "Duplicate — same call, related asset",
+        "This repeats a view already kept for a closely related asset from the "
+        "same piece of text; it was kept once to avoid double-counting. No "
+        "action needed.",
+    ),
+}
+
+# Importance rank per reason code = its position in CLIENT_FAILURE_LABELS.
+_CLIENT_FAILURE_RANKS: dict[str, int] = {
+    code: rank for rank, code in enumerate(CLIENT_FAILURE_LABELS)
 }
 
 # An unmapped code never crashes: it falls back to the raw code plus a generic,
@@ -246,6 +258,14 @@ def client_failure_label(reason_code: str) -> tuple[str, str]:
     return CLIENT_FAILURE_LABELS.get(
         reason_code, (reason_code, _CLIENT_FAILURE_FALLBACK)
     )
+
+
+def client_failure_rank(reason_code: str) -> int:
+    """Sort key for failures-client.csv: the code's position in
+    CLIENT_FAILURE_LABELS (dict order = most important first). An unmapped code
+    sorts to the very top — something we didn't anticipate deserves the most
+    attention, not the least."""
+    return _CLIENT_FAILURE_RANKS.get(reason_code, -1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -894,7 +914,9 @@ def write_run_outputs(
     show each firm/source title (absent -> the source_id is shown instead).
 
     Alongside `failures.csv` (unchanged, internal) a `failures-client.csv` is
-    written with the same rows in the same order but plain labels/explanations.
+    written with the same rows but plain labels/explanations, grouped by label
+    and sorted most-important-first (CLIENT_FAILURE_LABELS order; stable within
+    a label, so per-source order is preserved inside each group).
     """
     chunk_failures = chunk_failures or []
     run_dir = Path(output_dir)
@@ -906,10 +928,13 @@ def write_run_outputs(
         FAILURE_COLUMNS,
         [failure.to_row() for failure in all_failures],
     )
+    client_failures = sorted(
+        all_failures, key=lambda failure: client_failure_rank(failure.reason_code)
+    )
     _write_csv(
         run_dir / "failures-client.csv",
         CLIENT_FAILURE_COLUMNS,
-        [_client_failure_row(failure, sources or {}) for failure in all_failures],
+        [_client_failure_row(failure, sources or {}) for failure in client_failures],
     )
     manifest = _manifest_text(
         result,

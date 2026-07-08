@@ -1,6 +1,6 @@
 # Markets Recon / Allocator Pro POC — State
 
-_Last updated: 2026-07-08_
+_Last updated: 2026-07-09_
 
 ## Current State
 
@@ -24,7 +24,10 @@ table-visual key-token route; Rubric v2 scoring off the checker's categorical
 scrambled and OCR pages: key-token fallback, cap 74, forced review),
 `src/assemble.py` (`output.csv`/`failures.csv`/`failures-client.csv`/
 `manifest.md`; cross-leaf dedup; deterministic stated-beats-implied with
-`implied_challenges_stated` logged; O-vs-U sibling tripwire), `src/ingest.py`
+`implied_challenges_stated` logged; O-vs-U sibling tripwire;
+`failures-client.csv` is grouped by client label and sorted
+most-important-first — `CLIENT_FAILURE_LABELS` dict order is the canonical
+importance order, internal `failures.csv` never re-ordered), `src/ingest.py`
 (header-alias CSV loading with optional `local_file`, snapshots, chunking,
 visual-heavy detection + Playwright print-to-PDF, scrambled-page detection,
 retry-hardened fetches with browser fallback for blocked HTML — the browser
@@ -43,7 +46,7 @@ and failures-client files to the client (plain-language labels for every
 internal reason_code, mapping test-enforced complete). A
 `.claude/settings.json` hook blocks commits containing Claude/Anthropic
 self-attribution — commit messages stay plain. Tests: `.venv/bin/python -m
-unittest discover -s tests` (the `-s tests` is required); 311 pass (1 skip).
+unittest discover -s tests` (the `-s tests` is required); 313 pass (1 skip).
 
 The run pipeline (`src/run.py`, ≤20 sources per run, `--out-root` to redirect
 artifacts) runs up to five LLM steps with per-step engine/model/effort flags:
@@ -104,19 +107,32 @@ rows (Vanguard "midyear market outlook" removed, wrong-year content). It
 runs as TEN firm-whole splits (9×10 + 1×7) from the wired master
 `client-runs/runs-07072026-98rows/Target Ingestion List AI (with
 local_file).csv` (44 local files under `manual-sources/`), command sheet
-`tmp/98run-commands.md`; everything combines into ONE deliverable (combined
-output CSV + crosscheck across all outputs + firm pages/binder at the
-combine step). Execution: split 1 DONE (104 kept / 32 failed, ~4.2 h, RBC
-Global Insight 4-way group applied; deliverable is `98b-split1-rescored/`,
-110 rows); split 2 relaunch pending after its first attempt died on a
-transient AB DNS error (fixed by phase-3 fault tolerance; 6 AB PDFs now
-local); splits 3–10 queued. Runs launch under `nohup` (a wrapper teardown
-killed a run once on macOS), ≤2 parallel, staggered. `.venv` holds
+`tmp/98run-commands.md`; everything combines into ONE deliverable. Execution
+COMPLETE: all ten splits ran (split 1 deliverable is `98b-split1-rescored/`;
+split 8 needed an HSBC rerun, already merged into its current files — the
+`.pre-hsbc-rerun` backups and `98b-split8-hsbc/` are superseded), and the
+cross-run crosscheck is done (`crosscheck/`). The combined deliverable is
+`98b-combined/` (built by `tmp/combine-98b.py`): 1729 kept calls across 55
+firms + 758 failure rows; its `failures-client.csv` is importance-sorted.
+Firm-page digests are still running; firm pages + Word binder follow once
+they finish. Runs launch under `nohup` (a wrapper teardown killed a run once
+on macOS), ≤2 parallel, staggered. `.venv` holds
 pdfplumber, pdfminer.six, trafilatura, htmldate, playwright (+ chromium),
 python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-09: All ten splits + crosscheck complete; combined deliverable
+  built at `client-runs/runs-07072026-98rows/98b-combined/`
+  (`tmp/combine-98b.py`: output.csv 1729 rows, failures-client.csv 758 rows,
+  internal failures.csv, manifest.md with per-split counts). failures-client
+  sorting made canonical in `src/assemble.py`: `CLIENT_FAILURE_LABELS`
+  reordered to importance order (whole-document/needs-decision first,
+  duplicates last), `client_failure_rank()` added (unmapped codes sort to
+  the top), per-run and combined files grouped by label most-important-first
+  (internal failures.csv untouched). `output-guide.html` failures section
+  states the sort order, table reordered to match, missing "Document could
+  not be ingested" and visual-verification labels added. Suite 311 → 313.
 - 2026-07-08: Splits 1–2 first launch + phase-3 validation. Split 1 completed
   (104 kept / 32 failed; materiality gate fired for the first time); split 2
   died mid-run on a transient AB DNS error — the defect phase-3 fixed. Review
@@ -192,19 +208,14 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Next / Open
 
-- **97-row batch execution (in progress)**: relaunch split 2 (delete stale
-  `work/98b-split2/` + `98b-split2.log` first for a clean slate), then splits
-  3–10 from `tmp/98run-commands.md` (≤2 parallel, nohup, ~2–4 h each).
-  Group-note flags: RBC ×4 applied on split 1; Wellington pair pending on
-  split 5.
-- One combined final deliverable across all batch outputs: combined CSV,
-  crosscheck across every output.csv, firm pages + Word binder at the
-  combine step. Use `98b-split1-rescored/output.csv` for split 1, not the
-  original.
-- Split-1 client cosmetics to decide before the combine: 30 undated Janus
-  Henderson rows (docs carry no parseable worded date) and grouped rows
-  pipe-joining identical dates (`15/06/2026 | ×4`) — dedupe would read
-  better.
+- **Deliverable remainder**: firm-page digests still running; when done,
+  reconcile → firmpages → bind the Word binder, then review digests against
+  `98b-combined/`. Re-run `tmp/combine-98b.py` if any split output changes.
+- Client cosmetics to decide before sending: 30 undated Janus Henderson rows
+  (docs carry no parseable worded date) and grouped rows pipe-joining
+  identical dates (`15/06/2026 | ×4`) — dedupe would read better.
+- Combine-step code changes (assemble sort, tests, guide, combine script)
+  are uncommitted on `phase-3`.
 - `runs/pilot-04` + `runs/pilot-04-rescored` remain disk-only (freeze
   pending user decision).
 - GT reconciliation with the Markets Recon team: test2 GT has ≥1 error (TRP
