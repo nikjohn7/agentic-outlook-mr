@@ -297,6 +297,7 @@ def score_candidate(
     visual_pages: frozenset[int] = frozenset(),
     verdict: CheckVerdict | None = None,
     checker_enabled: bool = False,
+    evidence_check_override: EvidenceCheck | None = None,
 ) -> ConfidenceResult:
     """Return a deterministic score, or raise ValueError for hard failures.
 
@@ -310,7 +311,7 @@ def score_candidate(
     if candidate.taxonomy_match == "none" or not taxonomy.is_valid_label(candidate.sub_asset_class):
         raise ValueError(HARD_FAILURE_TAXONOMY)
 
-    evidence_check = evidence_passes(
+    evidence_check = evidence_check_override or evidence_passes(
         candidate,
         snapshot_text,
         scrambled_pages=scrambled_pages,

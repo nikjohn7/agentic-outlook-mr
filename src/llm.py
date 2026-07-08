@@ -231,6 +231,21 @@ def parse_arbitration(raw_response: str) -> tuple[int | None, str]:
     return winning_index, reasoning
 
 
+def parse_quote_visual_verification(raw_response: str) -> str:
+    """Parse quote visual verifier response: {"judgment": "..."}."""
+    payload = json.loads(_extract_json(raw_response))
+    if not isinstance(payload, dict):
+        raise ValueError("quote visual verifier response must be a JSON object")
+    judgment = payload.get("judgment")
+    valid = {"present_verbatim", "present_paraphrase", "absent"}
+    if judgment not in valid:
+        raise ValueError(
+            "quote visual verifier judgment must be one of "
+            + ", ".join(sorted(valid))
+        )
+    return judgment
+
+
 def _default_runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
     # stdin must be closed: `codex exec` (and `claude -p`) treat piped stdin as
     # extra prompt input and block waiting for EOF when the parent's stdin

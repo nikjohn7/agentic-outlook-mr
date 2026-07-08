@@ -11,6 +11,7 @@ from typing import Callable
 
 from src.confidence import (
     CHECKER_FAIL_REASONS,
+    EvidenceCheck,
     HARD_FAILURE_EVIDENCE,
     HARD_FAILURE_MATERIALITY,
     HARD_FAILURE_QUOTE,
@@ -28,6 +29,7 @@ from src.taxonomy import Taxonomy
 # Given the conflicting scored candidates for one (source, leaf), returns the
 # winning index within the group (None = unresolved) and the reasoning.
 Arbiter = Callable[[list[ConfidenceResult]], tuple[int | None, str]]
+QuoteVisualVerifier = Callable[[CandidateCall, SourceInfo, Path | None], str]
 
 
 TARGET_OUTPUT_COLUMNS = (
@@ -102,6 +104,7 @@ _CONFIDENCE_REASON_CODES = frozenset(
         HARD_FAILURE_EVIDENCE,
         HARD_FAILURE_MATERIALITY,
         *CHECKER_FAIL_REASONS.values(),
+        "quote_not_found_visual",
     }
 )
 _ASSEMBLE_REASON_CODES = frozenset(
@@ -167,6 +170,12 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "The exact supporting text couldn't be found in the document, so the "
         "call was dropped rather than kept unverified. A human can check the "
         "cited page.",
+    ),
+    "quote_not_found_visual": (
+        "Evidence could not be verified visually",
+        "The exact supporting text could not be confirmed even after a visual "
+        "page check, so the call was dropped rather than kept unverified. A "
+        "human can check the cited page.",
     ),
     "visual_locator_missing": (
         "Evidence location missing",
@@ -353,6 +362,8 @@ def assemble_candidates(
     verdicts: dict[int, CheckVerdict] | None = None,
     arbiter: Arbiter | None = None,
     group_map: dict[str, str] | None = None,
+    quote_visual_verifier: QuoteVisualVerifier | None = None,
+    native_source_paths: dict[str, Path] | None = None,
 ) -> AssemblyResult:
     """page_counts maps source_id -> PDF page count (absent for HTML sources).
 
@@ -405,6 +416,48 @@ def assemble_candidates(
             # EvidenceFailure carries the human-readable message (e.g. the
             # scrambled-page degraded-fallback note); other reasons echo the code.
             message = getattr(exc, "message", reason)
+            if reason == HARD_FAILURE_QUOTE and quote_visual_verifier is not None:
+                source_info = sources.get(candidate.source_id)
+                native_path = (native_source_paths or {}).get(candidate.source_id)
+                if source_info is not None:
+                    visual_check = _visual_quote_check(
+                        candidate,
+                        source_info,
+                        native_path,
+                        quote_visual_verifier,
+                    )
+                    if visual_check.passed:
+                        try:
+                            scored.append(
+                                score_candidate(
+                                    candidate,
+                                    taxonomy=taxonomy,
+                                    snapshot_text=snapshot_text,
+                                    page_count=page_count,
+                                    scrambled_pages=source_scrambled,
+                                    ocr_pages=source_ocr,
+                                    visual_pages=source_visual_pages,
+                                    verdict=verdict,
+                                    checker_enabled=checker_enabled,
+                                    evidence_check_override=visual_check,
+                                )
+                            )
+                            continue
+                        except ValueError as visual_exc:
+                            reason = str(visual_exc)
+                            message = getattr(visual_exc, "message", reason)
+                    else:
+                        failures.append(
+                            FailureRecord.from_candidate(
+                                visual_check.reason_code,
+                                visual_check.message,
+                                candidate,
+                                checker_strength=(
+                                    verdict.evidence_strength if verdict is not None else ""
+                                ),
+                            )
+                        )
+                        continue
             if (
                 verdict is not None
                 and reason in CHECKER_FAIL_REASONS.values()
@@ -527,6 +580,46 @@ def assemble_candidates(
         output_rows=output_rows,
         failures=failures,
         candidate_count=len(candidates),
+    )
+
+
+def _visual_quote_check(
+    candidate: CandidateCall,
+    source: SourceInfo,
+    native_source_path: Path | None,
+    verifier: QuoteVisualVerifier,
+) -> EvidenceCheck:
+    try:
+        judgment = verifier(candidate, source, native_source_path)
+    except Exception as exc:
+        judgment = "malformed"
+        detail = f"visual verifier failed: {type(exc).__name__}: {exc}"
+    else:
+        detail = ""
+    if judgment == "present_verbatim":
+        return EvidenceCheck(
+            True,
+            message=(
+                "visual verifier confirmed the quote verbatim on the rendered "
+                "source page; confidence capped and review required"
+            ),
+            degraded=True,
+            quote_match="visual",
+        )
+    if judgment == "present_paraphrase":
+        detail = (
+            "visual verifier found only a paraphrase, not the submitted "
+            "verbatim quote; dropped under the verified-evidence policy"
+        )
+    elif judgment == "absent":
+        detail = "visual verifier did not find the submitted quote on the cited page"
+    elif not detail:
+        detail = f"visual verifier returned malformed judgment {judgment!r}; treated as absent"
+    return EvidenceCheck(
+        False,
+        "quote_not_found_visual",
+        detail,
+        quote_match="visual",
     )
 
 
@@ -787,6 +880,7 @@ def write_run_outputs(
     chunk_failures: list[FailureRecord] | None = None,
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
+    quote_visual_stats: dict[str, int] | None = None,
 ) -> None:
     """Write the run's review files.
 
@@ -817,7 +911,14 @@ def write_run_outputs(
         CLIENT_FAILURE_COLUMNS,
         [_client_failure_row(failure, sources or {}) for failure in all_failures],
     )
-    manifest = _manifest_text(result, source_summaries or [], chunk_failures, run_config, grouping)
+    manifest = _manifest_text(
+        result,
+        source_summaries or [],
+        chunk_failures,
+        run_config,
+        grouping,
+        quote_visual_stats,
+    )
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
 
 
@@ -984,6 +1085,7 @@ def _manifest_text(
     chunk_failures: list[FailureRecord],
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
+    quote_visual_stats: dict[str, int] | None = None,
 ) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
@@ -1043,6 +1145,12 @@ def _manifest_text(
         lines.append("## Quote match tier (kept rows)")
         lines.extend(
             f"- {tier}: {count}" for tier, count in sorted(quote_match_counts.items())
+        )
+        lines.append("")
+    if quote_visual_stats:
+        lines.append("## Quote visual verification")
+        lines.extend(
+            f"- {key}: {count}" for key, count in sorted(quote_visual_stats.items())
         )
         lines.append("")
     reason_counts = Counter(

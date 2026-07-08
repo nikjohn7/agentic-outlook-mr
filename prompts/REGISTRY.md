@@ -5,6 +5,21 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `verify_quote_visual.md` — v1 (2026-07-08)
+
+Tier-3 quote verification fallback (`src/run.py` + `src/assemble.py`). Invoked
+only after deterministic quote tiers fail for a candidate. The model opens the
+native PDF path, inspects the cited page/locator visually, and returns one
+categorical judgment only: `present_verbatim`, `present_paraphrase`, or
+`absent`. No numbers or confidence. Deterministic mapping: `present_verbatim`
+keeps the candidate with `quote_match: visual`, cap 74, and forced review;
+`present_paraphrase` is dropped (the system never keeps non-verbatim evidence);
+`absent`, malformed JSON, and engine failures also drop with
+`quote_not_found_visual`. Default engine claude/sonnet/medium, overridable with
+`run.py` quote-visual flags. Inputs (appended JSON): source identity,
+`native_source_path`, candidate locator, evidence_quote, sub_asset_class, and
+view.
+
 ### `preflight_content_check.md` — v1 (2026-07-07)
 
 The link preflight's one content-sanity step (`src/preflight.py`, instruction

@@ -20,9 +20,10 @@ from src.run import (
     _chunk_content,
     _html_chunk_text,
     _make_arbiter,
+    _make_quote_visual_verifier,
     _resolve_groups,
 )
-from src.schemas import CandidateCall
+from src.schemas import CandidateCall, SourceInfo
 
 
 FIXTURE_PRINTED_PDF = Path(__file__).parent / "fixtures" / "printed_page.pdf"
@@ -630,6 +631,47 @@ class RunPipelineIngestFaultToleranceTest(unittest.TestCase):
         self.assertIn("Document could not be ingested", client_text)
         self.assertIn("bad-doc (pdf, 0 chunks): 0 candidates emitted [ingest-failed:", manifest)
         self.assertIn("good-doc (pdf, 1p / 1 chunks): 1 candidates emitted", manifest)
+
+
+class QuoteVisualVerifierTest(unittest.TestCase):
+    def test_malformed_llm_response_fails_closed_and_updates_stats(self) -> None:
+        calls = 0
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            nonlocal calls
+            calls += 1
+            return subprocess.CompletedProcess(command, 0, stdout='{"judgment": "maybe"}', stderr="")
+
+        stats = {
+            "attempted": 0,
+            "present_verbatim": 0,
+            "present_paraphrase": 0,
+            "absent": 0,
+            "malformed": 0,
+        }
+        verifier = _make_quote_visual_verifier(
+            engine="claude",
+            model="sonnet",
+            effort="medium",
+            runner=runner,
+            stats=stats,
+        )
+        judgment = verifier(
+            _call_candidate(),
+            SourceInfo(
+                source_id="pimco-outlook",
+                firm="PIMCO",
+                date="",
+                source="Layered Uncertainty",
+                url="https://example.test/pimco",
+            ),
+            Path("/tmp/source.pdf"),
+        )
+
+        self.assertEqual("malformed", judgment)
+        self.assertEqual(3, calls)  # initial call + two repair attempts
+        self.assertEqual(1, stats["attempted"])
+        self.assertEqual(1, stats["malformed"])
 
 
 def _call_candidate() -> CandidateCall:

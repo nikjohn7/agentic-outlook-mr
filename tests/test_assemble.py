@@ -228,6 +228,94 @@ class ClientFailuresFileTest(unittest.TestCase):
             )
 
 
+class VisualQuoteFallbackTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1",
+                firm="Janus Henderson Investors",
+                date="",
+                source="Market GPS Investment Outlook Mid-Year 2026",
+                url="https://example.test/jh.pdf",
+            )
+        }
+
+    def test_present_verbatim_keeps_with_visual_cap_and_review(self) -> None:
+        calls: list[str] = []
+
+        def verifier(candidate: CandidateCall, source: SourceInfo, native_path: Path | None) -> str:
+            calls.append(candidate.sub_asset_class)
+            return "present_verbatim"
+
+        result = assemble_candidates(
+            [_candidate(evidence_quote="quote only visible on rendered page")],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): _long_snapshot("snapshot omits it")},
+            quote_visual_verifier=verifier,
+            native_source_paths={"source-1": Path("/tmp/source.pdf")},
+        )
+
+        self.assertEqual(["Emerging Markets Equities"], calls)
+        self.assertEqual(1, len(result.output_rows))
+        row = result.output_rows[0]
+        self.assertEqual("74", row["confidence"])
+        self.assertEqual("Medium", row["band"])
+        self.assertEqual("review", row["review_flag"])
+        self.assertEqual("visual", row["quote_match"])
+        self.assertEqual([], result.failures)
+
+    def test_absent_visual_verification_drops_with_distinct_reason(self) -> None:
+        result = assemble_candidates(
+            [_candidate(evidence_quote="quote only visible on rendered page")],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): _long_snapshot("snapshot omits it")},
+            quote_visual_verifier=lambda candidate, source, native_path: "absent",
+            native_source_paths={"source-1": Path("/tmp/source.pdf")},
+        )
+
+        self.assertEqual([], result.output_rows)
+        self.assertEqual(["quote_not_found_visual"], [f.reason_code for f in result.failures])
+        self.assertIn("did not find", result.failures[0].message)
+
+    def test_malformed_visual_verification_fails_closed(self) -> None:
+        result = assemble_candidates(
+            [_candidate(evidence_quote="quote only visible on rendered page")],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): _long_snapshot("snapshot omits it")},
+            quote_visual_verifier=lambda candidate, source, native_path: "not_a_judgment",
+            native_source_paths={"source-1": Path("/tmp/source.pdf")},
+        )
+
+        self.assertEqual([], result.output_rows)
+        self.assertEqual(["quote_not_found_visual"], [f.reason_code for f in result.failures])
+        self.assertIn("malformed", result.failures[0].message)
+
+    def test_visual_verification_not_invoked_when_deterministic_gate_passes(self) -> None:
+        def forbidden(candidate: CandidateCall, source: SourceInfo, native_path: Path | None) -> str:
+            raise AssertionError("visual verifier must not run")
+
+        result = assemble_candidates(
+            [_candidate(evidence_quote="EM equities are favored in the outlook.")],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={
+                ("source-1", "p1-5"): _long_snapshot(
+                    "EM equities are favored in the outlook."
+                )
+            },
+            quote_visual_verifier=forbidden,
+            native_source_paths={"source-1": Path("/tmp/source.pdf")},
+        )
+
+        self.assertEqual(1, len(result.output_rows))
+        self.assertEqual("exact", result.output_rows[0]["quote_match"])
+
+
 class CheckerAndArbiterAssemblyTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -1029,6 +1117,10 @@ def _verdict(**overrides: object) -> CheckVerdict:
     }
     values.update(overrides)
     return CheckVerdict.from_mapping(values)
+
+
+def _long_snapshot(text: str) -> str:
+    return text + " " + ("Broader market context. " * 80)
 
 
 def _candidate(**overrides: object) -> CandidateCall:

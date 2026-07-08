@@ -26,6 +26,7 @@ from src.llm import (
     call_parsed,
     parse_arbitration,
     parse_groups,
+    parse_quote_visual_verification,
     parse_verdicts,
 )
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
@@ -39,6 +40,7 @@ CONVENTIONS_FILE = PROJECT_ROOT / "prompts" / "conventions.md"
 CHECK_PROMPT = PROJECT_ROOT / "prompts" / "check_candidates.md"
 ARBITER_PROMPT = PROJECT_ROOT / "prompts" / "arbitrate_conflict.md"
 GROUPS_PROMPT = PROJECT_ROOT / "prompts" / "resolve_groups.md"
+QUOTE_VISUAL_PROMPT = PROJECT_ROOT / "prompts" / "verify_quote_visual.md"
 
 # The chunk call can fail two ways worth catching per-chunk (so one bad chunk
 # never sinks the whole run): unparseable/contract-breaking output after the
@@ -64,6 +66,9 @@ def run_pipeline(
     grouper_engine: str = "codex",
     grouper_model: str | None = None,
     grouper_effort: str = "low",
+    quote_visual_engine: str = "claude",
+    quote_visual_model: str | None = "sonnet",
+    quote_visual_effort: str = "medium",
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
     brain_text: str | None = None,
@@ -86,6 +91,8 @@ def run_pipeline(
         arbiter_model = CODEX_MODEL
     if grouper_engine == "codex" and grouper_model is None:
         grouper_model = CODEX_MODEL
+    if quote_visual_engine == "codex" and quote_visual_model is None:
+        quote_visual_model = CODEX_MODEL
     taxonomy = load_taxonomy()
     taxonomy_block = taxonomy.grouped_block()
     brain = brain_text if brain_text is not None else _brain_text()
@@ -131,6 +138,7 @@ def run_pipeline(
     scrambled_pages: dict[str, set[int]] = {}
     ocr_pages: dict[str, set[int]] = {}
     visual_pages: dict[str, set[int]] = {}
+    native_source_paths: dict[str, Path] = {}
     source_infos: dict[str, SourceInfo] = {}
     source_summaries: list[dict[str, object]] = []
     group_ledgers: dict[str, str] = {}
@@ -173,6 +181,7 @@ def run_pipeline(
             snapshots[(source.source_id, chunk.chunk_id)] = snapshot_text
         if ingested.page_count is not None:
             page_counts[source.source_id] = ingested.page_count
+        native_source_paths[source.source_id] = Path(ingested.native_source_path)
         if ingested.scrambled_pages:
             scrambled_pages[source.source_id] = set(ingested.scrambled_pages)
         if ingested.ocr_pages:
@@ -265,6 +274,20 @@ def run_pipeline(
         effort=arbiter_effort,
         runner=runner,
     )
+    quote_visual_stats = {
+        "attempted": 0,
+        "present_verbatim": 0,
+        "present_paraphrase": 0,
+        "absent": 0,
+        "malformed": 0,
+    }
+    quote_visual_verifier = _make_quote_visual_verifier(
+        engine=quote_visual_engine,
+        model=quote_visual_model,
+        effort=quote_visual_effort,
+        runner=runner,
+        stats=quote_visual_stats,
+    )
     result = assemble_candidates(
         all_candidates,
         sources=source_infos,
@@ -277,6 +300,8 @@ def run_pipeline(
         verdicts=verdicts,
         arbiter=arbiter,
         group_map=group_map or None,
+        quote_visual_verifier=quote_visual_verifier,
+        native_source_paths=native_source_paths,
     )
     run_config = {
         "engine": engine,
@@ -284,6 +309,9 @@ def run_pipeline(
         "effort": effort,
         "checker": f"{checker_engine}/{checker_model}/{checker_effort}",
         "arbiter": f"{arbiter_engine}/{arbiter_model}/{arbiter_effort}",
+        "quote visual verifier": (
+            f"{quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
+        ),
     }
     if group_notes_text:
         run_config["grouper"] = f"{grouper_engine}/{grouper_model}/{grouper_effort}"
@@ -296,6 +324,7 @@ def run_pipeline(
         chunk_failures=chunk_failures,
         run_config=run_config,
         grouping=grouping,
+        quote_visual_stats=quote_visual_stats,
     )
     return result, chunk_failures, run_dir
 
@@ -502,6 +531,60 @@ def _make_arbiter(
         return result.payload
 
     return arbiter
+
+
+def _make_quote_visual_verifier(
+    *,
+    engine: str,
+    model: str | None,
+    effort: str | None,
+    runner=None,
+    stats: dict[str, int] | None = None,
+):
+    """Build the tier-3 categorical quote verifier.
+
+    The verifier is called only after deterministic tiers 1-2b fail. It fails
+    closed: non-PDF sources, malformed JSON, parser failures, and engine errors
+    all return a non-keeping judgment rather than crashing assembly.
+    """
+
+    def verifier(candidate: CandidateCall, source: SourceInfo, native_source_path: Path | None) -> str:
+        if stats is not None:
+            stats["attempted"] = stats.get("attempted", 0) + 1
+        if native_source_path is None or native_source_path.suffix.lower() != ".pdf":
+            if stats is not None:
+                stats["absent"] = stats.get("absent", 0) + 1
+            return "absent"
+        inputs = {
+            "source_id": source.source_id,
+            "firm": source.firm,
+            "source_title": source.source,
+            "native_source_path": str(native_source_path),
+            "locator": candidate.locator,
+            "evidence_quote": candidate.evidence_quote,
+            "sub_asset_class": candidate.sub_asset_class,
+            "view": candidate.view,
+        }
+        try:
+            result = call_parsed(
+                QUOTE_VISUAL_PROMPT,
+                inputs,
+                engine=engine,
+                model=model,
+                effort=effort,
+                runner=runner,
+                parser=parse_quote_visual_verification,
+            )
+        except CHUNK_CALL_ERRORS:
+            if stats is not None:
+                stats["malformed"] = stats.get("malformed", 0) + 1
+            return "malformed"
+        judgment = result.payload
+        if stats is not None:
+            stats[judgment] = stats.get(judgment, 0) + 1
+        return judgment
+
+    return verifier
 
 
 def _resolve_groups(
@@ -753,6 +836,22 @@ def main() -> int:
         help="reasoning effort for the group-notes resolver (default low)",
     )
     parser.add_argument(
+        "--quote-visual-engine",
+        choices=("claude", "codex"),
+        default="claude",
+        help="engine for tier-3 visual quote verification (default claude)",
+    )
+    parser.add_argument(
+        "--quote-visual-model",
+        default="sonnet",
+        help="model for tier-3 visual quote verification (default sonnet)",
+    )
+    parser.add_argument(
+        "--quote-visual-effort",
+        default="medium",
+        help="reasoning effort for tier-3 visual quote verification (default medium)",
+    )
+    parser.add_argument(
         "--out-root",
         help="optional root for this run's artifacts: writes to <out-root>/<run-id>/ "
         "and <out-root>/work/<run-id>/ instead of runs/<run-id> and work/<run-id> "
@@ -790,6 +889,12 @@ def main() -> int:
             grouper_model, grouper_effort = resolve_engine_settings(
                 args.grouper_engine, args.grouper_model, args.grouper_effort
             )
+        quote_visual_arg_model = args.quote_visual_model
+        if args.quote_visual_engine == "codex" and quote_visual_arg_model == "sonnet":
+            quote_visual_arg_model = None
+        quote_visual_model, quote_visual_effort = resolve_engine_settings(
+            args.quote_visual_engine, quote_visual_arg_model, args.quote_visual_effort
+        )
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
 
@@ -801,7 +906,9 @@ def main() -> int:
     print(
         f"run {args.run_id}: engine={args.engine} model={model} effort={effort} | "
         f"checker={args.checker_engine}/{checker_model}/{checker_effort} | "
-        f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort}{grouper_line}"
+        f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort} | "
+        f"quote_visual={args.quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
+        f"{grouper_line}"
     )
     result, chunk_failures, run_dir = run_pipeline(
         sources=sources,
@@ -820,6 +927,9 @@ def main() -> int:
         grouper_engine=args.grouper_engine,
         grouper_model=grouper_model,
         grouper_effort=grouper_effort,
+        quote_visual_engine=args.quote_visual_engine,
+        quote_visual_model=quote_visual_model,
+        quote_visual_effort=quote_visual_effort,
         out_root=args.out_root,
     )
     kept = len(result.output_rows)
