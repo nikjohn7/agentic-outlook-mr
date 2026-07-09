@@ -122,6 +122,20 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-09: Firm pages (firmpages stage, engine codex/effort medium) + Word
+  binder built for the 98-row batch. 56 pages in
+  `client-runs/runs-07072026-98rows/firmpages/`, log clean; all 55 output-firm
+  pages present (56th is CI Global Asset Management — a batch source with a
+  macro digest but no reconciled calls; its page discloses "no calls" rather
+  than inventing any). Spot-read RBC Wealth (7 src), Janus Henderson (2 src),
+  Aegon (1 src), CI Global: clean client prose, zero em dashes across all 56,
+  no jargon leakage. Codex/medium not client-approved for this stage (approved
+  sample was claude/sonnet/high) — flags for Nikhil: curly apostrophes/quotes
+  vs the approved sample's typography, and two firms (RBC, Janus) disclose a
+  genuine cross-doc divergence as "unresolved"/"differ" rather than picking a
+  side (correct per resolve convention, but a judgment call). Bound
+  deterministically to `98b-combined/firm-summaries.docx` (151 KB, 1601
+  paragraphs, all 56 firm headings present once). Nothing committed.
 - 2026-07-09: All ten splits + crosscheck complete; combined deliverable
   built at `client-runs/runs-07072026-98rows/98b-combined/`
   (`tmp/combine-98b.py`: output.csv 1729 rows, failures-client.csv 758 rows,
