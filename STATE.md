@@ -107,12 +107,12 @@ rows (Vanguard "midyear market outlook" removed, wrong-year content). It
 runs as TEN firm-whole splits (9×10 + 1×7) from the wired master
 `client-runs/runs-07072026-98rows/Target Ingestion List AI (with
 local_file).csv` (44 local files under `manual-sources/`), command sheet
-`tmp/98run-commands.md`; everything combines into ONE deliverable. Execution
+`docs/run-records/98run-commands.md`; everything combines into ONE deliverable. Execution
 COMPLETE: all ten splits ran (split 1 deliverable is `98b-split1-rescored/`;
 split 8 needed an HSBC rerun, already merged into its current files — the
 `.pre-hsbc-rerun` backups and `98b-split8-hsbc/` are superseded), and the
 cross-run crosscheck is done (`crosscheck/`). The combined deliverable is
-`98b-combined/` (built by `tmp/combine-98b.py`): 1729 kept calls across 55
+`98b-combined/` (built by `scripts/combine-98b.py`): 1729 kept calls across 55
 firms + 758 failure rows; its `failures-client.csv` is importance-sorted.
 Firm-page digests are still running; firm pages + Word binder follow once
 they finish. Runs launch under `nohup` (a wrapper teardown killed a run once
@@ -122,6 +122,10 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-09: Rehomed referenced run records from `tmp/` to
+  `docs/run-records/`, moved the 98-row combine helper to
+  `scripts/combine-98b.py`, preserved client update correspondence under
+  `docs/client-updates/2026-07-06/`, and deleted gitignored scratch artifacts.
 - 2026-07-09: Firm pages (firmpages stage, engine codex/effort medium) + Word
   binder built for the 98-row batch. 56 pages in
   `client-runs/runs-07072026-98rows/firmpages/`, log clean; all 55 output-firm
@@ -138,7 +142,7 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   paragraphs, all 56 firm headings present once). Nothing committed.
 - 2026-07-09: All ten splits + crosscheck complete; combined deliverable
   built at `client-runs/runs-07072026-98rows/98b-combined/`
-  (`tmp/combine-98b.py`: output.csv 1729 rows, failures-client.csv 758 rows,
+  (`scripts/combine-98b.py`: output.csv 1729 rows, failures-client.csv 758 rows,
   internal failures.csv, manifest.md with per-split counts). failures-client
   sorting made canonical in `src/assemble.py`: `CLIENT_FAILURE_LABELS`
   reordered to importance order (whole-document/needs-decision first,
@@ -153,7 +157,7 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   of split 1 found 8 Janus Henderson quote_not_found drops all with real
   evidence (glyph-artifact lines + two-column interleaving), driving the
   tiered quote gate; deliverable for split 1 is `98b-split1-rescored/` (110
-  rows). A fresh smoke (`tmp/phase3-smoke2/`) then validated everything
+  rows). A fresh smoke (`docs/run-records/phase3-smoke2/`) then validated everything
   end-to-end live: ingest_error continuation on an unreachable source,
   quote-gate tier counts in manifest, subsequence + visual tiers fired
   (visual: 3 kept present_verbatim, 1 dropped fail-closed), stale-work-dir
@@ -183,7 +187,7 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   so no Vanguard group. Splits repacked (9×10 + 1×7, firm-whole); scout
   re-run on the 97 list proposed 2 groups (Wellington Bond Credit+Rates,
   RBC Wealth Global Insight regionals ×4) — wired as removable flags on
-  splits 1 and 5 in `tmp/98run-commands.md` (v3), Nikhil accepts/rejects at
+  splits 1 and 5 in `docs/run-records/98run-commands.md` (v3), Nikhil accepts/rejects at
   launch.
 - 2026-07-08: 98-batch finalized for launch. BofA txt replaced with real
   Private Bank content (no longer the Merrill duplicate); the unresolved
@@ -191,7 +195,7 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   per Nikhil (the split-1 group collapses the two Vanguard rows into one
   combined source — group-notes now REQUIRED on split-1). Splits repacked
   per Nikhil's preference: TEN splits of ≤10 rows (9×10 + 1×8), firm-whole;
-  command sheet `tmp/98run-commands.md` rewritten (v2). All 98 rows
+  command sheet `docs/run-records/98run-commands.md` rewritten (v2). All 98 rows
   fetch-safe; 38 local files.
 - 2026-07-08: 98-batch manual round 2 wired: Allspring, Morgan Stanley,
   Nuveen, Carmignac, Schwab, RBC Wealth ×5 (PDFs), BofA Private Bank (txt —
@@ -210,7 +214,7 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   List AI (with local_file).csv` (26 local files: 12 carried + 11 Nikhil
   manual incl. 4 transcripts + Amundi/Seviora extension-less PDFs
   auto-downloaded + JPM cdn PDF), splits 20/20/20/19/19 firm-whole, command
-  sheet `tmp/98run-commands.md`. **(4)** Scout over 98: 1 group proposed
+  sheet `docs/run-records/98run-commands.md`. **(4)** Scout over 98: 1 group proposed
   (Vanguard transcript + midyear outlook) — moot until the wrong-year
   content is fixed. **(5)** Preflight over 98: 88 ok / 10 failed; retry
   sweep proved AB ×6 + JPM transient-DNS (now ok). Kyle's CSV had the four
@@ -224,7 +228,7 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 - **Deliverable remainder**: firm-page digests still running; when done,
   reconcile → firmpages → bind the Word binder, then review digests against
-  `98b-combined/`. Re-run `tmp/combine-98b.py` if any split output changes.
+  `98b-combined/`. Re-run `scripts/combine-98b.py` if any split output changes.
 - Client cosmetics to decide before sending: 30 undated Janus Henderson rows
   (docs carry no parseable worded date) and grouped rows pipe-joining
   identical dates (`15/06/2026 | ×4`) — dedupe would read better.
@@ -233,7 +237,7 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
 - `runs/pilot-04` + `runs/pilot-04-rescored` remain disk-only (freeze
   pending user decision).
 - GT reconciliation with the Markets Recon team: test2 GT has ≥1 error (TRP
-  UK IG Credit) + 6 not-grounded rows (`tmp/gt-reconciliation-test2.md`);
+  UK IG Credit) + 6 not-grounded rows (`docs/run-records/gt-reconciliation-test2.md`);
   earlier pilot GT disputes sent 2026-07-04, awaiting response.
 - Still open: fuller analyst-reviewed ground-truth set; acceptable model
   providers. Deferred work is tracked in `ROADMAP.md` (v1.2/v2 backlog).

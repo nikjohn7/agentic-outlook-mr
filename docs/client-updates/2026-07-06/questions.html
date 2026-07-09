@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allocator Pro POC - Questions &amp; Confirmations</title>
+<style>
+  :root { --accent: #2f5d84; --ink: #1c1e21; --muted: #5a6069; --line: #e2e5ea; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 720px; margin: 0 auto; padding: 48px 44px 56px; }
+  header { border-bottom: 2px solid var(--accent); padding-bottom: 14px; margin-bottom: 22px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin: 0 0 4px; }
+  h1 { font-size: 23px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  .lead { color: var(--muted); font-size: 14px; margin: 12px 0 26px; }
+  ol { margin: 0; padding: 0; list-style: none; counter-reset: q; }
+  li.q { position: relative; padding: 0 0 18px 40px; margin-bottom: 16px; border-bottom: 1px solid var(--line); counter-increment: q; }
+  li.q:last-child { border-bottom: none; }
+  li.q::before {
+    content: counter(q); position: absolute; left: 0; top: 1px;
+    width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-size: 13px; font-weight: 600; text-align: center; line-height: 26px;
+  }
+  .q-title { font-weight: 650; margin: 2px 0 6px; font-size: 15.5px; }
+  .q-body { color: #33373d; margin: 0; }
+  footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+  @media print {
+    body { font-size: 12px; }
+    .page { max-width: none; padding: 0.45in 0.6in; }
+    h1 { font-size: 20px; }
+    li.q { padding-left: 34px; padding-bottom: 12px; margin-bottom: 11px; page-break-inside: avoid; }
+    li.q::before { width: 22px; height: 22px; line-height: 22px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <p class="eyebrow">Allocator Pro &middot; Proof of Concept</p>
+      <h1>Questions &amp; Confirmations</h1>
+    </header>
+    <p class="lead">A short list of things I'd like you to confirm so I can set the
+      system up correctly for the full source list. Most can be answered in a sentence
+      or a yes/no.</p>
+
+    <ol>
+      <li class="q">
+        <p class="q-title">Are the source links final?</p>
+        <p class="q-body">In last quarter's set, some links opened a web page that had a
+          download button, and the button was what actually took you to the PDF. Going forward,
+          not just for these 37 but for future batches too, can I assume the links will be
+          curated by hand so each one is final? So if a link is a web page, I'll treat that page
+          as the thing to read, and if it's a PDF, the link goes straight to the file. Or is that
+          extra click something I should plan to automate down the line?</p>
+      </li>
+      <li class="q">
+        <p class="q-title">Are there sources that should be read together?</p>
+        <p class="q-body">Last quarter, a few calls came from two documents combined, where the
+          view only really made sense once you read both together (say a review document
+          alongside an outlook from the same firm). Will that come up again in the 37-source
+          list? If so, it'd help to have a quick list of which titles go together: just the firm
+          and the two titles, like <em>"J.P. Morgan: 'Title A' + 'Title B', read together."</em>
+          A short note or a few lines in an email is plenty.</p>
+      </li>
+      <li class="q">
+        <p class="q-title">Can you confirm the call legend?</p>
+        <p class="q-body">Quick one to confirm: I'm recording each call as O for overweight,
+          N for neutral, U for underweight, and UNCERTAIN when the document doesn't really commit
+          either way. Does that match what you'd like to see in the output?</p>
+      </li>
+      <li class="q">
+        <p class="q-title">Does a small change in a forecast number count as a call?</p>
+        <p class="q-body">Sometimes a document only nudges a forecast number rather than stating
+          an actual view. Should that count as a call? For now I've assumed a move needs to be
+          at least around 25 basis points for rates, or 2% for currencies, before it's worth
+          recording. Is that a reasonable line to draw, or would you put it somewhere else?</p>
+      </li>
+      <li class="q">
+        <p class="q-title">Should the system read between the lines, or only record stated views?</p>
+        <p class="q-body">Some views are implied rather than spelled out, like a broad economic
+          comment that clearly points to a call without saying it outright. Do you want the system
+          to make those judgement calls, or just stick to what's explicitly stated? Right now it
+          does include the implied ones, but marks them lower-confidence and flags them for review.</p>
+      </li>
+      <li class="q">
+        <p class="q-title">How specific should the calls be?</p>
+        <p class="q-body">If a document names a specific country (say, Taiwan equities), should
+          I record the call at the country level, or roll it up to the region (Asia)? More
+          generally, when the wording sits between a broad category and a specific one, which
+          do you prefer I record?</p>
+      </li>
+      <li class="q">
+        <p class="q-title">For dial or scale-style pages, which levels do I record?</p>
+        <p class="q-body">Some documents present their views as dials or scales (for example
+          J.P. Morgan's asset-allocation views page), with a main asset-class dial and finer
+          sub-asset dials. Should I record the main dials, the sub-asset dials, or both?</p>
+      </li>
+      <li class="q">
+        <p class="q-title">For full dial dashboards, should every dial become a row?</p>
+        <p class="q-body">Some sources publish a full grid or dashboard with 30 or more asset
+          dials. Do you want every dial recorded as its own row, or only the firm's highlighted
+          or featured views? In the second test I recorded full grids faithfully, which was
+          accurate but produced many rows from a single source.</p>
+      </li>
+      <li class="q">
+        <p class="q-title">Should a source ever include a firm's broader outlook material?</p>
+        <p class="q-body">Right now I read exactly the document behind the provided link. Some
+          reference answers appear to draw on a firm's broader publication set, such as separate
+          bond, credit, or multi-asset pages. Should a source ever mean "this firm's outlook
+          material generally"? If yes, please list the extra links that should be read for each
+          source.</p>
+      </li>
+      <li class="q">
+        <p class="q-title">For a combined two-document row, which date and link should it carry?</p>
+        <p class="q-body">When a single call is drawn from two documents read together (see
+          question 2), the output row can only carry one date and one link. Which of the two
+          should it use?</p>
+      </li>
+      <li class="q">
+        <p class="q-title">Is the reference I capture enough?</p>
+        <p class="q-body">For each call I'm currently capturing both the page number and the
+          exact supporting phrase. Web pages don't really have page numbers, so for those I just
+          point to the exact phrase in the text. Is that enough of a reference for you, or would
+          you want something more?</p>
+      </li>
+      <li class="q">
+        <p class="q-title">What confidence level should trigger mandatory human review?</p>
+        <p class="q-body">The system flags lower-confidence calls for a human to check. Right
+          now it flags anything below the top confidence band. Is that the right threshold, or
+          would you like it set higher or lower?</p>
+      </li>
+    </ol>
+
+    <footer>
+      Allocator Pro, proof of concept. Prepared for the Markets Recon team.
+    </footer>
+  </div>
+</body>
+</html>

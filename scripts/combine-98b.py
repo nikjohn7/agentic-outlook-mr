@@ -13,7 +13,7 @@ rerun merge) and writes 98b-combined/ with:
 - failures.csv         — internal, concatenated in split order, unsorted
 - manifest.md          — per-split row counts and provenance
 
-Run from the repo root: .venv/bin/python tmp/combine-98b.py
+Run from the repo root: .venv/bin/python scripts/combine-98b.py
 """
 from __future__ import annotations
 
