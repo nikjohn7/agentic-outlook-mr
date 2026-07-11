@@ -1,6 +1,6 @@
 # Markets Recon / Allocator Pro POC — State
 
-_Last updated: 2026-07-09_
+_Last updated: 2026-07-11_
 
 ## Current State
 
@@ -34,7 +34,11 @@ retry-hardened fetches with browser fallback for blocked HTML — the browser
 path retries too — per-page OCR for image-only PDFs, document-date
 extraction; a per-source ingest failure becomes an `ingest_error` failure
 row and the run continues), and `src/llm.py` (headless `claude -p` /
-`codex exec`, `{{name}}` template vars). Dates are
+`codex exec`, `{{name}}` template vars; codex is no longer pinned to one
+model — an allowlist `CODEX_MODELS = gpt-5.5 / gpt-5.6-sol / gpt-5.6-terra /
+gpt-5.6-luna` with `DEFAULT_CODEX_MODEL = gpt-5.5`, a codex effort floor of
+`low` (`minimal` never emitted; `CODEX_EFFORTS`), threaded through every codex
+call site as a flag; defaults byte-identical). Dates are
 document-only (client decision 11): the CSV date is discarded; HTML via
 htmldate, PDF via a first-page worded-date scan; strict DD/MM/YYYY or blank;
 `date_from` ∈ {html, pdf_text, ""}; PDF metadata never used (carries capture
@@ -46,7 +50,7 @@ and failures-client files to the client (plain-language labels for every
 internal reason_code, mapping test-enforced complete). A
 `.claude/settings.json` hook blocks commits containing Claude/Anthropic
 self-attribution — commit messages stay plain. Tests: `.venv/bin/python -m
-unittest discover -s tests` (the `-s tests` is required); 313 pass (1 skip).
+unittest discover -s tests` (the `-s tests` is required); 378 pass (1 skip).
 
 The run pipeline (`src/run.py`, ≤20 sources per run, `--out-root` to redirect
 artifacts) runs up to five LLM steps with per-step engine/model/effort flags:
@@ -55,27 +59,43 @@ analyze (per-chunk, rolling `memory.md`, `prompts/analyze_chunk.md` +
 source, sees the whole-file memory; any `fail` hard-fails, `thin` caps below
 High), conflict arbiter (`arbitrate_conflict.md`), a group-notes resolver
 (`resolve_groups.md`), and a tier-3 visual quote verifier
-(`verify_quote_visual.md`, default claude/sonnet/medium) that fires only for
+(`verify_quote_visual.md`) that fires only for
 quotes failing the deterministic tiers: categorical present_verbatim /
 present_paraphrase / absent, fail-closed, verbatim kept capped+review as
 `quote_match: visual`, paraphrase dropped, absent dropped as
 `quote_not_found_visual`; tier counts and invocations logged in manifest.md.
 Both engine CLIs read PDF pages visually, so image content reaches the model
-even when snapshot text is thin. The proven production config (pilot-05
-onward): analyze codex/gpt-5.5/high, checker claude/opus/medium, arbiter
-claude/sonnet/high, grouper claude/sonnet/medium; the cost slice
-(`cost-slice-01`, 3 sources incl. Manulife) validated it live at ~8
-min/source. Prompts are versioned in `prompts/REGISTRY.md`.
+even when snapshot text is thin. The CODE DEFAULTS are the single source of
+truth for which model runs which step — a bare invocation of any tool
+resolves to the model matrix wired 2026-07-10 (see Recent Changes; regression
+net `tests/test_model_matrix.py`). This SUPERSEDES the earlier "proven
+production config" (pilot-05 onward: analyze codex/gpt-5.5/high, checker
+claude/opus/medium, arbiter claude/sonnet/high, grouper claude/sonnet/medium;
+validated live by `cost-slice-01` at ~8 min/source) — kept here as history.
+Prompts are versioned in `prompts/REGISTRY.md`.
 
 Standalone tools around the pipeline: `src/eval.py` (deterministic GT
 comparison harness + judgment worksheet; never influences a run),
 `src/scout.py` (layer 1 of grouping: pre-run metadata-only companion
 proposals emitting a `--group-notes` file; conservative — same firm alone
-never groups), `src/crosscheck.py` (layer 3: post-run same-firm (firm, leaf)
-overlap report across any number of run outputs; same-view auto-marked, view
-conflicts get one batched categorical pass, degrade to `needs_human`),
+never groups), `src/crosscheck.py` (layer 3 report tool, now SUPERSEDED as the
+acting stage by `src/reconcile.py`; still runs as a bare same-firm (firm, leaf)
+overlap report), `src/reconcile.py` (the v1.2 firm-reconcile stage: scope gate
+→ merge same-view / precedence-ladder conflicting → reconciled `output.csv` +
+`reconcile-audit.csv` + summary; `merged_by_reconcile`/`superseded_by_reconcile`
+failure rows; consumed by the combine step),
 `src/preflight.py` (fetch-only sweep of a source CSV, no run cap, one batched
-content-sanity call, `preflight.csv` + report), and `src/summarize.py`
+content-sanity call, `preflight.csv` + report), `src/datefill.py` (post-run
+document-date backfill: never edits a run in place — report/patch +
+separate `--apply`; one date-hunt agent per undated source
+(`prompts/find_date.md`) in a codex-low→claude-sonnet-low cascade; every
+claim deterministically verified fail-closed (stated quote must reappear;
+landing page must reference the doc; date parsed here and year-windowed
+2025–2026); precedence stated-full → metadata → landing-full →
+month-year `01/MM`, quarter/season never fills; PDF-metadata tier excludes
+browser print-to-PDF captures by producer/creator signature; `--apply`
+rebuilds grouped `Date` cells and dedupes the `15/06/2026 | ×4` cosmetic),
+and `src/summarize.py`
 (reader summaries: per-source `digest` → deterministic reconcile →
 per-firm `firmpages` (claude/sonnet/high, no em dashes, v1.1) → `bind` to a
 python-docx Word binder; sample approved by Nikhil, opus/medium is the
@@ -114,126 +134,250 @@ split 8 needed an HSBC rerun, already merged into its current files — the
 cross-run crosscheck is done (`crosscheck/`). The combined deliverable is
 `98b-combined/` (built by `scripts/combine-98b.py`): 1729 kept calls across 55
 firms + 758 failure rows; its `failures-client.csv` is importance-sorted.
-Firm-page digests are still running; firm pages + Word binder follow once
-they finish. Runs launch under `nohup` (a wrapper teardown killed a run once
+Firm pages (56, firmpages stage codex/medium) + the deterministic python-docx
+Word binder (`98b-combined/firm-summaries.docx`) were built off the
+pre-reconcile combined output and rebuild once the reconcile promotion lands.
+Referenced run records live under `docs/run-records/`; the 98-row combine
+helper is `scripts/combine-98b.py`. Runs launch under `nohup` (a wrapper teardown killed a run once
 on macOS), ≤2 parallel, staggered. `.venv` holds
 pdfplumber, pdfminer.six, trafilatura, htmldate, playwright (+ chromium),
 python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
-- 2026-07-09: Rehomed referenced run records from `tmp/` to
-  `docs/run-records/`, moved the 98-row combine helper to
-  `scripts/combine-98b.py`, preserved client update correspondence under
-  `docs/client-updates/2026-07-06/`, and deleted gitignored scratch artifacts.
-- 2026-07-09: Firm pages (firmpages stage, engine codex/effort medium) + Word
-  binder built for the 98-row batch. 56 pages in
-  `client-runs/runs-07072026-98rows/firmpages/`, log clean; all 55 output-firm
-  pages present (56th is CI Global Asset Management — a batch source with a
-  macro digest but no reconciled calls; its page discloses "no calls" rather
-  than inventing any). Spot-read RBC Wealth (7 src), Janus Henderson (2 src),
-  Aegon (1 src), CI Global: clean client prose, zero em dashes across all 56,
-  no jargon leakage. Codex/medium not client-approved for this stage (approved
-  sample was claude/sonnet/high) — flags for Nikhil: curly apostrophes/quotes
-  vs the approved sample's typography, and two firms (RBC, Janus) disclose a
-  genuine cross-doc divergence as "unresolved"/"differ" rather than picking a
-  side (correct per resolve convention, but a judgment call). Bound
-  deterministically to `98b-combined/firm-summaries.docx` (151 KB, 1601
-  paragraphs, all 56 firm headings present once). Nothing committed.
-- 2026-07-09: All ten splits + crosscheck complete; combined deliverable
-  built at `client-runs/runs-07072026-98rows/98b-combined/`
-  (`scripts/combine-98b.py`: output.csv 1729 rows, failures-client.csv 758 rows,
-  internal failures.csv, manifest.md with per-split counts). failures-client
-  sorting made canonical in `src/assemble.py`: `CLIENT_FAILURE_LABELS`
-  reordered to importance order (whole-document/needs-decision first,
-  duplicates last), `client_failure_rank()` added (unmapped codes sort to
-  the top), per-run and combined files grouped by label most-important-first
-  (internal failures.csv untouched). `output-guide.html` failures section
-  states the sort order, table reordered to match, missing "Document could
-  not be ingested" and visual-verification labels added. Suite 311 → 313.
-- 2026-07-08: Splits 1–2 first launch + phase-3 validation. Split 1 completed
-  (104 kept / 32 failed; materiality gate fired for the first time); split 2
-  died mid-run on a transient AB DNS error — the defect phase-3 fixed. Review
-  of split 1 found 8 Janus Henderson quote_not_found drops all with real
-  evidence (glyph-artifact lines + two-column interleaving), driving the
-  tiered quote gate; deliverable for split 1 is `98b-split1-rescored/` (110
-  rows). A fresh smoke (`docs/run-records/phase3-smoke2/`) then validated everything
-  end-to-end live: ingest_error continuation on an unreachable source,
-  quote-gate tier counts in manifest, subsequence + visual tiers fired
-  (visual: 3 kept present_verbatim, 1 dropped fail-closed), stale-work-dir
-  rerun re-ingests fresh with no stale reuse. The earlier "CLIs unusable"
-  smoke blocker was an agent-sandbox artifact (Codex sandbox blocks the
-  macOS Keychain that holds claude CLI auth) — both CLIs work from normal
-  sessions. Verdict: GO for relaunching split 2 and running splits 3–10.
-- 2026-07-08: Phase 3 hardening for the 98-row batch defects: AB split-2
-  local PDFs wired; per-source ingest errors now continue the run with
-  `ingest_error` failures/client labels/manifest entries; browser fallback
-  fetches retry before failing; prose quote verification now records
-  `quote_match` and uses exact -> normalized -> bounded subsequence tiers
-  (subsequence cap 74/review); tier-3 visual quote verification added
-  (claude/sonnet/medium default, categorical only, fail-closed, paraphrase
-  dropped); `98b-split1-rescored` verifies all 8 Janus quote drops, appends 6
-  new rows, and suppresses 2 duplicate same-source/same-leaf rows. Full suite:
-  311 pass / 1 skip. (The build agent's own smoke stalled on CLI auth inside
-  its sandbox; superseded by the passing smoke-2 above.)
-- 2026-07-08: Aegon row updated: Kyle's replacement link is a direct PDF —
-  downloaded through the ingest path (24p, real text layer, "July 2026
-  Global fixed income mid-year outlook"), saved to `manual-sources/` and
-  wired local (38 local files); splits regenerated, packing unchanged
-  (Aegon in split-10), groups intact.
-- 2026-07-08: Batch reduced to 97 rows: the Vanguard "midyear market
-  outlook" row was REMOVED (its link serves pre-2026 content; Nikhil
-  informing Kyle) — one Vanguard row remains on the local 2026 update PDF,
-  so no Vanguard group. Splits repacked (9×10 + 1×7, firm-whole); scout
-  re-run on the 97 list proposed 2 groups (Wellington Bond Credit+Rates,
-  RBC Wealth Global Insight regionals ×4) — wired as removable flags on
-  splits 1 and 5 in `docs/run-records/98run-commands.md` (v3), Nikhil accepts/rejects at
-  launch.
-- 2026-07-08: 98-batch finalized for launch. BofA txt replaced with real
-  Private Bank content (no longer the Merrill duplicate); the unresolved
-  Vanguard "midyear market outlook" row wired to the same local update PDF
-  per Nikhil (the split-1 group collapses the two Vanguard rows into one
-  combined source — group-notes now REQUIRED on split-1). Splits repacked
-  per Nikhil's preference: TEN splits of ≤10 rows (9×10 + 1×8), firm-whole;
-  command sheet `docs/run-records/98run-commands.md` rewritten (v2). All 98 rows
-  fetch-safe; 38 local files.
-- 2026-07-08: 98-batch manual round 2 wired: Allspring, Morgan Stanley,
-  Nuveen, Carmignac, Schwab, RBC Wealth ×5 (PDFs), BofA Private Bank (txt —
-  byte-identical to the Merrill transcript, both BofA CIO brands; flagged
-  for Kyle), Vanguard update replaced by the 3-Jul-2026 PDF. Master now
-  wires 37 local files; splits regenerated (20/20/20/19/19). Confirmation
-  sweep (`preflight-confirm/`): 15/15 ok, 0 suspect. Sole unresolved row:
-  Vanguard "midyear market outlook" URL serves wrong-year content (htmldate
-  09/05/2023) — must be fixed or consciously dropped before split-3.
-- 2026-07-08: 98-batch prep. **(1)** `.txt` transcript local_file support in
-  ingest (video sources; text path, char-range locators, `date_from:
-  txt_text`; unsupported extensions hard-error) — commit ab4598d, suite 291 →
-  297. **(2)** `summarize._work_dir_for` now resolves an out-root run's
-  sibling `work/` dir (cost-slice finding fixed; 85663ad, suite 298).
-  **(3)** Wired master `client-runs/runs-07072026-98rows/Target Ingestion
-  List AI (with local_file).csv` (26 local files: 12 carried + 11 Nikhil
-  manual incl. 4 transcripts + Amundi/Seviora extension-less PDFs
-  auto-downloaded + JPM cdn PDF), splits 20/20/20/19/19 firm-whole, command
-  sheet `docs/run-records/98run-commands.md`. **(4)** Scout over 98: 1 group proposed
-  (Vanguard transcript + midyear outlook) — moot until the wrong-year
-  content is fixed. **(5)** Preflight over 98: 88 ok / 10 failed; retry
-  sweep proved AB ×6 + JPM transient-DNS (now ok). Kyle's CSV had the four
-  Wellington URLs shuffled against titles — remapped in the wired master
-  (original untouched). Confirmed-broken/blocked, awaiting Nikhil manual
-  download: Allspring, Morgan Stanley, Nuveen, Carmignac, BofA Private
-  Bank, Schwab, RBC Wealth ×5; both Vanguard pieces carry wrong-year
-  content (URL serves July 2024; transcript reads as the 2025 video).
+- 2026-07-11: Phase 3 near-leaf reconciliation built (ROADMAP v1.2 item 6 +
+  the advisory portion of item 3; uncommitted on `phase-3`). Opt-in
+  `src/reconcile.py --near-leaf` pass that runs AFTER the exact-leaf pass over
+  its reconciled rows (61-key exact baseline preserved; off by default so the
+  exact-only path is byte-identical). Deterministic candidate generation pairs a
+  firm's related locked leaves by two bounded lanes — structural (same top-level
+  asset class, Jaccard ≥0.50, plus token-subset or shared category) and
+  short-label containment (a ≤2-token leaf whose tokens all appear in the other,
+  e.g. `AI` ↔ `IT/Tech/Telecomms (inc. AI)`, Jaccard 0.2) — then builds per-firm
+  connected-component clusters. A batched LLM (claude/opus/medium, INHERITED from
+  the scope gate — no independent default; ≤8 clusters / ≤40 rows per call,
+  `prompts/reconcile_nearleaf.md`) partitions each cluster's rows into collective
+  `same_claim` calls (merged onto a canonical leaf chosen from the cluster's own
+  locked labels) vs `distinct` calls (kept). Cross-view merges name the
+  most-relevant surviving row (user decision: agent picks, not keep-separate);
+  every near-leaf survivor is force-flagged review. All four taxonomy fields are
+  rebuilt via `src/taxonomy.py`. Any contract violation (non-partition, canonical
+  not in cluster, missing primary, malformed/failed batch) fails CLOSED to
+  needs_human for the whole cluster. New reason codes `near_leaf_merged` /
+  `near_leaf_superseded` (+ client labels), `reconcile-nearleaf-audit.csv`, and a
+  standalone cross-firm `taxonomy-coverage-review.csv` (broad/specific volume as
+  CONTEXT ONLY, never an auto-tiebreaker). Suite 408→429 (+20 test_reconcile, +1
+  test_model_matrix). Real sibling run over `98b-combined/output.dated.csv` →
+  `client-runs/runs-07072026-98rows/reconcile-near-leaf/` (NOT promoted): 1729 →
+  1654 rows; exact pass 46 merged / 7 superseded (LLM-nondeterministic drift from
+  the frozen 47/5), near-leaf 308 candidate pairs / 117 clusters → 16 same-view
+  merged + 6 cross-view superseded across 20 acted clusters, 97 kept, 0
+  needs_human; 0/1654 rows have mismatched taxonomy fields. The 6 cross-view
+  supersessions (AllianceBernstein Duration + US Equities, Citizens US Duration,
+  RBC GAM EM Equities) are the borderline broad/specific review items, all
+  flagged. KKR US Treasuries↔Intermediate, RBC US Credit↔US IG, Amundi Euro Govt
+  clusters were judged `distinct` (kept). `scripts/combine-98b.py` untouched.
+- 2026-07-10: Checker evidence-context windows built (deterministic routing +
+  visual fallback), behind opt-in `--checker-context` (OFF by default;
+  uncommitted on `phase-3`). `src/confidence.evidence_context` routes each PROSE
+  candidate from facts already recorded, no LLM routing: CLEAN (`quote_match`
+  exact/normalized AND cited page not scrambled/OCR) → a text window of the
+  quote's containing paragraph +/-1, hard-capped at
+  `EVIDENCE_CONTEXT_CHAR_CAP=1200` around the primary span, attached as
+  `evidence_context`; DEGRADED (subsequence match, or page scrambled/OCR) → NO
+  text, `context_unreliable: true` + the cited page for the checker's existing
+  visual route; fail-safe (non-prose, empty snapshot, quote not locatable, or no
+  PDF page image) attaches nothing and the candidate is judged as today. Reuses
+  the quote gate's own matching machinery (import, no reimplementation).
+  `check_candidates.md` v1.8 adds the normative context section (context is
+  CONTEXT NEVER EVIDENCE; may only push toward unclear/fail when the immediate
+  surroundings hedge/condition/negate/re-attribute THIS quote, never over a
+  different view — that stays the arbiter's/memory's territory;
+  `context_unreliable` → open the page image). Wired in `run.py`
+  (`_context_fields`/`_native_pdf_path`, recorded in run_config/manifest). Suite
+  394→408 (routing unit tests: clean-exact/normalized, subsequence, scrambled,
+  OCR, unlocatable, multi-span first-span window, non-prose, char-cap,
+  grouped-member; + 3 run-wiring tests). A/B (blind, artifacts under gitignored
+  `client-runs/checker-context/`, nothing promoted): two fresh 7-doc pilot runs
+  on the current matrix, context OFF vs ON. OFF: recall 65.9% (54/82),
+  view-agreement 94.2% (49/52), overreach 76 model_only, 130 kept. ON: recall
+  67.1% (55/82), view-agreement 92.5% (49/53), overreach 72, 127 kept. Deltas sit
+  within analyze-step nondeterminism (the two baselines here vs the frozen
+  pilot-matrix-02 already differ ~1-2pt) and the checker HARD-FAILED nothing in
+  EITHER run, so the full-pipeline A/B cannot isolate the feature (analyze runs
+  first → candidate sets differ; candidates aren't serialized for a clean
+  checker-only replay). A CONTROLLED micro-demo (identical candidate, only
+  `checker_context` varies, real opus/medium) DOES isolate it: a quote "We would
+  be overweight European equities" conditioned in-sentence on a scenario the
+  house does not expect flips `supports_view` pass(decisive) → fail, note citing
+  the neutral base case — the exact residual gap the feature targets, fired
+  within its normative rules. Janus regression: the known-real Multi-Sector
+  Credit score-grid calls are `explicit_dial` table/visual, which the prose-only
+  feature never touches (proven no-op); the context run had 0 checker hard-fails,
+  and the 2 loans calls absent under context dropped on the deterministic
+  `evidence_check_failed` (empty visual evidence from analyze nondeterminism),
+  not the checker. RECOMMENDATION: keep OPT-IN (off by default) — the default-on
+  bar (view agreement/overreach improve without material recall cost) is not met
+  (agreement dipped within noise); the feature is proven correct and safe (no
+  recall cost, fail-safe, no-op on visual) but shows no net aggregate benefit
+  under the current lenient checker (opus/medium hard-fails almost nothing),
+  pending a cleaner isolated eval (freeze candidates, vary only the checker)
+  before any promotion.
+- 2026-07-10: Model revamp — the code defaults at every LLM call site became a
+  new matrix (supersedes the pilot-05 "proven production config"; uncommitted
+  on `phase-3`). Analyze codex/gpt-5.6-sol/high; checker claude/opus/medium;
+  arbiter codex/gpt-5.6-luna/high; grouper claude/haiku/high (haiku+high
+  intentional, CLI-verified); quote-visual codex/gpt-5.6-luna/high; scout
+  codex/gpt-5.6-luna/medium (claude/haiku removed — never approved); preflight
+  codex/gpt-5.6-luna/high; crosscheck claude/sonnet/medium; reconcile scope
+  gate claude/opus/medium (and `scripts/combine-98b.py`; effort raised
+  low→medium same day); datefill primary
+  codex/gpt-5.6-luna/high + cascade claude/sonnet/medium; summarize digest AND
+  firmpages claude/`claude-sonnet-4-6`/high (ONE pinned Sonnet-4.6 constant so
+  client-voice can't drift when the `sonnet` alias re-points; id CLI-verified).
+  `run.py` argparse extracted to `build_parser()`; all step defaults filled so
+  `python -m src.run --run-id X --sources ...` is fully specified. Suite
+  385→394 (`tests/test_model_matrix.py`: per-tool no-flags→matrix regression
+  net). Validation (blind, artifacts under gitignored
+  `client-runs/model-revamp/`, nothing promoted): (1) visual-verifier A/B on 18
+  labeled cases — codex/gpt-5.6-luna/high 17/18 vs claude/sonnet/medium 9/18, 0
+  vs 1 worst-class false-verbatim, 0 vs 5 malformed → default set to luna. (2)
+  7-doc pilot (`pilot-matrix-02`) through `src.eval` vs the frozen pilot-06
+  baseline on the same harness: raw recall 65.9%→67.1%, view-agreement
+  92.5%→94.3%, misses 28→27, view-disagreements 4→3; model rows 106→128 (the
+  +22 dominated by grounded stated JPM calls, not overreach — 39/44 stated
+  basis). No material regression. (3) datefill throwaway rerun over
+  `98b-combined/output.csv`: 43/50 filled vs the frozen 44/50 — the 37 metadata
+  + 6 stated fills identical, only Morgan Stanley's one landing-page fill went
+  fail-closed blank. A full judgment pass (like pilot-06's) would be needed to
+  certify STATE-style "true recall / overreach" numbers.
+- 2026-07-10: Unpinned the codex model in `src/llm.py`. The single
+  `CODEX_MODEL = "gpt-5.5"` pin became an allowlist `CODEX_MODELS` (gpt-5.5 +
+  gpt-5.6-sol/terra/luna) with `DEFAULT_CODEX_MODEL = "gpt-5.5"`; `model=None`
+  emits a byte-identical command line, an off-list model raises. Codex effort
+  floor is `low` (`CODEX_EFFORTS = low/medium/high/xhigh`); `minimal` is rejected
+  for every codex model (user decision — never emitted; also cannot web-search).
+  Threaded as a flag through every codex call site (`run.py`, `datefill.py`,
+  `summarize.py`, `scout.py`, `preflight.py`, `crosscheck.py`, `reconcile.py`);
+  `summarize`'s `_resolve_model` no longer silently drops a passed codex model.
+  NO model default changed — plumbing only, until a 5.6 model is validated on a
+  real slice. CLI smoke (codex-cli 0.144.1): all three 5.6 ids reply `OK` at low;
+  `minimal` on a 5.6 model errors 400. Suite 378→385. Uncommitted on `phase-3`.
+- 2026-07-10: Phase 2 built (ROADMAP v1.2 item 1, marked built). Part A:
+  `src/assemble.py` same-view dedup is now citation-preserving — the losing
+  candidate's commentary folds into the kept row via the shared `"  ||||  "`
+  labeled-segment convention (`<Source Title> (<locator>): <commentary>`,
+  defined once, imported) instead of vanishing / a bare "Corroborated by"
+  note; `duplicate_same_view` stays in internal `failures.csv` (note reworded)
+  but is excluded from `failures-client.csv` (explicit exclusion, label kept).
+  Part B: `src/reconcile.py` — standalone firm-reconcile stage that supersedes
+  `crosscheck.py` as the acting tool (crosscheck untouched as a report). Groups
+  on imported `src.eval` (firm, leaf); a batched categorical scope gate
+  (`prompts/reconcile_scope.md`, claude/sonnet/medium) splits each multi-row
+  key into `same_claim`/`distinct_claims` (fail-closed → needs_human); then
+  deterministic code merges same-view claims (max confidence, pipe-joined
+  Source/URL/Date, `||||` commentary) and resolves conflicting views by a
+  precedence ladder (recency → basis stated>forecast_delta>inferred → band/
+  confidence → needs_human keeps all rows flagged; never forced, never
+  majority-vote). Outputs reconciled `output.csv` + `reconcile-audit.csv`
+  (dual-confidence trail) + `reconcile-summary.md`; emits `merged_by_reconcile`
+  / `superseded_by_reconcile` failure rows. `scripts/combine-98b.py` rewired:
+  combine splits → date patch (`datefill.apply_patch`) → reconcile → final
+  files, reconcile failures folded into the combined failure files. New
+  `tests/test_reconcile.py` (19: scope gate, each precedence rule incl. undated
+  recency-skip, tie→needs_human, distinct, merge) + assemble merge/label/sort
+  tests; suite 358→378. `output-guide.html` gains the two new labels + a
+  `||||` note. Real run over `98b-combined/output.dated.csv`
+  (`reconcile/`, sibling pending review, NOT promoted into 98b-combined):
+  1729→1677 rows; 61 keys matched the crosscheck anchor exactly (39 same-view/
+  22 conflicting by view; scope gate 41 same_claim/20 distinct_claims); 47
+  merged, 5 superseded (recency×2, confidence×1 across 3 keys — PGIM/RBC GAM/
+  Wellington), 44 kept_distinct, 0 needs_human.
+- 2026-07-10: Phase 1 built — `src/datefill.py` + `prompts/find_date.md` +
+  `tests/test_datefill.py` (45 tests; suite 313→358). Post-run date backfill,
+  crosscheck-shaped (report/patch + separate `--apply`, injectable runner,
+  mock-runner tests). Cascade validated live: codex/gpt-5.5/low (web search
+  via `-c tools.web_search=true`, NOT a `--search` flag) → claude/sonnet/low
+  on remaining blanks (prompt via stdin; tools WebSearch/WebFetch/Read, no
+  Bash). Ran for real over `98b-combined/output.csv`: 50 undated sources,
+  44 filled (6 stated-in-document, 37 PDF metadata, 1 landing page), 6
+  fail-closed blank (OCBC/LSEG no date; Merrill/BofA only quarter-partials;
+  Carmignac ambiguous `12/06/2026` numeric never-guessed; Allspring
+  image-only cover + one-off claude non-zero), 1 unmatched to master
+  (Aon/"Aon's" firm variant). The print-capture guard mattered: 16 manual
+  PDFs are browser Save-as-PDF (Skia/Chromium, macOS Quartz+Firefox) whose
+  CreationDate is a capture time — excluded by producer/creator signature.
+  `--apply` wrote `98b-combined/output.dated.csv` (SIBLING, not `output.csv`
+  — pending Nikhil review): 1221 Date cells changed (1195 filled + 26 RBC
+  grouped-date dedups), blank rows 1280→85 (the 6 blanks + Aon). ROADMAP
+  decision-11 note added (metadata fallback now allowed post-run; capture
+  dates still excluded). Everything uncommitted on `phase-3`.
+- 2026-07-09: Client feedback round analyzed (dates + firm-level merging) and
+  turned into build instructions: `tmp/phase1-date-backfill.md`
+  (`src/datefill.py` — post-run date backfill: sonnet-low agent finds stated /
+  landing-page dates, deterministic verification, fill order stated →
+  metadata → landing page → 01/MM from month-year partials; quarter/season
+  partials never fill) and `tmp/phase2-firm-reconcile.md`
+  (citation-preserving dedup in assemble + `src/reconcile.py`, the ROADMAP
+  v1.2 item-1 firm-reconcile: scope gate → recency → basis → band →
+  needs_human, never majority vote; `"  ||||  "` labeled commentary-merge
+  convention everywhere). Client decisions recorded: metadata publish dates
+  now allowed as fallback (supersedes part of decision 11; ROADMAP note
+  pending with the Phase-1 build), merged commentary labeled by source.
+  Measured gap driving Phase 1: 1280/1729 combined rows undated (51/91
+  sources, 43 of them PDFs; page-1-only worded-date scan is the bottleneck).
 
 ## Next / Open
 
+- **Phase 3 near-leaf output pending review** (uncommitted on `phase-3`,
+  sibling not promoted): `client-runs/runs-07072026-98rows/reconcile-near-leaf/`
+  holds the near-leaf reconciled `output.csv` + `reconcile-nearleaf-audit.csv` +
+  `taxonomy-coverage-review.csv` + summary over `output.dated.csv`. Review the 6
+  cross-view supersessions (AllianceBernstein Duration + US Equities, Citizens US
+  Duration, RBC GAM EM Equities) and the 16 same-view merges (esp. the
+  Equities-General→US Equities collapses and the AI↔IT/Tech normalizations), plus
+  a sample of the 97 kept-separate clusters (incl. the KKR/RBC/Amundi named
+  examples judged distinct). If accepted, wire `--near-leaf` into
+  `scripts/combine-98b.py` and rebuild `98b-combined/` after the Phase 1/2
+  promotion. Open policy Q: whether near-leaf survivors should stay force-flagged
+  review beyond this first run.
+- **Phase 1 date patch applied, pending review:**
+  `98b-combined/output.dated.csv` is the date-filled sibling (frozen
+  `output.csv` untouched). Review `client-runs/runs-07072026-98rows/datefill/`
+  (`datefill.csv` + `datefill-summary.md`) — especially the 6 fail-closed
+  blanks and Carmignac's ambiguous numeric — then promote `output.dated.csv`
+  to `output.csv` if accepted, and re-run `scripts/combine-98b.py` /
+  firm-pages off the dated file.
+- **Phase 2 reconcile output pending review** (like the date patch, written as
+  a sibling): `reconcile/` holds the reconciled `output.csv` + audit + summary
+  over `98b-combined/output.dated.csv`. Review it (esp. the 5 superseded rows
+  and the 20 distinct_claims keys), then PROMOTE by running
+  `scripts/combine-98b.py` (combine → date patch → reconcile) to rebuild the
+  final `98b-combined/` from the frozen splits. Not yet promoted — the frozen
+  `98b-combined/output.csv` is still the pre-reconcile concatenation.
 - **Deliverable remainder**: firm-page digests still running; when done,
   reconcile → firmpages → bind the Word binder, then review digests against
   `98b-combined/`. Re-run `scripts/combine-98b.py` if any split output changes.
-- Client cosmetics to decide before sending: 30 undated Janus Henderson rows
-  (docs carry no parseable worded date) and grouped rows pipe-joining
-  identical dates (`15/06/2026 | ×4`) — dedupe would read better.
 - Combine-step code changes (assemble sort, tests, guide, combine script)
   are uncommitted on `phase-3`.
+- **Model revamp pending review** (uncommitted on `phase-3`): the wired matrix,
+  tests, REGISTRY, and validation artifacts (`client-runs/model-revamp/`:
+  A/B results, `pilot-matrix-02`, `pilot-eval`, datefill-throwaway, 3
+  firmpage samples). One judgment call flagged: grouper is `claude/haiku/high`
+  per the matrix table + Note 3, though the build's item-1 text also said
+  `sonnet` — flip if sonnet was intended. Nothing promoted; no client batch
+  re-run yet.
+- **Checker evidence-context pending review** (uncommitted on `phase-3`):
+  `--checker-context` feature + `check_candidates.md` v1.8 + tests. Recommended
+  OPT-IN (off by default); see the 2026-07-10 Recent Changes entry for the A/B
+  numbers, the controlled micro-demo, and the Janus no-op result. Nikhil reviews
+  before commit. If a definitive default-on/off call is wanted, the clean next
+  step is an isolated eval: freeze one analyze output's candidates and run ONLY
+  the checker twice (context off/on) so nondeterminism can't confound it (would
+  need the pipeline to serialize candidates + a checker-replay mode). A/B
+  artifacts under gitignored `client-runs/checker-context/` (both pilot runs +
+  evals, the Janus regression pair, the controlled-demo script), nothing
+  promoted.
 - `runs/pilot-04` + `runs/pilot-04-rescored` remain disk-only (freeze
   pending user decision).
 - GT reconciliation with the Markets Recon team: test2 GT has ≥1 error (TRP

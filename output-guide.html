@@ -109,7 +109,7 @@
       <tr><td class="col">Canva Groupings</td><td>The display grouping for the sub-asset. Filled in automatically from the asset list.</td></tr>
       <tr><td class="col">Asset Class</td><td>The mid-level asset class for the sub-asset. Filled in automatically from the asset list.</td></tr>
       <tr><td class="col">View</td><td>The call: <code>O</code> overweight, <code>N</code> neutral, <code>U</code> underweight, <code>UNCERTAIN</code> when the document does not take a clear position.</td></tr>
-      <tr><td class="col">Full Commentary</td><td>The reasoning plus the exact supporting text (and its page or location), so you can see why the call was made and check it.</td></tr>
+      <tr><td class="col">Full Commentary</td><td>The reasoning plus the exact supporting text (and its page or location), so you can see why the call was made and check it. When one call is supported by more than one document (or more than one place in a document), the commentary shows each source's wording as a separate labeled segment — <code>Source Title (locator): …</code> — joined by <code>&nbsp;||||&nbsp;</code>, so no supporting evidence is lost when calls are merged.</td></tr>
       <tr><td class="col">confidence</td><td>A 0–100 score from fixed rules (evidence quality, how clearly the view is stated, whether a second reader confirmed it). It is <em>not</em> a model's own opinion of its confidence.</td></tr>
       <tr><td class="col">band</td><td>The confidence score in words: High, Medium, or Low.</td></tr>
       <tr><td class="col">review_flag</td><td>Whether a human should take a closer look. <code>review</code> means yes; <code>none</code> means it passed cleanly.</td></tr>
@@ -146,8 +146,12 @@
       <tr><td class="col">Evidence points the other way / Evidence is about a different asset / Not a forward-looking view</td><td>A second reader found the cited text doesn't back the call as made, so it was dropped. A human can check the cited page.</td></tr>
       <tr><td class="col">Skipped — asset not on the list</td><td>The asset named didn't match the approved list, so it was left out.</td></tr>
       <tr><td class="col">Change too small to call</td><td>The forecast change behind the call was too small to justify a view.</td></tr>
-      <tr><td class="col">Duplicate — already covered</td><td>The same view for this asset appears in another of the firm's documents; kept once. No action needed.</td></tr>
+      <tr><td class="col">Superseded — a newer document from this firm updated this view</td><td>Another document from the same firm took a different view on this asset; a more current (or otherwise preferred) call was kept in its place. Review if the kept call looks wrong.</td></tr>
+      <tr><td class="col">Merged into a related call — please review</td><td>The firm made views on two closely related assets (e.g. a broad category and a specific part of it) that pointed different ways; they were read as one collective call and the most relevant view was kept. Review that the kept view is the right one.</td></tr>
+      <tr><td class="col">Duplicate — already covered</td><td>The same view for this asset appears in another of the firm's documents; kept once, with the other document's wording merged into the kept row's commentary. No action needed.</td></tr>
       <tr><td class="col">Duplicate — same call, related asset</td><td>Repeats a view already kept for a closely related asset from the same text; kept once. No action needed.</td></tr>
+      <tr><td class="col">Merged — same view stated in several documents</td><td>Several of the firm's documents made the same call on this asset; they were merged into one row and every document's wording is preserved in that row's commentary. No action needed.</td></tr>
+      <tr><td class="col">Merged — same view on a closely related asset</td><td>The firm made the same call on two closely related assets (e.g. a broad category and a specific part of it); they were merged into one row on the most precise asset and every document's wording is preserved. No action needed.</td></tr>
     </tbody>
   </table>
   </div>

@@ -63,6 +63,22 @@ without re-deriving the reasoning._
     time (pre-ingest) — out of scope; the change is that ingestion outputs never
     carry it.
 
+    **Update 2026-07-09/10 (metadata fallback now allowed):** the client
+    confirmed that a document's own metadata publish date IS acceptable as a
+    fallback when no date is stated in the document content. This supersedes the
+    "file metadata are not used" clause above for the POST-RUN backfill only —
+    in-run tier-1 extraction is unchanged. The backfill tool `src/datefill.py`
+    fills a blank `Date` in fixed precedence: (1) a full date STATED in the
+    document, (2) document metadata (PDF CreationDate / htmldate), (3) a full
+    date on the publisher landing page, (4) a month-year partial rendered
+    `01/MM/YYYY`; quarter/season partials ("Q3 2026", "Midyear 2026") never
+    fill. Two guardrails preserve the spirit of decision 11: the source CSV's
+    date is still NEVER used, and a CAPTURE date is never a publication date —
+    browser print-to-PDF captures (our Playwright Skia/PDF, and manual
+    Firefox/Safari "Save as PDF" via macOS Quartz) are excluded from the PDF
+    metadata tier by producer/creator signature, and every candidate is
+    year-windowed (2025–2026) to reject trap/epoch dates.
+
 ## v1 pre-37 wave (in flight)
 
 Three independent instruction sets, one agent session each (files in `tmp/`,
@@ -146,7 +162,26 @@ artifacts retain, so:
 ## v1.2 backlog
 
 1. **Full post-run firm-reconcile stage with dual-confidence audit trail**
-   (the client's own design — the priority v1.2 item). Replaces/extends the
+   (the client's own design — the priority v1.2 item). ✅ **BUILT 2026-07-10**
+   as `src/reconcile.py` (+ `prompts/reconcile_scope.md`,
+   `tests/test_reconcile.py`), superseding `src/crosscheck.py` as the acting
+   stage (crosscheck stays as a bare report tool). Groups same-firm rows on the
+   imported `src.eval` (firm, leaf) normalization; a batched categorical scope
+   gate splits each multi-row key into `same_claim` / `distinct_claims`
+   (fail-closed to needs_human); then deterministic code merges same-view
+   claims (citation-preserving `||||` commentary merge) and resolves
+   conflicting views by a precedence ladder (recency → basis → confidence
+   band/number → needs_human — never a forced call, never a majority vote).
+   Outputs a reconciled `output.csv` + `reconcile-audit.csv` (the
+   dual-confidence trail: original per-row confidence/band + the reconcile
+   decision) + `reconcile-summary.md`; emits `merged_by_reconcile` /
+   `superseded_by_reconcile` failure rows folded into the run's failure files at
+   the combine step (`scripts/combine-98b.py`: combine → date patch →
+   reconcile). Part A of the same build made in-run same-view dedup
+   citation-preserving too (`src/assemble.py`). Original design intent below,
+   for the record.
+
+   Replaces/extends the
    bare-bones cross-check: after all runs complete, cross-reference same-firm
    rows on asset class + call + reasoning; dedupe with provenance; for
    conflicts, run a second confidence process and surface BOTH the original
@@ -166,7 +201,13 @@ artifacts retain, so:
    groupings (e.g. Taiwan Equities ×1 firm vs Asia Equities ×10 firms) and
    emit a broad-vs-specific advisory column ("fallback" column) so a human
    can decide whether to block calls together. Analytics layer over existing
-   output columns; no row-schema change expected.
+   output columns; no row-schema change expected. ✅ **Advisory portion BUILT
+   2026-07-11** with Phase 3 (item 6): `reconcile.coverage_advisory` writes a
+   standalone `taxonomy-coverage-review.csv` (broad leaf, specific leaf, firm/row
+   counts per side, firms carrying both, near-leaf action if applicable, a
+   human-review advisory). Volume is CONTEXT ONLY — it never chooses a canonical
+   leaf or blocks a call automatically; the decision stays with the analyst. The
+   automatic call-blocking half remains open.
 4. **Same-firm cross-source call linking as discovery** (replacing analyst
    group-notes): agent looks across same-firm sources for potential
    call-linkage — whether calls in one document support, extend, or should be
@@ -179,7 +220,24 @@ artifacts retain, so:
    v1 checker-sees-memory change (instruction set 1).
 6. **Near-leaf / fuzzy matching in the cross-check** (v1 joins on exact
    firm+leaf only): catch "US Duration" vs "US Treasuries"-style adjacent
-   overlaps across same-firm sources.
+   overlaps across same-firm sources. ✅ **BUILT 2026-07-11** (Phase 3) as the
+   opt-in `src/reconcile.py --near-leaf` pass (+ `prompts/reconcile_nearleaf.md`,
+   tests in `tests/test_reconcile.py`). Runs AFTER the exact-leaf pass over its
+   reconciled rows (61-key exact baseline preserved). Deterministic candidate
+   generation pulls a firm's related locked leaves into clusters by two bounded
+   lexical lanes — structural (same top-level asset class, token overlap ≥0.50,
+   plus a token-subset or shared-category tie) and short-label containment (a
+   ≤2-token leaf whose tokens all appear in the other, e.g. `AI` ↔
+   `IT/Tech/Telecomms (inc. AI)`). An LLM (claude/opus/medium, inherited — no
+   independent default) partitions each cluster's rows into collective calls
+   (merged onto a validated canonical leaf, all four taxonomy fields rebuilt via
+   `src/taxonomy.py`) vs distinct calls (kept). When a merged group's rows
+   disagree on view, the model names the most-relevant surviving call; every
+   near-leaf survivor is flagged for review. Any contract violation fails closed
+   to `needs_human`. Emits `near_leaf_merged` / `near_leaf_superseded` failure
+   rows, a `reconcile-nearleaf-audit.csv`, and the item-3 coverage advisory.
+   Opt-in; the real 98-batch result is written to a sibling and not promoted into
+   `scripts/combine-98b.py` until reviewed.
 7. **Summary verification pass:** spot-check each one-page reader summary's
    claims (names, figures, quotes) against the source document,
    checker-style, before it ships — the reader summaries are the

@@ -5,6 +5,74 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `reconcile_scope.md` — v1 (2026-07-10)
+
+The scope gate of the post-run firm-reconcile stage (`src/reconcile.py`, v1.2
+backlog item 1). Runs once, batched over every multi-row (firm, sub-asset leaf)
+key — same-firm rows that landed on the same locked leaf across the firm's frozen
+run outputs. Per key the model returns a categorical verdict only — `same_claim`
+(the firm's one position on the leaf, however worded across documents) or
+`distinct_claims` (genuinely different calls sharing a leaf: different horizon,
+sub-sector, or scenario) — plus a one-sentence reason that must quote the
+deciding words from the commentary. No confidence number, no winner pick, no
+merge (house rule: the LLM is categorical; deterministic code in `reconcile.py`
+owns every merge and the recency→basis→confidence→needs_human precedence ladder).
+A failed call or an unparseable/missing verdict degrades that key to
+`needs_human` in `src/reconcile.py` (crosscheck precedent), never a crash.
+Default engine claude/opus/medium (effort raised from low 2026-07-10; codex allowlist member
+if selected). Parsed by `reconcile.parse_reconcile_scope`. No template vars. Inputs (appended
+JSON): `groups[]` with `group_id`, firm, sub_asset_leaf, and each row's
+view/source_title/date/full_commentary. This is the v1.2 stage that supersedes
+the bare-bones `crosscheck_conflicts.md` cross-check as the acting output tool.
+
+### `reconcile_nearleaf.md` — v1 (2026-07-11)
+
+The near-leaf judge of the Phase 3 near-leaf reconciliation pass
+(`src/reconcile.py --near-leaf`, v1.2 backlog item 6). Runs AFTER the exact-leaf
+scope gate, over the exact-reconciled rows, in bounded batches (≤8 clusters / ≤40
+rows per call). Deterministic code first clusters a firm's related locked leaves
+by two lexical lanes (structural token-overlap and short-label containment); the
+model then reads each cluster's rows and returns a **partition** — each group is
+either one collective `same_claim` call (2+ rows merged onto a `canonical_leaf`
+chosen from the cluster's own locked labels) or a `distinct` call kept on its own.
+When a merged group's rows disagree on view, the model names the single
+most-relevant `primary_row_id` whose call survives. The model never invents a
+label, number, confidence, or surviving-row text; deterministic code owns every
+merge, the taxonomy-field rebuild, and all scoring. Any contract violation
+(non-partition, canonical not in the cluster, missing primary on a conflicting-view
+merge, malformed/failed response) fails **closed** to `needs_human` for that whole
+cluster (all rows kept, flagged for review) in `src/reconcile.py`, never a crash.
+Default engine claude/opus/medium — INHERITED from the scope gate, no independent
+model default. Parsed by `reconcile.parse_nearleaf`. No template vars. Inputs
+(appended JSON): `clusters[]` with `cluster_id`, firm, `leaves[]`
+(label/category/asset_class/canva_grouping/locked_order), and `rows[]`
+(row_id/leaf/view/source_title/date/full_commentary/candidate_reason).
+
+### `find_date.md` — v1 (2026-07-10)
+
+The date-hunt agent for the post-run date backfill (`src/datefill.py`). One
+call per undated source. The model reads the pre-extracted `document_text` (and,
+via `local_file_path`, the file itself — including a date printed only inside a
+cover image) for an explicitly STATED publication date; failing that, it hunts
+the publisher's landing page (web search allowed; for a URL-PDF it tries the
+parent path first). It returns JSON only — `{"candidates": [...]}` — each
+candidate carrying `where` (`stated_in_document` | `landing_page`),
+`date_verbatim` (exact string), `locator` (page number, or full URL for a
+landing page), `evidence_quote` (verbatim line containing the date), and
+`granularity` (`full` | `month_year` | `quarter_or_season`); an empty list when
+nothing is found. Categorical/verbatim claims ONLY — it never reads file
+metadata (that is deterministic code, `datefill` step 3/4), never invents or
+infers a date, and is told to ignore "data as of" trap dates. Every claim is
+re-verified deterministically downstream (quote must reappear; landing page must
+reference the document; date parsed and year-windowed), so a hallucinated or
+mis-located date fails closed to blank. Cascade engines (model revamp
+2026-07-10): codex/gpt-5.6-luna/high (primary; web search via
+`-c tools.web_search=true`), then claude/sonnet/medium on
+sources still blank (prompt via stdin because `--allowed-tools` is variadic;
+tools WebSearch/WebFetch/Read, no Bash so it cannot stall shelling out). Parsed
+by `datefill.parse_find_date_response`. No template vars. Inputs (appended JSON):
+`firm`, `title`, `url`, `local_file_path`, `document_text` (head+tail slice).
+
 ### `verify_quote_visual.md` — v1 (2026-07-08)
 
 Tier-3 quote verification fallback (`src/run.py` + `src/assemble.py`). Invoked
@@ -15,7 +83,9 @@ categorical judgment only: `present_verbatim`, `present_paraphrase`, or
 keeps the candidate with `quote_match: visual`, cap 74, and forced review;
 `present_paraphrase` is dropped (the system never keeps non-verbatim evidence);
 `absent`, malformed JSON, and engine failures also drop with
-`quote_not_found_visual`. Default engine claude/sonnet/medium, overridable with
+`quote_not_found_visual`. Default engine codex/gpt-5.6-luna/high (model revamp
+2026-07-10 A/B: 17/18 vs the claude/sonnet/medium incumbent's 9/18, 0 vs 1
+worst-class false-verbatim, 0 vs 5 malformed), overridable with
 `run.py` quote-visual flags. Inputs (appended JSON): source identity,
 `native_source_path`, candidate locator, evidence_quote, sub_asset_class, and
 view.
@@ -33,8 +103,8 @@ different document/firm than the title claims) plus one short reason. No scores
 or numbers (house rule: deterministic scoring; the LLM never emits numbers), and
 it judges only that the fetch landed on the right content, never the document's
 quality. A failed call degrades every source to `unchecked` in
-`src/preflight.py`, never a crash. Default engine codex/gpt-5.5/medium
-(overridable; the only live call in the tool). Parsed by
+`src/preflight.py`, never a crash. Default engine codex/gpt-5.6-luna/high
+(model revamp 2026-07-10; overridable; the only live call in the tool). Parsed by
 `preflight.parse_content_verdicts`. No template vars. Inputs (appended JSON):
 `sources[]` with `index`, `firm`, `expected_title`, `snapshot_head`.
 
@@ -52,7 +122,8 @@ internal artifact optimized for faithful density, not prose. Hard grounding: sta
 only what the document/calls/memory contain; every figure/name/quote must appear
 in the source material; the stance summary must agree with the kept calls; no
 confidence numbers (house rule). Parsed by `summarize.parse_digest`. Default engine
-codex/gpt-5.5/medium (high-volume reading job; overridable). Inputs (appended JSON):
+claude/claude-sonnet-4-6/high (model revamp 2026-07-10 — pinned Sonnet 4.6 id,
+client-facing prose, shared constant with the firm-page stage; overridable). Inputs (appended JSON):
 source_id, firm, document_title, url, date, native_source_path, kept_calls[].
 
 ### `summarize_firm_page.md` — v1.1 (2026-07-07)
@@ -72,9 +143,11 @@ reconciled calls; an `unresolved` final call (the firm's documents differ) is
 described in-line as a divergence, never silently collapsed to one side. Length
 disciplined to ~500–800 words (one printed page). Single-source firms pass through
 the same call for a consistent voice. Parsed by `summarize.parse_firm_page` (requires
-the `# ` heading + a `## Sources` section). Default engine claude/sonnet/high (digest
-synthesis + editorial prose); the agreed escalation if a sample reads flat is
-claude/opus/medium. Inputs (appended JSON): firm, digests[], final_calls[] (with
+the `# ` heading + a `## Sources` section). Default engine
+claude/claude-sonnet-4-6/high (model revamp 2026-07-10 — pinned Sonnet 4.6 id,
+the SAME shared constant as the digest stage so the client's approved voice
+cannot drift when the `sonnet` alias re-points; editorial prose); the agreed
+escalation if a sample reads flat is claude/opus/medium. Inputs (appended JSON): firm, digests[], final_calls[] (with
 `unresolved`/`views`/`divergence` for unresolved keys), sources[].
 
 ### `crosscheck_conflicts.md` — v1 (2026-07-07)
@@ -89,8 +162,8 @@ conflict) — plus a one-sentence note. Categorical only, no confidence number
 (house rule: deterministic scoring; the LLM never emits numbers). Same-view
 duplicates never reach this prompt (pure-code auto-resolve). A failed call
 degrades every conflict group to `needs_human` in `src/crosscheck.py`, never a
-crash. Default engine a light Claude tier (claude/haiku/medium; codex pinned to
-gpt-5.5 if selected). Inputs (appended JSON): `groups[]` with `group_id`, firm,
+crash. Default engine claude/sonnet/medium (model revamp 2026-07-10; codex
+allowlist member if selected). Inputs (appended JSON): `groups[]` with `group_id`, firm,
 sub_asset_leaf, and each row's view/source_title/date/full_commentary. No
 template vars. Deliberately NOT the v1.2 dual-confidence reconcile (ROADMAP.md
 v1.2 item 1) and does no fuzzy/near-leaf matching (v1.2 item 6).
@@ -253,6 +326,27 @@ text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
 
+### `check_candidates.md` — v1.8 (2026-07-10)
+
+v1.8 (checker evidence-context wave): adds an "Evidence-context window" section
+for the opt-in `--checker-context` feature (`src/run.py` `_check_candidates` →
+`src/confidence.evidence_context`, deterministic routing). Two routes, decided by
+code, never by the model: (1) a CLEAN candidate carries an `evidence_context`
+field — the quote's surrounding snapshot text (containing paragraph +/- one, hard
+char cap `EVIDENCE_CONTEXT_CHAR_CAP = 1200`) — framed as CONTEXT, NEVER EVIDENCE:
+it may only push toward `unclear`/`fail` when the immediate surroundings hedge,
+condition, negate, or re-attribute THIS quote, never rescue a weak quote and
+never fail a candidate over a different/contradicting view about something else
+(that stays the arbiter's and memory's territory); (2) a DEGRADED candidate
+carries `context_unreliable: true` (scrambled/OCR page or subsequence match) with
+NO text — the checker opens the cited page image in `native_source_path`, exactly
+like the existing `text_unverifiable_visual` route, and reads the surroundings
+there; if the image is unreadable too it judges on the quote alone as today. The
+quote gate, confidence rubric, and memory are unchanged. Off by default (opt-in)
+pending the pilot A/B validation. Routed by `run._context_fields`; a fail-safe
+returns no context (non-prose, empty snapshot, quote not locatable, or no page
+image) so a candidate is never blocked.
+
 ### `check_candidates.md` — v1.7 (2026-07-07)
 
 v1.7 (pre-37 checker-context wave, instruction set 1): three additions. (1) The
@@ -342,8 +436,8 @@ and **no self-confidence number**: verdicts are facts consumed by the
 deterministic rubric (`src/confidence.py`) — any `fail` hard-fails the
 candidate to review (`checker_sign_mismatch` / `checker_not_forward_looking`
 / `checker_asset_mismatch`); anything short of all-pass caps confidence at 74
-so the call cannot reach High. Default engine codex @ high effort
-(`--checker-engine/--checker-model/--checker-effort`). Inputs (appended JSON):
+so the call cannot reach High. Default engine claude/opus/medium (model revamp
+2026-07-10; `--checker-engine/--checker-model/--checker-effort`). Inputs (appended JSON):
 source_id, firm, source_title, candidates[] with echoed `index`.
 
 ### `scout_groups.md` — v1 (2026-07-07)
@@ -362,7 +456,8 @@ Deterministic guards in `scout._apply_guards` then drop unknown ids, overlaps,
 cross-firm merges, and sub-pairs as warnings. The scout emits a
 `--group-notes`-compatible notes file (consumed by `run._resolve_groups` →
 `resolve_groups.md`) plus a per-firm reasoning sidecar for human review. Default
-engine claude @ haiku / low effort (`--engine/--model/--effort`). Inputs
+engine codex/gpt-5.6-luna/medium (model revamp 2026-07-10 — the earlier
+claude/haiku/low default was never user-approved; `--engine/--model/--effort`). Inputs
 (appended JSON): `firms[]` with `firm` and `sources[]` of source_id/title/date.
 
 ### `resolve_groups.md` — v1 (2026-07-05)
@@ -377,8 +472,8 @@ guards in `run.py` `_resolve_groups` drop unknown/overlapping ids with
 warnings; the plan is frozen to `work/<run-id>/groups.json` and echoed in the
 manifest, and all downstream grouping (cross-doc rolling memory, group-keyed
 dedup/conflict, pipe-joined output rows) consumes the plan, not the notes.
-Resolver failure degrades to an ungrouped run. Default engine codex @ low
-effort (`--grouper-*` flags). Inputs (appended JSON): sources[] with
+Resolver failure degrades to an ungrouped run. Default engine claude/haiku/high
+(model revamp 2026-07-10; `--grouper-*` flags). Inputs (appended JSON): sources[] with
 source_id/firm/title/date; `{{group_notes}}` injected.
 
 ### `arbitrate_conflict.md` — v1.1 (2026-07-05)
@@ -399,7 +494,7 @@ routing). Winner is kept but always flagged `review` with the arbiter's
 reasoning appended to commentary; losers land in `failures.csv` as
 `arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
 confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
-Default engine codex @ medium effort (`--arbiter-*` flags).
+Default engine codex/gpt-5.6-luna/high (model revamp 2026-07-10; `--arbiter-*` flags).
 
 ### `brain.md` — v1.6 (2026-07-07)
 
