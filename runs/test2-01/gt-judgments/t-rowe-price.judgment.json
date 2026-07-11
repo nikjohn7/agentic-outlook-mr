@@ -1,0 +1,138 @@
+{
+  "firm": "T. Rowe Price",
+  "rows": [
+    {
+      "kind": "view_disagreement",
+      "leaf": "Europe Equities",
+      "model_view": "O",
+      "gt_view": "N",
+      "classification": "convention_dispute",
+      "cite": "monthly:printed.pdf p.2 grid (Europe region dial = red / Underweight) + monthly:L34-35 transcript ('shifted away from more energy-sensitive regions such as Europe') vs uk-view:L87-89 / pdf p.2 grid (Europe ex-UK = O)",
+      "note": "GENUINE CROSS-DOCUMENT CONFLICT. The two grouped docs disagree on the same leaf: the April monthly dashboard dial reads Europe = U (and its transcript explicitly describes reducing Europe), while the March UK-view grid reads Europe ex-UK = O. Neither model nor GT nails the most-recent dial: the monthly (April, most current) reads U. Model's O relies solely on the older March UK-view and its arbiter wrongly discarded the monthly U via a cross-document 'specific beats general' rule (arbitrated_out in failures.csv). GT's N is a defensible reconciliation midpoint (O trimmed toward U). Model's O is the weakest of the three readings; GT's N is closer to the authoritative U."
+    },
+    {
+      "kind": "view_disagreement",
+      "leaf": "UK IG Credit",
+      "model_view": "N",
+      "gt_view": "U",
+      "classification": "reading_error",
+      "cite": "uk-view:L137-140 / pdf p.3 grid ('UK Investment-Grade (IG) Corporates' = N, Neutral box) + monthly:printed.pdf p.2 grid (UK IG corporates = gray / Neutral)",
+      "note": "GT side reading error. BOTH grouped docs show UK IG corporates in the Neutral box (UK-view p.3 grid = N; monthly dashboard dial = gray/N). GT's U has no grounding in either source. Model's N is correct = model_correct."
+    },
+    {
+      "kind": "gt_only",
+      "leaf": "US IG Credit",
+      "model_view": "",
+      "gt_view": "U",
+      "classification": "near_leaf_covered",
+      "cite": "uk-view:L142-143 / pdf p.3 grid ('US IG Aggregate' = U, Underweight box)",
+      "note": "Not a recall miss. The source row is 'US IG Aggregate' (U); the model read it and mapped it to leaf 'U.S. Fixed Income' = U (kept in output, model_only row). GT mapped the same source row to 'US IG Credit'. Same view (U), adjacent leaf. Model's 'aggregate' mapping is arguably more faithful to the source label than GT's 'credit'."
+    },
+    {
+      "kind": "gt_only",
+      "leaf": "Europe IG Credit",
+      "model_view": "",
+      "gt_view": "U",
+      "classification": "near_leaf_covered",
+      "cite": "uk-view:L144-147 / pdf p.3 grid ('European IG Aggregate' = U, Underweight box)",
+      "note": "Not a recall miss. Source row 'European IG Aggregate' (U) was read and mapped by the model to leaf 'Europe Fixed Income' = U (kept in output). GT mapped it to 'Europe IG Credit'. Same view (U), adjacent leaf (near_leaf_hint itself flags 'Europe Fixed Income U')."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Value",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "monthly:printed.pdf p.2 grid (Growth vs value = O for Growth) + uk-view:L106-110 / pdf p.2 (Global Growth vs Value = O)",
+      "note": "Pairwise-derived relative call: both docs show Growth-vs-Value dial overweight for Growth, so Value is the relative underweight side. Grounded in explicit dials; defensible breadth, though it is a one-sided split of a relative pairwise. Review flag none."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Large Cap Equities",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "monthly:printed.pdf p.2 grid (Small-cap vs large-cap = O for Small-cap) + uk-view:L111-117 / pdf p.2 (Global Small-Cap vs Large-Cap = O)",
+      "note": "Pairwise-derived: small-cap overweight vs large-cap in both docs, so large-cap is the relative underweight side. Grounded in explicit dials. Review flag none."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "US Value",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "monthly:L35 transcript ('increasing our tilt toward more resilient areas, including US large-cap value')",
+      "note": "Grounded in explicit April prose describing an increased tilt toward US large-cap value = positive/overweight. Defensible. Review flag none."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Duration",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "uk-view:L71-72 / pdf p.2 ('We maintain our short duration position, reflected in underweights to gilts, as well as US and European high-quality bonds')",
+      "note": "Short duration = underweight duration. Decisive statement. The arbiter correctly kept U over a competing monthly 'added back some duration' (a partial trim, not a new overweight) - arbitrated_out in failures.csv. Well grounded despite review flag."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "EM Debt - General",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "overreach",
+      "cite": "monthly:L37-38 transcript ('we also reduced our exposure to emerging market debt to limit risk') vs uk-view:L151-159 / pdf p.3 (EM Dollar Sovereigns=O, EM Local Currency=O, EM Corporates=O) + monthly:printed.pdf p.2 (EM local currency=O, EM dollar sovereigns=N, EM corporates=N)",
+      "note": "OVERREACH (review flag = review). Model converted a journey/trim statement ('reduced our exposure') into an absolute underweight on a general EM-debt leaf. This directly contradicts the granular EM-debt dials in BOTH docs, which are neutral-to-overweight (all three UK-view EM debt rows = O). A reduction from an overweight is not an underweight."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "U.S. Fixed Income",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "near_leaf_of_gt",
+      "cite": "uk-view:L142-143 / pdf p.3 ('US IG Aggregate' = U) + monthly:printed.pdf p.2 (US Aggregate = red/U)",
+      "note": "Near-leaf of GT's 'US IG Credit = U' miss - same 'US IG Aggregate' source row, same view. Model mapped to the broad US aggregate leaf."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Europe Fixed Income",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "near_leaf_of_gt",
+      "cite": "uk-view:L144-147 / pdf p.3 ('European IG Aggregate' = U) + monthly:printed.pdf p.2 (Europe Aggregate = red/U)",
+      "note": "Near-leaf of GT's 'Europe IG Credit = U' miss - same 'European IG Aggregate' source row, same view."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "USD",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "uk-view:L161-165 / pdf p.3 (GBP vs USD = O for GBP) + monthly:printed.pdf p.2 (GBP vs USD = O)",
+      "note": "Pairwise-derived: GBP overweight vs USD in both docs, so USD is the relative underweight side. Grounded in explicit currency dials; flight-to-quality risk to USD noted in source. Review flag none."
+    }
+  ],
+  "summary": {
+    "view_disagreements": {
+      "total": 2,
+      "reading_errors": 1,
+      "convention_disputes": 1,
+      "model_correct": 1,
+      "gt_correct": 0
+    },
+    "misses": {
+      "total": 2,
+      "recall_gap": 0,
+      "near_leaf_covered": 2,
+      "not_grounded": 0,
+      "defensible_omission": 0,
+      "emitted_but_evidence_gated": 0
+    },
+    "model_only": {
+      "total": 8,
+      "sound_breadth": 5,
+      "overreach": 1,
+      "near_leaf_of_gt": 2
+    },
+    "grouping_note": "Grouping the two docs was NET POSITIVE and even added resilience: the monthly dashboard is print-captured HTML whose dial tokens failed the evidence gate (16 evidence_check_failed candidates), but the SAME dials survived through the UK-view PDF's clean text (e.g., US/European IG Aggregate=U, EM local currency=O, GBP-vs-USD=O), so zero GT misses were lost to the gate. Duplication across the two grids was handled by duplicate_same_view dedup (e.g., small-cap). The ONE real problem: a direct cross-document conflict on Europe equities (April monthly dial=U + transcript 'shifted away from Europe' vs March UK-view=O) that the arbiter mis-resolved to O using an invalid cross-doc 'specific-beats-general' rule.",
+    "headline": "Of 2 view disagreements, 1 is a clean GT reading error (UK IG Credit: both docs show Neutral, model correct) and 1 is a genuine two-document conflict on Europe equities where neither side matches the most-recent April monthly dial (U); GT's N beats model's stale O. Both 'misses' are near-leaf-covered (US/Europe IG Credit vs model's US/Europe Fixed Income on the identical 'IG Aggregate' source rows, same U view) - zero true recall gaps. Model breadth is largely sound (5/8 grounded pairwise/prose calls) with one clear overreach: turning 'reduced EM debt exposure' into an absolute EM-debt underweight against neutral-to-overweight EM dials."
+  }
+}

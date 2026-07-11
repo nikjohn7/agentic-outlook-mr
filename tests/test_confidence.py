@@ -15,6 +15,11 @@ from src.confidence import (
     MIN_HTML_SNAPSHOT_CHARS,
     MIN_PDF_CHARS_PER_PAGE,
     SCRAMBLED_PROSE_CAP,
+    SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP,
+    SUBSEQUENCE_MAX_WINDOW_MULTIPLE,
+    EVIDENCE_CONTEXT_CHAR_CAP,
+    VISUAL_UNVERIFIED_BY_TEXT,
+    evidence_context,
     evidence_passes,
     normalize_quote_text,
     score_candidate,
@@ -184,6 +189,167 @@ class ConfidenceTest(unittest.TestCase):
             evidence_passes(candidate, "We hold a long-term overweight stance today.").passed
         )
 
+    def test_exact_quote_match_tier_is_recorded(self) -> None:
+        check = evidence_passes(
+            _candidate(evidence_quote="a long-term overweight stance"),
+            "We hold a long-term overweight stance today.",
+        )
+
+        self.assertTrue(check.passed)
+        self.assertEqual("exact", check.quote_match)
+
+    def test_normalized_quote_match_tier_is_recorded(self) -> None:
+        check = evidence_passes(
+            _candidate(evidence_quote="AI-related spending is set to move up a gear"),
+            "We think that as AI-\nrelated spending is set to move up a gear this year.",
+        )
+
+        self.assertTrue(check.passed)
+        self.assertEqual("normalized", check.quote_match)
+
+
+class JanusHendersonQuoteGateFixtureTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    # Actual snapshot excerpts from
+    # client-runs/runs-07072026-98rows/work/98b-split1/
+    # janus-henderson-investors-market-gps-investment-outlook-mid-year-2026/snapshot.txt.
+    SNAPSHOT_EXCERPTS = """
+We also continue to believe inflation could be a more sizable risk than the acceleration
+current consensus suggests. This implies fixed income portfolios may
+Ex-U.S.: Balanced opportunity
+>
+benefit from a focus on shorter-duration instruments and superior
+set, attractive valuations
+income, rather than overall total return.
+Enhanced cash, securitized strategies, and opportunistic fixed FIXED INCOME
+income strategies seem most relevant for a potentially changing Securitized credit:
+>
+inflation paradigm. Income with resilience
+
+Investor considerations
+Infrastructure – the US$106 trillion opportunity: The AI buildout has extended into power, utilities, materials,
+>
+and energy. A cumulative US$106 trillion will be needed for new and updated infrastructure through 2040.3
+Demand is already exceeding supply across semiconductors, memory, cooling systems, optical, and power
+equipment. Companies operating at these bottlenecks, where capital expenditure shows no sign of slowing,
+merit consideration.
+
+Investor considerations
+Catalysts across biopharma: Through Q1, all biopharma transactions have been below US$10 billion, creating
+>
+potential for a record-breaking year of M&A if larger deals come to market.6 The sector has an expected 1,200
+potential "events" this year7 - from anticipated FDA decisions to trial enrollments and data readouts - that discerning
+investors may be able to capitalize on.
+Beneficiaries of structural change: Smaller companies have a relatively large presence in the industrials and
+>
+materials sectors, providing valuable exposure to both the AI buildout and nearshoring trends. Innovative solutions
+may present attractive investment opportunities.
+"""
+
+    PREVIOUSLY_DROPPED = (
+        (
+            "Duration - Short",
+            "This implies fixed income portfolios may benefit from a focus on shorter-duration instruments and superior income, rather than overall total return.",
+            "subsequence",
+        ),
+        (
+            "Cash/Money Markets",
+            "Enhanced cash, securitized strategies, and opportunistic fixed income strategies seem most relevant for a potentially changing inflation paradigm.",
+            "subsequence",
+        ),
+        (
+            "Securitized/Structured (ABS/MBS/CDS/Swaps/CLOs)",
+            "Enhanced cash, securitized strategies, and opportunistic fixed income strategies seem most relevant for a potentially changing inflation paradigm.",
+            "subsequence",
+        ),
+        (
+            "Infrastructure Theme",
+            "Infrastructure – the US$106 trillion opportunity: The AI buildout has extended into power, utilities, materials, and energy.",
+            "normalized",
+        ),
+        (
+            "Energy Sector",
+            "Infrastructure – the US$106 trillion opportunity: The AI buildout has extended into power, utilities, materials, and energy.",
+            "normalized",
+        ),
+        (
+            "Healthcare/Pharma",
+            "Catalysts across biopharma: Through Q1, all biopharma transactions have been below US$10 billion, creating potential for a record-breaking year of M&A if larger deals come to market.",
+            "normalized",
+        ),
+        (
+            "Industrials",
+            "Smaller companies have a relatively large presence in the industrials and materials sectors, providing valuable exposure to both the AI buildout and nearshoring trends. Innovative solutions may present attractive investment opportunities.",
+            "normalized",
+        ),
+        (
+            "Materials",
+            "Smaller companies have a relatively large presence in the industrials and materials sectors, providing valuable exposure to both the AI buildout and nearshoring trends. Innovative solutions may present attractive investment opportunities.",
+            "normalized",
+        ),
+    )
+
+    def test_all_eight_split1_janus_quote_drops_verify_deterministically(self) -> None:
+        for label, quote, expected_tier in self.PREVIOUSLY_DROPPED:
+            with self.subTest(label=label):
+                check = evidence_passes(
+                    _candidate(evidence_quote=quote),
+                    self.SNAPSHOT_EXCERPTS,
+                )
+
+                self.assertTrue(check.passed)
+                self.assertEqual(expected_tier, check.quote_match)
+
+    def test_subsequence_match_is_capped_and_review_flagged(self) -> None:
+        quote = self.PREVIOUSLY_DROPPED[0][1]
+        result = score_candidate(
+            _candidate(
+                evidence_quote=quote,
+                taxonomy_match="semantic",
+                call_language="directional",
+            ),
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(self.SNAPSHOT_EXCERPTS),
+        )
+
+        self.assertEqual(SCRAMBLED_PROSE_CAP, result.confidence)
+        self.assertEqual("Medium", result.band)
+        self.assertEqual("review", result.review_flag)
+        self.assertEqual("subsequence", result.evidence_check.quote_match)
+        self.assertIn(
+            f"max {SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP} injected tokens",
+            result.evidence_check.message,
+        )
+        self.assertIn(
+            f"window <= {SUBSEQUENCE_MAX_WINDOW_MULTIPLE}x",
+            result.evidence_check.message,
+        )
+
+    def test_fabricated_quote_still_fails(self) -> None:
+        check = evidence_passes(
+            _candidate(evidence_quote="Platinum rhodium palladium outperform together."),
+            self.SNAPSHOT_EXCERPTS,
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+
+    def test_reordered_quote_still_fails(self) -> None:
+        check = evidence_passes(
+            _candidate(
+                evidence_quote=(
+                    "Benefit may portfolios income fixed implies this from instruments shorter-duration."
+                )
+            ),
+            self.SNAPSHOT_EXCERPTS,
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+
     def test_semantic_implied_call_scores_medium_under_v2(self) -> None:
         candidate = _candidate(taxonomy_match="semantic", call_language="implied")
 
@@ -320,6 +486,22 @@ class CallLanguageScoringTest(unittest.TestCase):
         self.assertEqual(96, result.confidence)
         self.assertIn("scored as explicit_stance", result.call_language_note)
         self.assertEqual("none", result.review_flag)
+        # The persisted field is the EFFECTIVE (downgraded) value, not the raw
+        # candidate bucket.
+        self.assertEqual("explicit_dial", candidate.call_language)
+        self.assertEqual("explicit_stance", result.call_language)
+
+    def test_result_persists_effective_call_language_unchanged_for_prose(self) -> None:
+        candidate = _candidate(call_language="directional")
+
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(candidate.evidence_quote),
+        )
+
+        self.assertEqual("directional", result.call_language)
+        self.assertEqual("", result.call_language_note)
 
 
 class ScrambledPageProseTest(unittest.TestCase):
@@ -415,6 +597,209 @@ class ScrambledPageProseTest(unittest.TestCase):
 
         self.assertFalse(check.passed)
         self.assertFalse(check.degraded)
+
+
+class OcrPageProseTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def test_ocr_page_prose_verbatim_pass_is_capped_and_flagged(self) -> None:
+        quote = "global equities remain attractive"
+        candidate = _candidate(locator="p.3", evidence_quote=quote)
+
+        result = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=_healthy_snapshot(f"We think {quote} in the current cycle."),
+            ocr_pages=frozenset({3}),
+        )
+
+        self.assertEqual(SCRAMBLED_PROSE_CAP, result.confidence)
+        self.assertEqual("review", result.review_flag)
+        self.assertTrue(result.evidence_check.degraded)
+        self.assertIn("OCR", result.evidence_check.message)
+
+    def test_ocr_page_prose_falls_back_to_key_tokens(self) -> None:
+        candidate = _candidate(
+            locator="p.3",
+            evidence_quote="global equities remain attractive",
+            taxonomy_match="semantic",
+            call_language="directional",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("attractive global equities remain a stated stance"),
+            ocr_pages=frozenset({3}),
+        )
+
+        self.assertTrue(check.passed)
+        self.assertTrue(check.degraded)
+        self.assertIn("OCR", check.message)
+
+    def test_ocr_page_prose_failure_has_ocr_specific_message(self) -> None:
+        candidate = _candidate(locator="p.3", evidence_quote="platinum rhodium palladium")
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("unrelated source text about rates"),
+            ocr_pages=frozenset({3}),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertTrue(check.degraded)
+        self.assertIn("OCR", check.message)
+
+
+class VisualUnverifiedByTextTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+
+    def test_visual_token_miss_on_print_captured_page_routes_to_checker(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("page text omits the rendered dial labels"),
+            visual_pages=frozenset({4}),
+        )
+
+        self.assertTrue(check.passed)
+        self.assertEqual(VISUAL_UNVERIFIED_BY_TEXT, check.reason_code)
+        self.assertTrue(check.visual_unverified_by_text)
+        self.assertFalse(check.degraded)
+
+    def test_visual_token_miss_on_clean_text_source_still_hard_fails(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("page text omits the rendered dial labels"),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("evidence_check_failed", check.reason_code)
+        self.assertFalse(check.visual_unverified_by_text)
+
+    def test_visual_route_triggers_only_for_table_or_visual_evidence(self) -> None:
+        candidate = _candidate(
+            evidence_kind="prose",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("page text omits the rendered dial labels"),
+            visual_pages=frozenset({4}),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("quote_not_found", check.reason_code)
+        self.assertFalse(check.visual_unverified_by_text)
+
+    def test_visual_route_triggers_only_when_cited_page_is_visual(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        check = evidence_passes(
+            candidate,
+            _healthy_snapshot("page text omits the rendered dial labels"),
+            visual_pages=frozenset({2}),
+        )
+
+        self.assertFalse(check.passed)
+        self.assertEqual("evidence_check_failed", check.reason_code)
+
+    def test_visual_route_scoring_uses_checker_strength_mapping(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+        snapshot = _healthy_snapshot("page text omits the rendered dial labels")
+
+        decisive = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=snapshot,
+            visual_pages=frozenset({4}),
+            verdict=_verdict(evidence_strength="decisive"),
+            checker_enabled=True,
+        )
+        adequate = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=snapshot,
+            visual_pages=frozenset({4}),
+            verdict=_verdict(evidence_strength="adequate"),
+            checker_enabled=True,
+        )
+        thin = score_candidate(
+            candidate,
+            taxonomy=self.taxonomy,
+            snapshot_text=snapshot,
+            visual_pages=frozenset({4}),
+            verdict=_verdict(evidence_strength="thin"),
+            checker_enabled=True,
+        )
+
+        self.assertEqual("High", decisive.band)
+        self.assertEqual("none", decisive.review_flag)
+        self.assertEqual(decisive.confidence - CHECKER_ADEQUATE_DEDUCTION, adequate.confidence)
+        self.assertEqual("High", adequate.band)
+        self.assertEqual(CHECKER_THIN_CAP, thin.confidence)
+        self.assertEqual("review", thin.review_flag)
+
+    def test_visual_route_checker_fail_is_diagnosable(self) -> None:
+        candidate = _candidate(
+            evidence_kind="visual",
+            evidence_quote="Japan equities dial sits in the Neutral box",
+            locator="p.4 - Regional equity dials",
+            call_language="explicit_dial",
+            view="N",
+            sub_asset_class="Japan Equities",
+        )
+
+        with self.assertRaises(ValueError) as caught:
+            score_candidate(
+                candidate,
+                taxonomy=self.taxonomy,
+                snapshot_text=_healthy_snapshot("page text omits the rendered dial labels"),
+                visual_pages=frozenset({4}),
+                verdict=_verdict(supports_view="fail", note="dial shows underweight"),
+                checker_enabled=True,
+            )
+
+        self.assertEqual("checker_sign_mismatch", str(caught.exception))
+        self.assertIn("checker visual review failed", caught.exception.message)
 
 
 class CheckerScoringTest(unittest.TestCase):
@@ -712,6 +1097,142 @@ def _healthy_snapshot(quote: str) -> str:
     """Snapshot text containing the quote and passing the HTML read-quality floor."""
     filler = "Broader market commentary continues across the outlook document. "
     return quote + " " + filler * (MIN_HTML_SNAPSHOT_CHARS // len(filler) + 1)
+
+
+class EvidenceContextRoutingTest(unittest.TestCase):
+    """Deterministic routing of the checker evidence-context window."""
+
+    CLEAN_SNAPSHOT = (
+        "Intro paragraph about the macro backdrop and rates.\n\n"
+        "We are overweight EM equities given cheap valuations, "
+        "though we acknowledge idiosyncratic risks.\n\n"
+        "A closing paragraph about developed-market bonds."
+    )
+
+    def test_clean_exact_returns_text_window(self) -> None:
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.3"
+        )
+        context = evidence_context(candidate, self.CLEAN_SNAPSHOT)
+        self.assertEqual("clean", context.route)
+        self.assertIn("We are overweight EM equities", context.text)
+        # The neighbour paragraphs are included as context.
+        self.assertIn("macro backdrop", context.text)
+        self.assertIn("developed-market bonds", context.text)
+
+    def test_clean_normalized_match_returns_text_window(self) -> None:
+        # Extra internal whitespace/newlines: exact fails, normalized matches.
+        snapshot = "Lead-in.\n\nWe are   overweight\nEM equities this quarter.\n\nTail."
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.2"
+        )
+        context = evidence_context(candidate, snapshot)
+        self.assertEqual("clean", context.route)
+        self.assertIn("overweight EM equities", context.text)
+
+    def test_subsequence_match_routes_degraded_no_text(self) -> None:
+        # Injected sidebar noise between quote tokens: only the subsequence tier
+        # matches, so the surrounding text is not trustworthy.
+        snapshot = (
+            "Header.\n\nWe are overweight (see sidebar footnote twelve) "
+            "EM equities this quarter.\n\nFooter."
+        )
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.4"
+        )
+        context = evidence_context(candidate, snapshot)
+        self.assertEqual("degraded", context.route)
+        self.assertEqual(4, context.cited_page)
+        self.assertEqual("", context.text)
+
+    def test_scrambled_page_routes_degraded_even_when_exact(self) -> None:
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.3"
+        )
+        context = evidence_context(
+            candidate, self.CLEAN_SNAPSHOT, scrambled_pages=frozenset({3})
+        )
+        self.assertEqual("degraded", context.route)
+        self.assertEqual(3, context.cited_page)
+        self.assertEqual("", context.text)
+
+    def test_ocr_page_routes_degraded_even_when_exact(self) -> None:
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.3"
+        )
+        context = evidence_context(
+            candidate, self.CLEAN_SNAPSHOT, ocr_pages=frozenset({3})
+        )
+        self.assertEqual("degraded", context.route)
+        self.assertEqual(3, context.cited_page)
+
+    def test_unlocatable_quote_routes_none(self) -> None:
+        candidate = _candidate(
+            evidence_quote="This exact phrase appears nowhere in the source",
+            locator="p.3",
+        )
+        context = evidence_context(candidate, self.CLEAN_SNAPSHOT)
+        self.assertEqual("none", context.route)
+        self.assertEqual("", context.text)
+
+    def test_multi_span_windows_around_first_span(self) -> None:
+        snapshot = (
+            "Opening.\n\n"
+            "We are overweight emerging market equities given cheap valuations.\n\n"
+            "An unrelated paragraph sits in between over here.\n\n"
+            "Separately we trimmed duration modestly across the whole book.\n\n"
+            "Closing."
+        )
+        candidate = _candidate(
+            evidence_quote=[
+                "We are overweight emerging market equities given cheap valuations",
+                "we trimmed duration modestly across the whole book",
+            ],
+            locator="p.5",
+        )
+        context = evidence_context(candidate, snapshot)
+        self.assertEqual("clean", context.route)
+        # Window is around the primary (first) span, not the second.
+        self.assertIn("overweight emerging market equities", context.text)
+        self.assertNotIn("trimmed duration modestly", context.text)
+
+    def test_non_prose_candidate_routes_none(self) -> None:
+        candidate = _candidate(
+            evidence_kind="table",
+            evidence_quote="Regional grid places EM equities overweight",
+            locator="p.3 — Regional grid",
+        )
+        context = evidence_context(candidate, self.CLEAN_SNAPSHOT)
+        self.assertEqual("none", context.route)
+
+    def test_empty_snapshot_routes_none(self) -> None:
+        candidate = _candidate(evidence_quote="We are overweight EM equities")
+        self.assertEqual("none", evidence_context(candidate, "   ").route)
+
+    def test_window_is_capped(self) -> None:
+        # One huge paragraph (no blank lines): the window must be trimmed to the
+        # char cap while still covering the quote.
+        filler = "lorem ipsum dolor sit amet " * 300
+        snapshot = f"{filler} UNIQUEQUOTEMARKER stands here {filler}"
+        candidate = _candidate(evidence_quote="UNIQUEQUOTEMARKER stands here")
+        context = evidence_context(candidate, snapshot)
+        self.assertEqual("clean", context.route)
+        self.assertLessEqual(len(context.text), EVIDENCE_CONTEXT_CHAR_CAP)
+        self.assertIn("UNIQUEQUOTEMARKER stands here", context.text)
+
+    def test_member_snapshot_resolution(self) -> None:
+        # Grouped-source resolution: a candidate is located against the member
+        # source's own snapshot, not a companion's.
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.3"
+        )
+        companion_snapshot = "This companion document only discusses credit spreads."
+        self.assertEqual(
+            "none", evidence_context(candidate, companion_snapshot).route
+        )
+        self.assertEqual(
+            "clean", evidence_context(candidate, self.CLEAN_SNAPSHOT).route
+        )
 
 
 def _candidate(**overrides: object) -> CandidateCall:

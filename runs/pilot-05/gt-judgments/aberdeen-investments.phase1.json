@@ -1,0 +1,149 @@
+{
+ "firm": "Aberdeen Investments",
+ "exact_match": [
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Emerging Markets Equities",
+   "model_view": "O",
+   "gt_view": "N",
+   "view_agree": false,
+   "model_row": 4,
+   "gt_row": 10,
+   "model_confidence": "75",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Data Centers",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 5,
+   "gt_row": 9,
+   "model_confidence": "75",
+   "model_band": "High",
+   "review_flag": "none"
+  }
+ ],
+ "model_only": [
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "AI",
+   "view": "O",
+   "row": 2,
+   "confidence": "85",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "Aberdeen expects AI-related spending to accelerate in 2026, making AI a positive tailwind for APAC and EMs, while noting collapse risk is not its core view. Evidence: Most importantly though, we expect AI to remain a tailwind for the region \u2013 and for EMs overall \u2013 as AI-related spending is set to move up a gear in 2026. US tech companies have spent more than $865 billion since 2022 on CapEx already, and plan to spend more than $610 billion in 2026 alone (Chart 3).. Locator: p.4."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Asia Equities",
+   "view": "O",
+   "row": 3,
+   "confidence": "74",
+   "band": "Medium",
+   "review_flag": "review",
+   "commentary": "Aberdeen sees APAC as benefiting from the AI capex cycle, with the main caveat that a non-core AI equity and capex collapse would hit Asian EMs most. Evidence: Most importantly though, we expect AI to remain a tailwind for the region \u2013 and for EMs overall \u2013 as AI-related spending is set to move up a gear in 2026. US tech companies have spent more than $865 billion since 2022 on CapEx already, and plan to spend more than $610 billion in 2026 alone (Chart 3).. Locator: p.4. Checker: unconfirmed (The quote calls AI a tailwind for 'the region' but never names Asia equities; mapping and the equity-level inference are defensible but not decisive from the quote alone.)."
+  }
+ ],
+ "gt_only": [
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Taiwan Equities",
+   "view": "O",
+   "row": 2,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "Aberdeen identifies Taiwan as the clear beneficiary of the AI-driven semiconductor supercycle, with integrated circuit exports surging 60% year-on-year and US-bound shipments up 150%. The CapEx cycle shows no sign of abating, with US tech giants planning over $610 billion in 2026 spending alone. However, the team flags Dutch disease risk as semiconductor dominance distorts the broader economy."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "South Korea Equities",
+   "view": "O",
+   "row": 3,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "South Korean total exports are up 34% year-on-year, with the semiconductor share rising by more than 10 percentage points to over 30%. Korean tech-related exports to Taiwan have risen sharply, reinforcing APAC supply chain linkages. Aberdeen notes that outside semiconductors and shipping, the export picture is less compelling."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "IT/Tech/Telecomms (inc. AI)",
+   "view": "O",
+   "row": 4,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "The AI CapEx cycle has broadened beyond Taiwan and Korea to Malaysia, Thailand, and Vietnam. US tech firms have spent over $865 billion since 2022 and plan $610 billion for 2026 alone. Aberdeen expects AI to remain a tailwind for APAC and EMs overall as spending moves up a gear."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "India Equities",
+   "view": "O",
+   "row": 5,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "India is well placed for the data centre expansion wave alongside Malaysia. Fiscal consolidation has helped narrow bond spreads and given the central bank room to ease. Aberdeen views India's structural growth drivers as intact despite the broader EM uncertainty."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "EM Debt - Local Currency",
+   "view": "O",
+   "row": 6,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "Brazil maintains the highest real policy rates in EM, creating significant carry for local currency bond investors. Aberdeen expects the Banco Central do Brasil to begin cautiously easing. October election risk looms with a competitive race between Lula and Flavio Bolsonaro, but the rate differential remains deeply attractive."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "LatAm Fixed Income",
+   "view": "O",
+   "row": 7,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "Aberdeen expects Mexico to deliver further rate cuts from still-elevated real policy levels. Fiscal consolidation is underway, and de facto fiscal loosening from tariff reduction supports the growth outlook. Section 122 tariff moderation is net positive for Mexico."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Malaysia Equities",
+   "view": "O",
+   "row": 8,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "APAC trade strength has broadened to Malaysia, and the country is well positioned for data centre expansion alongside India. Fiscal consolidation has helped narrow bond spreads. Aberdeen notes electronics manufacturing employment has fallen, suggesting some AI concentration risk."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "China Equities",
+   "view": "N",
+   "row": 11,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "China's AI+ strategy targeting robotics, biomanufacturing, and quantum computing is ambitious and could pressure APAC manufacturing competitors. However, the US is likely to rebuild its tariff wall on China via Section 232 and 301 legislation. China's AI spend is understated at $67 billion due to diffuse investment across state-backed telecoms."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Eastern Europe Equities",
+   "view": "N",
+   "row": 12,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "Central banks in Central and Eastern Europe are most likely to remain on hold in 2026, held back by electoral fiscal pressure and lingering core inflation stickiness. Hungary's April election is a key swing factor, with Orb\u00e1n's Fidesz trailing the pro-EU Tisza party in polls."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Oil",
+   "view": "U",
+   "row": 13,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "The US-Israel-Iran conflict creates material downside for energy-importing EMs. The longer the Strait of Hormuz disruption persists, the greater the probability of a broad oil price spike and negative market moves. Aberdeen notes markets are currently pricing a short-lived shock, creating asymmetric risk."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Emerging Markets - Sovereigns",
+   "view": "U",
+   "row": 14,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "Fiscal consolidation has proved elusive in Colombia, contributing to bond selloffs. The presidential race between Petro's chosen successor Iv\u00e1n Cepeda and right-wing candidate Abelardo de la Espriella remains competitive, adding policy uncertainty to an already fragile fiscal picture. Market-friendly Finance Minister Sri Mulyani's departure following deadly protests signals a political shift. Fundraising at the sovereign wealth fund via patriot bonds and increased pressure on Bank Indonesia suggest growing fiscal populism. The 3% of GDP budget deficit limit may hold, but spending through other means is expanding. Romania shows the highest fiscal slippage risk in EM at nearly 2% of potential GDP. Fiscal consolidation remains elusive despite IMF expectations for improvement. Aberdeen sees Romania as the clearest negative outlier in the EM sovereign space."
+  },
+  {
+   "firm": "Aberdeen Investments",
+   "leaf": "Thailand Equities",
+   "view": "U",
+   "row": 15,
+   "source": "Emerging Markets Q2 2026 Outlook: Shifting Sands",
+   "commentary": "The minority government faces a potential no-confidence vote, border tensions with Cambodia persist, and economic growth remains weak. Fiscal slippage potential is high even with a fiscally conservative government in power. Thai elections are yet to be scheduled, adding to the uncertainty."
+  }
+ ]
+}

@@ -1,8 +1,8 @@
-Firm,Date,Source,MR Link
-Aberdeen Investments,3/10/2026,Emerging Markets Q2 2026 Outlook: Shifting Sands,https://www.aberdeeninvestments.com/en-us/institutional/insights-and-research/emerging-markets-q2-2026-outlook-shifting-sands
-AllianceBernstein,4/2/2026,Global Macro Outlook: Second Quarter 2026,https://marketsrecon.com/redirect?name=app_content&parameters%5Bslug%5D=global-macro-outlook-second-quarter-2026
-Schroders,4/7/2026,Quarterly markets review - Q1 2026,https://www.schroders.com/en/global/individual/insights/quarterly-markets-review---q1-2026/
-J.P. Morgan Asset Management,3/26/2026,Global Fixed Income Views 2Q 2026,https://am.jpmorgan.com/us/en/asset-management/institutional/insights/portfolio-insights/asset-class-views/fixed-income/
-PIMCO,3/24/2026,"Layered Uncertainty: Conflict, Credit Stress, and AI",https://www.pimco.com/gb/en/insights/layered-uncertainty-conflict-credit-stress-and-ai
-Schroders,3/20/2026,Our multi-asset investment views – March 2026,https://www.schroders.com/en/global/individual/insights/our-multi-asset-investment-views-march-2026/
-J.P. Morgan Asset Management,4/30/2026,Global Asset Allocation Views 2Q 2026,https://am.jpmorgan.com/gb/en/asset-management/institutional/insights/portfolio-insights/asset-class-views/asset-allocation/c
+Firm,Date,Source,MR Link,local_file
+Aberdeen Investments,3/10/2026,Emerging Markets Q2 2026 Outlook: Shifting Sands,https://www.aberdeeninvestments.com/en-us/institutional/insights-and-research/emerging-markets-q2-2026-outlook-shifting-sands,
+AllianceBernstein,4/2/2026,Global Macro Outlook: Second Quarter 2026,https://marketsrecon.com/redirect?name=app_content&parameters%5Bslug%5D=global-macro-outlook-second-quarter-2026,prev-excel/alliance-bernstein.pdf
+Schroders,4/7/2026,Quarterly markets review - Q1 2026,https://www.schroders.com/en/global/individual/insights/quarterly-markets-review---q1-2026/,prev-excel/Quarterly markets review - Q1 2026.pdf
+J.P. Morgan Asset Management,3/26/2026,Global Fixed Income Views 2Q 2026,https://am.jpmorgan.com/us/en/asset-management/institutional/insights/portfolio-insights/asset-class-views/fixed-income/,prev-excel/jp-morgan.pdf
+PIMCO,3/24/2026,"Layered Uncertainty: Conflict, Credit Stress, and AI",https://www.pimco.com/gb/en/insights/layered-uncertainty-conflict-credit-stress-and-ai,prev-excel/PIMCO.pdf
+Schroders,3/20/2026,Our multi-asset investment views – March 2026,https://www.schroders.com/en/global/individual/insights/our-multi-asset-investment-views-march-2026/,prev-excel/Our multi-asset investment views – March 2026.pdf
+J.P. Morgan Asset Management,4/30/2026,Global Asset Allocation Views 2Q 2026,https://am.jpmorgan.com/gb/en/asset-management/institutional/insights/portfolio-insights/asset-class-views/asset-allocation/c,prev-excel/Global Asset Allocation Views 2Q 2026 _ J.P. Morgan Asset Management.pdf

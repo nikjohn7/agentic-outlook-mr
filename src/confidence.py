@@ -15,6 +15,7 @@ HARD_FAILURE_QUOTE = "quote_not_found"
 HARD_FAILURE_VISUAL_LOCATOR = "visual_locator_missing"
 HARD_FAILURE_EVIDENCE = "evidence_check_failed"
 HARD_FAILURE_MATERIALITY = "delta_below_materiality"
+VISUAL_UNVERIFIED_BY_TEXT = "visual_unverified_by_text"
 
 # Materiality floor for forecast-delta evidence (a house forecast endpoint vs.
 # the current level). PROVISIONAL, pending client confirmation — this maps to
@@ -87,6 +88,28 @@ MIN_SPAN_MEANINGFUL_TOKENS = 4
 # (word order is no longer verified), so the score is capped just below the
 # High band and the row is flagged for review, and the degradation is recorded.
 SCRAMBLED_PROSE_CAP = 74
+DEGRADED_PROSE_CAP = SCRAMBLED_PROSE_CAP
+
+# Tier 2b quote verification: tolerate only bounded injected extraction noise
+# between the quote's own tokens. Every quote token must appear in order, each
+# gap may contain at most 15 snapshot-only tokens, and the enclosing window may
+# be no wider than 3x the quote length. This recovers rendered-page prose broken
+# by column sidebars while still rejecting fabricated or reordered quotes. It is
+# weaker than exact/normalized substring matching, so it uses the degraded prose
+# cap and forces review.
+SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP = 15
+SUBSEQUENCE_MAX_WINDOW_MULTIPLE = 3
+
+# Checker evidence-context window (opt-in --checker-context). Hard char cap on
+# the surrounding-text window handed to the checker so a wall-of-text page can
+# never blow up the prompt. The window is the quote's containing paragraph plus
+# one paragraph either side, then trimmed to this cap around the quote.
+EVIDENCE_CONTEXT_CHAR_CAP = 1200
+
+# Paragraph boundary in a snapshot: a blank line (a run of whitespace containing
+# at least two newlines). Per-page text is joined with "\n\n" in src/ingest, so
+# page breaks are also paragraph breaks.
+_PARAGRAPH_BREAK = re.compile(r"\n[^\S\n]*\n\s*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +121,34 @@ class EvidenceCheck:
     # because the cited page is scrambled. Both a degraded pass and a degraded
     # failure carry it, so the outcome is always visible to analysts.
     degraded: bool = False
+    # True when table/visual evidence is on a print-captured / visual-heavy page
+    # whose rendered dial/grid tokens are not present in the snapshot text. This
+    # is not a deterministic pass; it routes the candidate to checker visual
+    # review instead of hard-failing on the text snapshot.
+    visual_unverified_by_text: bool = False
+    # Prose quote verification tier for audit: exact, normalized, subsequence,
+    # visual, or key_tokens for legacy degraded scrambled/OCR fallback.
+    quote_match: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceContext:
+    """Deterministic routing of a candidate's evidence-context window.
+
+    route:
+      "clean"    — the quote sits on a trustworthy page; `text` is the
+                   surrounding snapshot window (containing paragraph +/- one).
+      "degraded" — the surrounding text could not be trusted (subsequence match,
+                   or the cited page is scrambled/OCR); no text is shipped. The
+                   checker should open the page image instead. `cited_page` is
+                   the page to open (may be None when the locator names none).
+      "none"     — no context attached (non-prose, empty snapshot, or the quote
+                   could not be located); the candidate is judged as today.
+    """
+
+    route: str
+    text: str = ""
+    cited_page: int | None = None
 
 
 class EvidenceFailure(ValueError):
@@ -123,6 +174,20 @@ class MaterialityFailure(ValueError):
         self.message = message
 
 
+class CheckerFailure(ValueError):
+    """A checker hard-fail with a diagnosable message.
+
+    In particular, visual-unverified candidates must distinguish "snapshot text
+    lacked dial tokens, then the checker looked at the page image and failed it"
+    from the old deterministic "tokens not found in snapshot text" gate.
+    """
+
+    def __init__(self, reason_code: str, message: str) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+        self.message = message
+
+
 @dataclass(frozen=True, slots=True)
 class ConfidenceResult:
     candidate: CandidateCall
@@ -141,6 +206,10 @@ class ConfidenceResult:
     # calls.
     cap_reason: str = ""
     call_language_note: str = ""
+    # The call-language bucket actually scored (after the explicit_dial-on-prose
+    # downgrade), persisted so an analyst can audit the effective grade from the
+    # frozen output — not the raw candidate value.
+    call_language: str = ""
 
 
 # Dash-like characters (typographic hyphens, en/em/figure dash, horizontal bar,
@@ -173,6 +242,7 @@ def normalize_quote_text(value: str) -> str:
             }
         )
     )
+    text = "\n".join(line for line in text.splitlines() if re.search(r"[A-Za-z0-9]", line))
     text = re.sub(f"[{_DASH_VARIANTS}]", "-", text)
     text = re.sub(r"(\w)-\s*\n\s*(\w)", r"\1\2", text)  # hyphen consumed by a line break
     text = re.sub(r"\s+", " ", text)
@@ -197,6 +267,8 @@ def evidence_passes(
     snapshot_text: str,
     *,
     scrambled_pages: frozenset[int] = frozenset(),
+    ocr_pages: frozenset[int] = frozenset(),
+    visual_pages: frozenset[int] = frozenset(),
 ) -> EvidenceCheck:
     """Validate evidence according to its kind without using model judgment.
 
@@ -207,10 +279,161 @@ def evidence_passes(
         return EvidenceCheck(False, HARD_FAILURE_EVIDENCE, "snapshot text is empty")
     if candidate.evidence_kind == "prose":
         cited_page = _cited_page(candidate.locator)
+        check = _prose_evidence_passes(candidate, snapshot_text)
+        if check.passed:
+            if cited_page is not None and cited_page in ocr_pages:
+                return EvidenceCheck(
+                    True,
+                    message=(
+                        f"page p.{cited_page} flagged OCR (image-only or low text layer); "
+                        "prose quote check passed on OCR text, but confidence is capped "
+                        "and review required"
+                    ),
+                    degraded=True,
+                    quote_match=check.quote_match,
+                )
+            return check
+        if cited_page is not None and cited_page in ocr_pages:
+            return _degraded_prose_evidence_passes(
+                candidate,
+                snapshot_text,
+                cited_page,
+                page_issue="OCR",
+                message_detail="image-only or low text layer",
+            )
         if cited_page is not None and cited_page in scrambled_pages:
-            return _degraded_prose_evidence_passes(candidate, snapshot_text, cited_page)
-        return _prose_evidence_passes(candidate, snapshot_text)
-    return _table_or_visual_evidence_passes(candidate, snapshot_text)
+            return _degraded_prose_evidence_passes(
+                candidate,
+                snapshot_text,
+                cited_page,
+                page_issue="scrambled",
+                message_detail="two-column interleave",
+            )
+        return check
+    return _table_or_visual_evidence_passes(
+        candidate,
+        snapshot_text,
+        visual_pages=visual_pages,
+    )
+
+
+def evidence_context(
+    candidate: CandidateCall,
+    snapshot_text: str,
+    *,
+    scrambled_pages: frozenset[int] = frozenset(),
+    ocr_pages: frozenset[int] = frozenset(),
+) -> EvidenceContext:
+    """Route a candidate to a text context window, a visual fallback, or nothing.
+
+    Deterministic — the LLM never judges whether the text is trustworthy. Only
+    prose candidates are routed (table/visual evidence already has its own
+    visual verification route). The route reuses the quote gate's own matching
+    machinery to both classify the quote and locate it:
+
+    - CLEAN (quote_match exact/normalized AND the cited page is not scrambled or
+      OCR): extract the containing paragraph plus one either side from the same
+      string the quote matched in, bounded to EVIDENCE_CONTEXT_CHAR_CAP.
+    - DEGRADED (quote_match subsequence, or the cited page is scrambled/OCR):
+      never ship the scrambled text; return the cited page for a visual read.
+    - Fail-safe: a non-prose candidate, an empty snapshot, or a quote that
+      cannot be located returns route "none" and the candidate is judged as
+      today. This never raises.
+    """
+    if candidate.evidence_kind != "prose":
+        return EvidenceContext("none")
+    if not snapshot_text or not snapshot_text.strip():
+        return EvidenceContext("none")
+
+    cited_page = _cited_page(candidate.locator)
+    page_degraded = cited_page is not None and (
+        cited_page in scrambled_pages or cited_page in ocr_pages
+    )
+    if page_degraded:
+        # A flagged page routes visual regardless of how the quote matched: even
+        # an exact hit sits in column-interleaved / OCR text we must not trust.
+        return EvidenceContext("degraded", cited_page=cited_page)
+
+    check = _prose_evidence_passes(candidate, snapshot_text)
+    if not check.passed:
+        return EvidenceContext("none")
+    if check.quote_match in ("exact", "normalized"):
+        located = _locate_primary_span(candidate, snapshot_text, check.quote_match)
+        if located is None:
+            return EvidenceContext("none")
+        source, start, end = located
+        window = _extract_context_window(source, start, end)
+        return EvidenceContext("clean", text=window) if window else EvidenceContext("none")
+
+    # A subsequence match on an unflagged page: the verbatim guarantee was
+    # already relaxed, so the surrounding text is not trustworthy either.
+    return EvidenceContext("degraded", cited_page=cited_page)
+
+
+def _locate_primary_span(
+    candidate: CandidateCall, snapshot_text: str, quote_match: str
+) -> tuple[str, int, int] | None:
+    """Locate the primary (first) span, returning (source_string, start, end).
+
+    For an exact match the span is found in the raw snapshot; for a normalized
+    match, in the normalized snapshot (whitespace-collapsed, dehyphenated) — the
+    context window is extracted from whichever string the quote matched in.
+    Mirrors the first-span search in _spans_in_order (cursor starts at 0)."""
+    raw_spans = [span.strip() for span in candidate.evidence_spans if span.strip()]
+    if not raw_spans:
+        return None
+    if quote_match == "exact":
+        primary = raw_spans[0]
+        index = snapshot_text.find(primary)
+        return (snapshot_text, index, index + len(primary)) if index != -1 else None
+    source = normalize_quote_text(snapshot_text)
+    primary = normalize_quote_text(raw_spans[0])
+    if not primary:
+        return None
+    index = source.find(primary)
+    return (source, index, index + len(primary)) if index != -1 else None
+
+
+def _extract_context_window(source: str, start: int, end: int) -> str:
+    """The quote's containing paragraph plus one either side, capped.
+
+    Paragraphs are blank-line separated (a normalized single-line snapshot has
+    exactly one paragraph, so the whole line is the window before capping). The
+    cap keeps the quote fully covered and centered."""
+    paragraphs = _paragraphs(source)
+    containing = len(paragraphs) - 1
+    for index, (p_start, p_end) in enumerate(paragraphs):
+        if p_start <= start <= p_end:
+            containing = index
+            break
+    ctx_start = paragraphs[max(0, containing - 1)][0]
+    ctx_end = paragraphs[min(len(paragraphs) - 1, containing + 1)][1]
+    ctx_start, ctx_end = _cap_context_window(ctx_start, ctx_end, start, end)
+    return source[ctx_start:ctx_end].strip()
+
+
+def _paragraphs(source: str) -> list[tuple[int, int]]:
+    """(start, end) offsets of each blank-line-separated paragraph in source."""
+    starts = [0] + [match.end() for match in _PARAGRAPH_BREAK.finditer(source)]
+    ends = [match.start() for match in _PARAGRAPH_BREAK.finditer(source)] + [len(source)]
+    return list(zip(starts, ends))
+
+
+def _cap_context_window(
+    ctx_start: int, ctx_end: int, quote_start: int, quote_end: int
+) -> tuple[int, int]:
+    """Shrink [ctx_start, ctx_end] to at most the char cap while still covering
+    the quote span, centering the remaining budget on the quote."""
+    cap = EVIDENCE_CONTEXT_CHAR_CAP
+    if ctx_end - ctx_start <= cap:
+        return ctx_start, ctx_end
+    if quote_end - quote_start >= cap:
+        return quote_start, quote_end
+    slack = cap - (quote_end - quote_start)
+    new_start = max(ctx_start, quote_start - slack // 2)
+    new_end = min(ctx_end, new_start + cap)
+    new_start = max(ctx_start, new_end - cap)
+    return new_start, new_end
 
 
 def score_candidate(
@@ -220,8 +443,11 @@ def score_candidate(
     snapshot_text: str,
     page_count: int | None = None,
     scrambled_pages: frozenset[int] = frozenset(),
+    ocr_pages: frozenset[int] = frozenset(),
+    visual_pages: frozenset[int] = frozenset(),
     verdict: CheckVerdict | None = None,
     checker_enabled: bool = False,
+    evidence_check_override: EvidenceCheck | None = None,
 ) -> ConfidenceResult:
     """Return a deterministic score, or raise ValueError for hard failures.
 
@@ -235,7 +461,13 @@ def score_candidate(
     if candidate.taxonomy_match == "none" or not taxonomy.is_valid_label(candidate.sub_asset_class):
         raise ValueError(HARD_FAILURE_TAXONOMY)
 
-    evidence_check = evidence_passes(candidate, snapshot_text, scrambled_pages=scrambled_pages)
+    evidence_check = evidence_check_override or evidence_passes(
+        candidate,
+        snapshot_text,
+        scrambled_pages=scrambled_pages,
+        ocr_pages=ocr_pages,
+        visual_pages=visual_pages,
+    )
     if not evidence_check.passed:
         raise EvidenceFailure(evidence_check)
 
@@ -253,19 +485,19 @@ def score_candidate(
     if checker_enabled and verdict is not None:
         failed = verdict.failed_questions()
         if failed:
-            raise ValueError(CHECKER_FAIL_REASONS[failed[0]])
+            reason_code = CHECKER_FAIL_REASONS[failed[0]]
+            message = verdict.note or reason_code
+            if evidence_check.visual_unverified_by_text:
+                message = (
+                    "checker visual review failed after snapshot text could not verify "
+                    f"the table/visual evidence: {message}"
+                )
+            raise CheckerFailure(reason_code, message)
 
-    effective_call_language = candidate.call_language
-    call_language_note = ""
-    if candidate.call_language == "explicit_dial" and candidate.evidence_kind == "prose":
-        effective_call_language = "explicit_stance"
-        call_language_note = (
-            "Call language: explicit_dial is accepted only for table/visual evidence; "
-            "prose evidence scored as explicit_stance."
-        )
+    effective_call, call_language_note = effective_call_language(candidate)
 
     score = 0
-    score += CALL_LANGUAGE_POINTS[effective_call_language]
+    score += CALL_LANGUAGE_POINTS[effective_call]
     score += 25
     score += {"exact": 20, "semantic": 10}[candidate.taxonomy_match]
     score += 5 if candidate.conflict else 15
@@ -302,7 +534,12 @@ def score_candidate(
 
     # The verbatim guarantee was weakened to key-token overlap: cap below High.
     if evidence_check.degraded:
-        score = min(score, SCRAMBLED_PROSE_CAP)
+        score = min(score, DEGRADED_PROSE_CAP)
+
+    if evidence_check.visual_unverified_by_text and not (
+        checker_enabled and verdict is not None and verdict.all_pass
+    ):
+        score = min(score, CHECKER_UNCONFIRMED_CAP)
 
     # Basis-driven caps: a forecast delta at/above the floor is still only a
     # provisional view, and an analyst inference is segregated one band below
@@ -349,7 +586,25 @@ def score_candidate(
         checker_note=checker_note,
         cap_reason=cap_reason,
         call_language_note=call_language_note,
+        call_language=effective_call,
     )
+
+
+def effective_call_language(candidate: CandidateCall) -> tuple[str, str]:
+    """The call-language bucket actually scored, plus an optional note.
+
+    `explicit_dial` reads a dial/grid position, so it is accepted only for
+    table/visual evidence; on prose it downgrades to `explicit_stance` with a
+    recorded note. Every other bucket passes through unchanged. Shared by
+    score_candidate and the failure path so both persist the same effective
+    value.
+    """
+    if candidate.call_language == "explicit_dial" and candidate.evidence_kind == "prose":
+        return "explicit_stance", (
+            "Call language: explicit_dial is accepted only for table/visual evidence; "
+            "prose evidence scored as explicit_stance."
+        )
+    return candidate.call_language, ""
 
 
 def _append_reason(existing: str, addition: str) -> str:
@@ -387,16 +642,17 @@ def review_flag_for(score: int, candidate: CandidateCall) -> str:
 
 
 def _prose_evidence_passes(candidate: CandidateCall, snapshot_text: str) -> EvidenceCheck:
-    """Every span must match the snapshot verbatim (after normalize_quote_text),
-    and the spans must appear in document order. A single span is the original
-    contiguous-quote contract; multiple spans (an honest elision) additionally
-    obey the join guardrails so a paraphrase or reversed stitch cannot slip by.
+    """Every span must match the snapshot in order through deterministic tiers.
+
+    Tier 1 is raw exact substring matching. Tier 2a is symmetric deterministic
+    normalization. Tier 2b is an ordered token subsequence with bounded injected
+    noise between quote tokens and a bounded total window. A single span keeps
+    the original contiguous-quote contract through tiers 1-2a; multiple spans
+    still obey the join guardrails so a paraphrase or reversed stitch cannot
+    slip by.
     """
-    spans = [
-        normalized
-        for span in candidate.evidence_spans
-        if (normalized := normalize_quote_text(span))
-    ]
+    raw_spans = [span.strip() for span in candidate.evidence_spans if span.strip()]
+    spans = [normalized for span in raw_spans if (normalized := normalize_quote_text(span))]
     if not spans:
         return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote is empty")
     if len(spans) > MAX_PROSE_SPANS:
@@ -410,7 +666,40 @@ def _prose_evidence_passes(candidate: CandidateCall, snapshot_text: str) -> Evid
                     False, HARD_FAILURE_QUOTE, "a prose quote span is too short to verify"
                 )
 
+    exact = _spans_in_order(snapshot_text, raw_spans)
+    if exact == "matched":
+        return EvidenceCheck(True, quote_match="exact")
+    if exact == "out_of_order":
+        return EvidenceCheck(
+            False, HARD_FAILURE_QUOTE, "prose quote spans are out of document order"
+        )
+
     source = normalize_quote_text(snapshot_text)
+    normalized = _spans_in_order(source, spans)
+    if normalized == "matched":
+        return EvidenceCheck(True, quote_match="normalized")
+    if normalized == "out_of_order":
+        return EvidenceCheck(
+            False, HARD_FAILURE_QUOTE, "prose quote spans are out of document order"
+        )
+
+    if _spans_match_ordered_subsequence(source, spans):
+        return EvidenceCheck(
+            True,
+            message=(
+                "prose quote matched as ordered token subsequence "
+                f"(max {SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP} injected tokens per gap, "
+                f"window <= {SUBSEQUENCE_MAX_WINDOW_MULTIPLE}x quote length); "
+                "confidence capped, review required"
+            ),
+            degraded=True,
+            quote_match="subsequence",
+        )
+
+    return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote was not found")
+
+
+def _spans_in_order(source: str, spans: list[str]) -> str:
     cursor = 0
     for span in spans:
         index = source.find(span, cursor)
@@ -418,30 +707,90 @@ def _prose_evidence_passes(candidate: CandidateCall, snapshot_text: str) -> Evid
             # Present but only before the cursor => the spans are stitched out of
             # document order; genuinely absent => a paraphrase or fabrication.
             if span in source:
-                return EvidenceCheck(
-                    False, HARD_FAILURE_QUOTE, "prose quote spans are out of document order"
-                )
-            return EvidenceCheck(False, HARD_FAILURE_QUOTE, "prose quote was not found")
+                return "out_of_order"
+            return "missing"
         cursor = index + len(span)
-    return EvidenceCheck(True)
+    return "matched"
+
+
+def _spans_match_ordered_subsequence(source: str, spans: list[str]) -> bool:
+    source_tokens = _quote_match_tokens(source)
+    cursor = 0
+    for span in spans:
+        quote_tokens = _quote_match_tokens(span)
+        if not quote_tokens:
+            return False
+        match = _find_ordered_subsequence(source_tokens, quote_tokens, start=cursor)
+        if match is None:
+            return False
+        cursor = match[1] + 1
+    return True
+
+
+def _find_ordered_subsequence(
+    source_tokens: list[str], quote_tokens: list[str], *, start: int = 0
+) -> tuple[int, int] | None:
+    max_window = max(len(quote_tokens), len(quote_tokens) * SUBSEQUENCE_MAX_WINDOW_MULTIPLE)
+    for start_index in range(start, len(source_tokens)):
+        if source_tokens[start_index] != quote_tokens[0]:
+            continue
+        previous = start_index
+        matched = 1
+        for token in quote_tokens[1:]:
+            next_index = _next_token_index(source_tokens, token, previous + 1)
+            if next_index is None:
+                break
+            if next_index - previous - 1 > SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP:
+                break
+            if next_index - start_index + 1 > max_window:
+                break
+            previous = next_index
+            matched += 1
+        if matched == len(quote_tokens):
+            return start_index, previous
+    return None
+
+
+def _next_token_index(tokens: list[str], token: str, start: int) -> int | None:
+    for index in range(start, len(tokens)):
+        if tokens[index] == token:
+            return index
+    return None
+
+
+def _quote_match_tokens(value: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", normalize_quote_text(value).lower())
 
 
 def _degraded_prose_evidence_passes(
     candidate: CandidateCall,
     snapshot_text: str,
     cited_page: int,
+    *,
+    page_issue: str,
+    message_detail: str,
 ) -> EvidenceCheck:
-    """Prose fallback for a scrambled (column-interleaved) page: the verbatim
-    check cannot succeed because the snapshot reorders the columns, so require
-    key-token overlap instead — the same weaker check table/visual evidence
-    uses. Every returned check is marked degraded so the score is capped and
-    the outcome is recorded for review."""
+    """Prose fallback for pages whose text layer cannot preserve source order.
+
+    Scrambled pages and OCR pages both get the same weaker key-token overlap
+    check. Every returned check is marked degraded so the score is capped and
+    the outcome is recorded for review.
+    """
     if _key_tokens_overlap(candidate.evidence_quote, snapshot_text):
-        return EvidenceCheck(True, degraded=True)
+        return EvidenceCheck(
+            True,
+            message=(
+                f"page p.{cited_page} flagged {page_issue} ({message_detail}); "
+                "prose verbatim check degraded to key-token overlap "
+                "(confidence capped, review required)"
+            ),
+            degraded=True,
+            quote_match="key_tokens",
+        )
     return EvidenceCheck(
         False,
         HARD_FAILURE_QUOTE,
-        f"page p.{cited_page} flagged scrambled (two-column interleave); "
+        f"page p.{cited_page} flagged {page_issue} ({message_detail}); "
         "prose verbatim check degraded to key-token overlap, which also failed",
         degraded=True,
     )
@@ -450,6 +799,8 @@ def _degraded_prose_evidence_passes(
 def _table_or_visual_evidence_passes(
     candidate: CandidateCall,
     snapshot_text: str,
+    *,
+    visual_pages: frozenset[int] = frozenset(),
 ) -> EvidenceCheck:
     if not _has_specific_visual_locator(candidate.locator):
         return EvidenceCheck(
@@ -461,6 +812,16 @@ def _table_or_visual_evidence_passes(
     if not _meaningful_tokens(candidate.evidence_quote):
         return EvidenceCheck(False, HARD_FAILURE_EVIDENCE, "table/visual evidence is empty")
     if not _key_tokens_overlap(candidate.evidence_quote, snapshot_text):
+        cited_page = _cited_page(candidate.locator)
+        if cited_page is not None and cited_page in visual_pages:
+            return EvidenceCheck(
+                True,
+                VISUAL_UNVERIFIED_BY_TEXT,
+                "table/visual evidence tokens were not found in snapshot text; "
+                "eligible for checker visual verification because the cited page "
+                "comes from a print-captured or visual-heavy source",
+                visual_unverified_by_text=True,
+            )
         return EvidenceCheck(
             False,
             HARD_FAILURE_EVIDENCE,

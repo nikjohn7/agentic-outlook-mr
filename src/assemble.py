@@ -11,7 +11,14 @@ from typing import Callable
 
 from src.confidence import (
     CHECKER_FAIL_REASONS,
+    EvidenceCheck,
+    HARD_FAILURE_EVIDENCE,
+    HARD_FAILURE_MATERIALITY,
+    HARD_FAILURE_QUOTE,
+    HARD_FAILURE_TAXONOMY,
+    HARD_FAILURE_VISUAL_LOCATOR,
     ConfidenceResult,
+    effective_call_language,
     normalize_quote_text,
     score_candidate,
 )
@@ -22,6 +29,41 @@ from src.taxonomy import Taxonomy
 # Given the conflicting scored candidates for one (source, leaf), returns the
 # winning index within the group (None = unresolved) and the reasoning.
 Arbiter = Callable[[list[ConfidenceResult]], tuple[int | None, str]]
+QuoteVisualVerifier = Callable[[CandidateCall, SourceInfo, Path | None], str]
+
+
+# The shared commentary-merge convention. Wherever two commentaries fold into one
+# row (same-view dedup here, and the firm-reconcile stage in src/reconcile.py),
+# each segment is labeled with its source title and locator and joined by this
+# separator, kept/primary segment first. Defined ONCE here and imported wherever
+# needed so the format can never drift between the two stages.
+COMMENTARY_MERGE_SEP = "  ||||  "
+
+
+def labeled_commentary_segment(title: str, locator: str, body: str) -> str:
+    """One `<Source Title> (<locator>): <commentary>` segment for a merged row.
+
+    A blank locator drops the parenthetical rather than rendering `()` — some
+    reconcile inputs carry the locator inside the commentary body instead of as a
+    separable field.
+    """
+    label = f"{title} ({locator})" if locator else title
+    return f"{label}: {body}"
+
+
+def merge_commentaries(segments: list[tuple[str, str, str]]) -> str:
+    """Join `(title, locator, body)` segments with COMMENTARY_MERGE_SEP, in the
+    order given (the kept/primary segment must be first)."""
+    return COMMENTARY_MERGE_SEP.join(
+        labeled_commentary_segment(title, locator, body) for title, locator, body in segments
+    )
+
+
+def _candidate_commentary_body(candidate: CandidateCall) -> str:
+    """The reasoning + evidence half of a merged segment. The locator is carried
+    by the segment label (see labeled_commentary_segment), so it is omitted here
+    to avoid stating it twice."""
+    return f"{candidate.reasoning} Evidence: {candidate.evidence_quote}."
 
 
 TARGET_OUTPUT_COLUMNS = (
@@ -37,15 +79,19 @@ TARGET_OUTPUT_COLUMNS = (
     "Full Commentary",
 )
 
-# `basis` and `checker_strength` are exposed after the internal-review columns
-# so an analyst can filter stated vs. forecast_delta/inferred calls and
-# High-but-adequate checker confirmations at a glance.
+# `basis`, `checker_strength`, and `call_language` are exposed after the
+# internal-review columns so an analyst can filter stated vs.
+# forecast_delta/inferred calls, High-but-adequate checker confirmations, and
+# the effective call-language grade at a glance. `call_language` is the value
+# actually scored (after the explicit_dial-on-prose downgrade).
 OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + (
     "confidence",
     "band",
     "review_flag",
     "basis",
     "checker_strength",
+    "call_language",
+    "quote_match",
 )
 
 FAILURE_COLUMNS = (
@@ -63,7 +109,252 @@ FAILURE_COLUMNS = (
     "reasoning",
     "basis",
     "checker_strength",
+    "call_language",
 )
+
+# Client-readable failures file. Same rows as failures.csv, but with a plain
+# label + one-sentence explanation per reason code and no internal jargon, and
+# grouped by label in importance order (most attention-worthy first). See
+# CLIENT_FAILURE_LABELS.
+CLIENT_FAILURE_COLUMNS = (
+    "Firm",
+    "Source",
+    "Sub-Asset Class",
+    "View (proposed)",
+    "What happened",
+    "Explanation",
+    "Evidence / notes",
+)
+
+# Authoritative registry of every failure `reason_code` that can reach
+# failures.csv. Codes raised by deterministic scoring live in `src.confidence`;
+# the rest are emitted here in assemble or by `run.py`'s chunk/checker paths.
+# CLIENT_FAILURE_LABELS must have an entry for every code in this set (a test
+# enforces it), so a new code fails the test instead of shipping unmapped.
+_CONFIDENCE_REASON_CODES = frozenset(
+    {
+        HARD_FAILURE_TAXONOMY,
+        HARD_FAILURE_QUOTE,
+        HARD_FAILURE_VISUAL_LOCATOR,
+        HARD_FAILURE_EVIDENCE,
+        HARD_FAILURE_MATERIALITY,
+        *CHECKER_FAIL_REASONS.values(),
+        "quote_not_found_visual",
+    }
+)
+_ASSEMBLE_REASON_CODES = frozenset(
+    {
+        "arbitrated_out",
+        "unresolved_conflict",
+        "duplicate_same_view",
+        "duplicate_cross_leaf",
+        "implied_challenges_stated",
+        "source_metadata_missing",
+    }
+)
+_RUN_REASON_CODES = frozenset(
+    {"json_parse_error", "engine_error", "checker_error", "ingest_error"}
+)
+# Emitted by the post-run firm-reconcile stage (src/reconcile.py) and folded into
+# the run's failure files at the combine step. Registered here so the mapping
+# test still enforces a client label for every code that can reach failures.csv.
+_RECONCILE_REASON_CODES = frozenset(
+    {
+        "merged_by_reconcile",
+        "superseded_by_reconcile",
+        # Phase 3 near-leaf pass (src/reconcile.py --near-leaf).
+        "near_leaf_merged",
+        "near_leaf_superseded",
+    }
+)
+ALL_REASON_CODES = (
+    _CONFIDENCE_REASON_CODES
+    | _ASSEMBLE_REASON_CODES
+    | _RUN_REASON_CODES
+    | _RECONCILE_REASON_CODES
+)
+
+# reason_code -> (What happened, Explanation), both written for a non-technical
+# reader. `What happened` is a short label; `Explanation` says in one plain
+# sentence what it means and what (if anything) the reader should do. This is a
+# mapping layer only — the internal reason codes are never renamed.
+#
+# ORDER MATTERS: dict order is the importance order (most attention-worthy
+# first), and failures-client.csv is sorted by it — whole-document and
+# needs-a-human-decision entries at the top, no-action housekeeping (duplicates,
+# too-small changes) at the bottom. Codes sharing a label sit adjacent so the
+# client file groups cleanly. failures.csv (internal) is never re-ordered.
+CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
+    "ingest_error": (
+        "Document could not be ingested",
+        "This source could not be fetched or converted into text, so it was "
+        "skipped while the rest of the run continued. Let us know so we can "
+        "re-run it.",
+    ),
+    "unresolved_conflict": (
+        "Conflicting views — none kept",
+        "Two views for this asset disagreed and could not be reconciled "
+        "automatically, so neither was kept. A human should decide which is "
+        "correct.",
+    ),
+    "json_parse_error": (
+        "Part of a document couldn't be read",
+        "A section of the document couldn't be processed automatically, so any "
+        "calls in it were skipped. Let us know so we can re-run it.",
+    ),
+    "engine_error": (
+        "Part of a document couldn't be processed",
+        "A section of the document failed during processing, so any calls in it "
+        "were skipped. Let us know so we can re-run it.",
+    ),
+    "checker_error": (
+        "Second-reader check couldn't run",
+        "The second-reader verification failed to run for this document, so "
+        "affected calls weren't confirmed. Let us know so we can re-run it.",
+    ),
+    "source_metadata_missing": (
+        "Skipped — source details missing",
+        "The document's identifying details were unavailable, so this call "
+        "could not be attached to a source. Usually a processing issue; let us "
+        "know if it recurs.",
+    ),
+    "implied_challenges_stated": (
+        "Suggestion — review recommended",
+        "An implied reading challenges the firm's stated call; the stated call "
+        "was kept and this row records the challenge for review.",
+    ),
+    "arbitrated_out": (
+        "Conflicting views — other call kept",
+        "Two documents disagreed; the more current or more specific call was "
+        "kept. Review if the kept call looks wrong.",
+    ),
+    "quote_not_found": (
+        "Evidence could not be verified",
+        "The exact supporting text couldn't be found in the document, so the "
+        "call was dropped rather than kept unverified. A human can check the "
+        "cited page.",
+    ),
+    "evidence_check_failed": (
+        "Evidence could not be verified",
+        "The supporting evidence didn't hold up on a second check, so the call "
+        "was dropped rather than kept unverified. A human can check the cited "
+        "page.",
+    ),
+    "quote_not_found_visual": (
+        "Evidence could not be verified visually",
+        "The exact supporting text could not be confirmed even after a visual "
+        "page check, so the call was dropped rather than kept unverified. A "
+        "human can check the cited page.",
+    ),
+    "visual_locator_missing": (
+        "Evidence location missing",
+        "A call from a chart or table didn't record where in the document it "
+        "came from, so it couldn't be verified. A human can check the document.",
+    ),
+    "checker_sign_mismatch": (
+        "Evidence points the other way",
+        "A second reader found the cited text doesn't support the direction of "
+        "this call, so it was dropped. A human can check the cited page.",
+    ),
+    "checker_asset_mismatch": (
+        "Evidence is about a different asset",
+        "A second reader found the cited text is about a different asset than "
+        "the call, so it was dropped. A human can check the cited page.",
+    ),
+    "checker_not_forward_looking": (
+        "Not a forward-looking view",
+        "A second reader found the cited text isn't a forward-looking view "
+        "(e.g. it describes the past), so it was dropped. A human can check the "
+        "cited page.",
+    ),
+    "taxonomy_no_match": (
+        "Skipped — asset not on the list",
+        "The asset named didn't match any item on the approved asset list, so "
+        "it was left out. No action needed unless it should be on the list.",
+    ),
+    "delta_below_materiality": (
+        "Change too small to call",
+        "The forecast change behind this call was too small to justify a view, "
+        "so it was left out. No action needed.",
+    ),
+    # Firm-reconcile outcomes (src/reconcile.py). Near the housekeeping end:
+    # superseded is a dropped-in-favour-of-a-newer-doc call an analyst may still
+    # want to eyeball; merged is pure de-duplication with the evidence visible in
+    # the reconciled row.
+    "superseded_by_reconcile": (
+        "Superseded — a newer document from this firm updated this view",
+        "Another document from the same firm took a different view on this asset, "
+        "and a more current (or otherwise preferred) call was kept in its place. "
+        "Review if the kept call looks wrong.",
+    ),
+    "near_leaf_superseded": (
+        "Merged into a related call — please review",
+        "This firm made views on two closely related assets (e.g. a broad category "
+        "and a specific part of it) that pointed different ways; they were read as "
+        "one collective call and the most relevant view was kept. Review that the "
+        "kept view is the right one.",
+    ),
+    "duplicate_same_view": (
+        "Duplicate — already covered",
+        "The same view for this asset appears in another of this firm's "
+        "documents; it was kept once. No action needed.",
+    ),
+    "duplicate_cross_leaf": (
+        "Duplicate — same call, related asset",
+        "This repeats a view already kept for a closely related asset from the "
+        "same piece of text; it was kept once to avoid double-counting. No "
+        "action needed.",
+    ),
+    "merged_by_reconcile": (
+        "Merged — same view stated in several documents",
+        "Several documents from this firm made the same call on this asset; they "
+        "were merged into one row and every document's wording is preserved in "
+        "that row's commentary. No action needed.",
+    ),
+    "near_leaf_merged": (
+        "Merged — same view on a closely related asset",
+        "This firm made the same call on two closely related assets (e.g. a broad "
+        "category and a specific part of it); they were merged into one row on the "
+        "most precise asset and every document's wording is preserved. No action "
+        "needed.",
+    ),
+}
+
+# Reason codes deliberately kept OUT of failures-client.csv (they stay in the
+# internal failures.csv for audit). A same-view duplicate's evidence is now
+# merged into the kept row's Full Commentary (Part A: citation-preserving
+# merges), so it is visibly in the output and there is nothing for the client to
+# review. Implemented as an explicit exclusion, NOT by deleting the label from
+# CLIENT_FAILURE_LABELS, so the mapping test still enforces a label for the code.
+_CLIENT_FILE_EXCLUDED_CODES = frozenset({"duplicate_same_view"})
+
+# Importance rank per reason code = its position in CLIENT_FAILURE_LABELS.
+_CLIENT_FAILURE_RANKS: dict[str, int] = {
+    code: rank for rank, code in enumerate(CLIENT_FAILURE_LABELS)
+}
+
+# An unmapped code never crashes: it falls back to the raw code plus a generic,
+# still plain-language explanation (the test guards against this in practice).
+_CLIENT_FAILURE_FALLBACK = (
+    "This item was set aside during processing; the reason code is shown for "
+    "our reference. Let us know if it needs a closer look."
+)
+
+
+def client_failure_label(reason_code: str) -> tuple[str, str]:
+    """(What happened, Explanation) for a reason code, with a graceful fallback
+    for any code not in CLIENT_FAILURE_LABELS (raw code + generic sentence)."""
+    return CLIENT_FAILURE_LABELS.get(
+        reason_code, (reason_code, _CLIENT_FAILURE_FALLBACK)
+    )
+
+
+def client_failure_rank(reason_code: str) -> int:
+    """Sort key for failures-client.csv: the code's position in
+    CLIENT_FAILURE_LABELS (dict order = most important first). An unmapped code
+    sorts to the very top — something we didn't anticipate deserves the most
+    attention, not the least."""
+    return _CLIENT_FAILURE_RANKS.get(reason_code, -1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +376,9 @@ class FailureRecord:
     reasoning: str = ""
     basis: str = ""
     checker_strength: str = ""
+    # The effective call-language bucket (after the explicit_dial-on-prose
+    # downgrade), so a failed row carries the same grade a kept row would.
+    call_language: str = ""
 
     @classmethod
     def from_candidate(
@@ -109,6 +403,7 @@ class FailureRecord:
             reasoning=candidate.reasoning,
             basis=candidate.basis,
             checker_strength=checker_strength,
+            call_language=effective_call_language(candidate)[0],
         )
 
     @classmethod
@@ -134,6 +429,7 @@ class FailureRecord:
             "reasoning": self.reasoning,
             "basis": self.basis,
             "checker_strength": self.checker_strength,
+            "call_language": self.call_language,
         }
 
 
@@ -155,7 +451,13 @@ class _Selected:
     display_source: SourceInfo
     member_count: int
     arbiter_note: str = ""
-    corroboration: str = ""
+    # Losing same-view candidates' commentary, as (title, locator, body) segments
+    # to fold into the kept row's Full Commentary (citation-preserving dedup).
+    merged_segments: tuple[tuple[str, str, str], ...] = ()
+    # Set when a same-leaf implied call challenged the kept stated call
+    # (deterministic stated-beats-implied resolution). Rendered on the kept row
+    # and forces a review flag so a human sees the recommendation.
+    challenge_note: str = ""
 
 
 def assemble_candidates(
@@ -166,15 +468,25 @@ def assemble_candidates(
     snapshots: dict[tuple[str, str], str],
     page_counts: dict[str, int] | None = None,
     scrambled_pages: dict[str, set[int]] | None = None,
+    ocr_pages: dict[str, set[int]] | None = None,
+    visual_pages: dict[str, set[int]] | None = None,
     verdicts: dict[int, CheckVerdict] | None = None,
     arbiter: Arbiter | None = None,
     group_map: dict[str, str] | None = None,
+    quote_visual_verifier: QuoteVisualVerifier | None = None,
+    native_source_paths: dict[str, Path] | None = None,
 ) -> AssemblyResult:
     """page_counts maps source_id -> PDF page count (absent for HTML sources).
 
     scrambled_pages maps source_id -> the set of column-interleaved page numbers
     (see src/ingest.detect_scrambled_page); a prose call citing one of them uses
     the degraded key-token check, capping confidence and forcing review.
+    ocr_pages maps source_id -> the set of image-only / low-text page numbers;
+    a prose call citing one gets the same degraded cap and review flag, with an
+    OCR-specific evidence message.
+    visual_pages maps source_id -> pages from print-captured / visual-heavy
+    sources where table/visual token misses should route to checker visual
+    review instead of hard-failing on snapshot text.
 
     verdicts maps candidate list index -> checker verdict; None means the
     checker step is not in play (no caps), while a dict with a missing index
@@ -193,6 +505,8 @@ def assemble_candidates(
         snapshot_text = snapshots.get((candidate.source_id, candidate.chunk_id), "")
         page_count = (page_counts or {}).get(candidate.source_id)
         source_scrambled = frozenset((scrambled_pages or {}).get(candidate.source_id, ()))
+        source_ocr = frozenset((ocr_pages or {}).get(candidate.source_id, ()))
+        source_visual_pages = frozenset((visual_pages or {}).get(candidate.source_id, ()))
         verdict = (verdicts or {}).get(index)
         try:
             scored.append(
@@ -202,6 +516,8 @@ def assemble_candidates(
                     snapshot_text=snapshot_text,
                     page_count=page_count,
                     scrambled_pages=source_scrambled,
+                    ocr_pages=source_ocr,
+                    visual_pages=source_visual_pages,
                     verdict=verdict,
                     checker_enabled=checker_enabled,
                 )
@@ -211,7 +527,54 @@ def assemble_candidates(
             # EvidenceFailure carries the human-readable message (e.g. the
             # scrambled-page degraded-fallback note); other reasons echo the code.
             message = getattr(exc, "message", reason)
-            if verdict is not None and reason in CHECKER_FAIL_REASONS.values() and verdict.note:
+            if reason == HARD_FAILURE_QUOTE and quote_visual_verifier is not None:
+                source_info = sources.get(candidate.source_id)
+                native_path = (native_source_paths or {}).get(candidate.source_id)
+                if source_info is not None:
+                    visual_check = _visual_quote_check(
+                        candidate,
+                        source_info,
+                        native_path,
+                        quote_visual_verifier,
+                    )
+                    if visual_check.passed:
+                        try:
+                            scored.append(
+                                score_candidate(
+                                    candidate,
+                                    taxonomy=taxonomy,
+                                    snapshot_text=snapshot_text,
+                                    page_count=page_count,
+                                    scrambled_pages=source_scrambled,
+                                    ocr_pages=source_ocr,
+                                    visual_pages=source_visual_pages,
+                                    verdict=verdict,
+                                    checker_enabled=checker_enabled,
+                                    evidence_check_override=visual_check,
+                                )
+                            )
+                            continue
+                        except ValueError as visual_exc:
+                            reason = str(visual_exc)
+                            message = getattr(visual_exc, "message", reason)
+                    else:
+                        failures.append(
+                            FailureRecord.from_candidate(
+                                visual_check.reason_code,
+                                visual_check.message,
+                                candidate,
+                                checker_strength=(
+                                    verdict.evidence_strength if verdict is not None else ""
+                                ),
+                            )
+                        )
+                        continue
+            if (
+                verdict is not None
+                and reason in CHECKER_FAIL_REASONS.values()
+                and verdict.note
+                and not getattr(exc, "message", "")
+            ):
                 message = verdict.note
             failures.append(
                 FailureRecord.from_candidate(
@@ -226,45 +589,60 @@ def assemble_candidates(
     for group in _group_scored(scored, group_map).values():
         views = {item.candidate.view for item in group}
         arbiter_note = ""
-        corroboration = ""
+        merged_segments: list[tuple[str, str, str]] = []
+        challenge_note = ""
         if len(views) > 1:
-            winner, reasoning = _arbitrate(group, arbiter)
-            if winner is None:
-                message = "multiple views survived validation for the same source/group and leaf"
-                if reasoning:
-                    message += f"; arbiter: {reasoning}"
+            stated_resolution = _resolve_stated_vs_implied(group)
+            if stated_resolution is not None:
+                # A clean stated-vs-implied split on one leaf: stated wins
+                # deterministically (client rule), the implied challenge is
+                # logged as a flagged recommendation, and the arbiter is not run.
+                selected, resolution_losers, challenge_note = stated_resolution
                 failures.extend(
-                    FailureRecord.from_candidate("unresolved_conflict", message, item.candidate)
-                    for item in group
+                    FailureRecord.from_candidate(reason, message, item.candidate)
+                    for item, reason, message in resolution_losers
                 )
-                continue
-            failures.extend(
-                FailureRecord.from_candidate("arbitrated_out", reasoning, item.candidate)
-                for item in group
-                if item is not winner
-            )
-            selected = winner
-            arbiter_note = reasoning
+            else:
+                winner, reasoning = _arbitrate(group, arbiter)
+                if winner is None:
+                    message = (
+                        "multiple views survived validation for the same source/group and leaf"
+                    )
+                    if reasoning:
+                        message += f"; arbiter: {reasoning}"
+                    failures.extend(
+                        FailureRecord.from_candidate("unresolved_conflict", message, item.candidate)
+                        for item in group
+                    )
+                    continue
+                failures.extend(
+                    FailureRecord.from_candidate("arbitrated_out", reasoning, item.candidate)
+                    for item in group
+                    if item is not winner
+                )
+                selected = winner
+                arbiter_note = reasoning
         else:
             selected = max(group, key=lambda item: item.confidence)
-            corroborators: list[str] = []
+            # Fold every losing same-view candidate's commentary into the kept
+            # row (within one source and across grouped companion sources — one
+            # convention). The failures.csv entry stays for audit, its note
+            # reworded to say the evidence was merged, not discarded.
             for item in group:
                 if item is selected:
                     continue
                 failures.append(
                     FailureRecord.from_candidate(
                         "duplicate_same_view",
-                        f"same view already kept from {selected.candidate.locator}",
+                        f"same view already kept from {selected.candidate.locator}; "
+                        "this evidence was merged into the kept row's commentary",
                         item.candidate,
                     )
                 )
-                if item.candidate.source_id != selected.candidate.source_id:
-                    dup_source = sources.get(item.candidate.source_id)
-                    title = dup_source.source if dup_source else item.candidate.source_id
-                    corroborators.append(f"{title} ({item.candidate.locator})")
-            if corroborators:
-                corroboration = (
-                    f"Corroborated by companion source: {'; '.join(corroborators)}."
+                dup_source = sources.get(item.candidate.source_id)
+                title = dup_source.source if dup_source else item.candidate.source_id
+                merged_segments.append(
+                    (title, item.candidate.locator, _candidate_commentary_body(item.candidate))
                 )
 
         source = sources.get(selected.candidate.source_id)
@@ -287,12 +665,14 @@ def assemble_candidates(
                 display_source=display_source,
                 member_count=member_count,
                 arbiter_note=arbiter_note,
-                corroboration=corroboration,
+                merged_segments=tuple(merged_segments),
+                challenge_note=challenge_note,
             )
         )
 
     survivors, cross_leaf_failures = _dedup_cross_leaf(selected_entries, taxonomy)
     failures.extend(cross_leaf_failures)
+    sibling_notes = _sibling_conflict_notes(survivors, taxonomy)
 
     output_rows = [
         _output_row(
@@ -301,7 +681,9 @@ def assemble_candidates(
             taxonomy,
             arbiter_note=entry.arbiter_note,
             locator_source=entry.source.source if entry.member_count > 1 else "",
-            corroboration=entry.corroboration,
+            merged_segments=entry.merged_segments,
+            sibling_note=sibling_notes.get(id(entry), ""),
+            challenge_note=entry.challenge_note,
         )
         for entry in survivors
     ]
@@ -311,6 +693,126 @@ def assemble_candidates(
         failures=failures,
         candidate_count=len(candidates),
     )
+
+
+def _visual_quote_check(
+    candidate: CandidateCall,
+    source: SourceInfo,
+    native_source_path: Path | None,
+    verifier: QuoteVisualVerifier,
+) -> EvidenceCheck:
+    try:
+        judgment = verifier(candidate, source, native_source_path)
+    except Exception as exc:
+        judgment = "malformed"
+        detail = f"visual verifier failed: {type(exc).__name__}: {exc}"
+    else:
+        detail = ""
+    if judgment == "present_verbatim":
+        return EvidenceCheck(
+            True,
+            message=(
+                "visual verifier confirmed the quote verbatim on the rendered "
+                "source page; confidence capped and review required"
+            ),
+            degraded=True,
+            quote_match="visual",
+        )
+    if judgment == "present_paraphrase":
+        detail = (
+            "visual verifier found only a paraphrase, not the submitted "
+            "verbatim quote; dropped under the verified-evidence policy"
+        )
+    elif judgment == "absent":
+        detail = "visual verifier did not find the submitted quote on the cited page"
+    elif not detail:
+        detail = f"visual verifier returned malformed judgment {judgment!r}; treated as absent"
+    return EvidenceCheck(
+        False,
+        "quote_not_found_visual",
+        detail,
+        quote_match="visual",
+    )
+
+
+def _resolve_stated_vs_implied(
+    group: list[ConfidenceResult],
+) -> tuple[ConfidenceResult, list[tuple[ConfidenceResult, str, str]], str] | None:
+    """Deterministic stated-beats-implied resolution for one conflicting
+    (source/group, leaf) — the client's rule (ROADMAP decision 5).
+
+    Fires only on the clean split it covers: the group holds only `stated` and
+    `inferred` candidates, at least one of each, and the stated side carries a
+    single view. The stated call then wins WITHOUT consulting the arbiter; every
+    inferred call whose view differs is a *challenge*, recorded as a flagged
+    recommendation (it never replaces the stated row in v1). Inferred calls that
+    agree with the stated view are ordinary same-view corroboration.
+
+    Returns (winner, losers, challenge_note) or None to fall through to the
+    arbiter. `losers` is a list of (item, reason_code, message). Conflicts where
+    both sides are stated, both are inferred, or a third basis (forecast_delta)
+    is present return None and keep the existing arbiter path unchanged.
+
+    The `implied_challenges_stated` message carries the implied view and its
+    reasoning as a recommendation — the deliberate hook the v1.2 confidence-based
+    override path will build on (a high-confidence implied call overriding a
+    low-confidence stated view); v1 records the recommendation, nothing more.
+    """
+    stated = [item for item in group if item.candidate.basis == "stated"]
+    inferred = [item for item in group if item.candidate.basis == "inferred"]
+    if not stated or not inferred:
+        return None
+    if len(stated) + len(inferred) != len(group):
+        return None  # a third basis (e.g. forecast_delta) is present — use the arbiter
+    stated_views = {item.candidate.view for item in stated}
+    if len(stated_views) != 1:
+        return None  # the stated side disagrees with itself — that is arbiter work
+    (stated_view,) = tuple(stated_views)
+
+    winner = max(stated, key=lambda item: item.confidence)
+    losers: list[tuple[ConfidenceResult, str, str]] = []
+    challenges: list[str] = []
+    for item in stated:
+        if item is winner:
+            continue
+        losers.append(
+            (
+                item,
+                "duplicate_same_view",
+                f"same stated view already kept from {winner.candidate.locator}",
+            )
+        )
+    for item in inferred:
+        candidate = item.candidate
+        if candidate.view == stated_view:
+            losers.append(
+                (
+                    item,
+                    "duplicate_same_view",
+                    f"inferred call corroborates the kept stated {stated_view} view "
+                    f"from {winner.candidate.locator}",
+                )
+            )
+            continue
+        message = (
+            f"implied {candidate.view} challenges the kept stated {stated_view} call "
+            f"on '{candidate.sub_asset_class}'; stated wins in v1, so this is recorded "
+            f"as a recommendation only. Implied reasoning: {candidate.reasoning} "
+            f"Recommendation: reconsider the stated {stated_view} call in light of this "
+            "inference."
+        )
+        losers.append((item, "implied_challenges_stated", message))
+        challenges.append(f"implied {candidate.view} ({candidate.reasoning})")
+
+    if not challenges:
+        return None  # no inferred call actually challenged the stated view
+
+    challenge_note = (
+        "Implied-call challenge (recommendation only; stated call kept): "
+        + "; ".join(challenges)
+        + " Review recommended."
+    )
+    return winner, losers, challenge_note
 
 
 def _arbitrate(
@@ -394,6 +896,48 @@ def _dedup_cross_leaf(
     return survivors, failures
 
 
+def _sibling_conflict_notes(entries: list[_Selected], taxonomy: Taxonomy) -> dict[int, str]:
+    """Flag O-vs-U sibling rows on byte-identical evidence.
+
+    This is a review tripwire only: same source doc, same cited page, same
+    normalized evidence spans, same top-level Asset Class, opposite directional
+    views. N-vs-U is deliberately out of scope.
+    """
+    clusters: dict[tuple[str, int | None, frozenset[str], str], list[_Selected]] = {}
+    for entry in entries:
+        candidate = entry.scored.candidate
+        if candidate.view not in {"O", "U"}:
+            continue
+        lookup = taxonomy.require_label(candidate.sub_asset_class)
+        span_key = frozenset(
+            normalized
+            for span in candidate.evidence_spans
+            if (normalized := normalize_quote_text(span))
+        )
+        key = (
+            candidate.source_id,
+            _cited_page(candidate.locator),
+            span_key,
+            lookup.asset_class,
+        )
+        clusters.setdefault(key, []).append(entry)
+
+    notes: dict[int, str] = {}
+    for members in clusters.values():
+        views = {member.scored.candidate.view for member in members}
+        if views != {"O", "U"}:
+            continue
+        labels = sorted(member.scored.candidate.sub_asset_class for member in members)
+        note = (
+            "Sibling consistency: same source/page/evidence produced opposite "
+            f"O/U views on related {taxonomy.require_label(members[0].scored.candidate.sub_asset_class).asset_class} "
+            f"leaves ({', '.join(labels)}); review required."
+        )
+        for member in members:
+            notes[id(member)] = note
+    return notes
+
+
 def _leaf_named_in_evidence(candidate: CandidateCall) -> bool:
     return _leaf_evidence_overlap(candidate.sub_asset_class, candidate.evidence_quote) > 0
 
@@ -443,12 +987,14 @@ def write_run_outputs(
     result: AssemblyResult,
     output_dir: str | Path,
     *,
+    sources: dict[str, SourceInfo] | None = None,
     source_summaries: list[dict[str, object]] | None = None,
     chunk_failures: list[FailureRecord] | None = None,
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
+    quote_visual_stats: dict[str, int] | None = None,
 ) -> None:
-    """Write the run's three review files.
+    """Write the run's review files.
 
     chunk_failures are whole-chunk failures (e.g. unparseable model output) that
     produced no candidate; they are recorded in failures.csv and counted
@@ -456,18 +1002,67 @@ def write_run_outputs(
     run_config (engine/model/effort) is recorded in the manifest so a frozen
     run states exactly what produced it. grouping is the resolved group-notes
     plan (groups + warnings) so the manifest shows exactly what was combined.
+    sources maps source_id -> SourceInfo so the client-readable failures file can
+    show each firm/source title (absent -> the source_id is shown instead).
+
+    Alongside `failures.csv` (unchanged, internal) a `failures-client.csv` is
+    written with plain labels/explanations, grouped by label and sorted
+    most-important-first (CLIENT_FAILURE_LABELS order; stable within a label, so
+    per-source order is preserved inside each group). `duplicate_same_view` rows
+    are excluded from the client file (their evidence is merged into the kept
+    row); they stay in the internal file for audit.
     """
     chunk_failures = chunk_failures or []
     run_dir = Path(output_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
+    all_failures = [*result.failures, *chunk_failures]
     _write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
     _write_csv(
         run_dir / "failures.csv",
         FAILURE_COLUMNS,
-        [failure.to_row() for failure in [*result.failures, *chunk_failures]],
+        [failure.to_row() for failure in all_failures],
     )
-    manifest = _manifest_text(result, source_summaries or [], chunk_failures, run_config, grouping)
+    # Exclude the merged-away same-view duplicates from the client file: their
+    # evidence is now folded into the kept row's commentary, so there is nothing
+    # for the client to review. They remain in the internal failures.csv above.
+    client_failures = sorted(
+        (f for f in all_failures if f.reason_code not in _CLIENT_FILE_EXCLUDED_CODES),
+        key=lambda failure: client_failure_rank(failure.reason_code),
+    )
+    _write_csv(
+        run_dir / "failures-client.csv",
+        CLIENT_FAILURE_COLUMNS,
+        [_client_failure_row(failure, sources or {}) for failure in client_failures],
+    )
+    manifest = _manifest_text(
+        result,
+        source_summaries or [],
+        chunk_failures,
+        run_config,
+        grouping,
+        quote_visual_stats,
+    )
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
+
+
+def _client_failure_row(
+    failure: FailureRecord, sources: dict[str, SourceInfo]
+) -> dict[str, str]:
+    """One failures-client.csv row: firm/source titles resolved from `sources`,
+    a plain What-happened label and Explanation, and the row's own message (or
+    reasoning) as human-readable evidence — no internal codes."""
+    what_happened, explanation = client_failure_label(failure.reason_code)
+    source_info = sources.get(failure.source_id)
+    notes = failure.message or failure.reasoning or failure.evidence_quote
+    return {
+        "Firm": source_info.firm if source_info else "",
+        "Source": source_info.source if source_info else failure.source_id,
+        "Sub-Asset Class": failure.sub_asset_class,
+        "View (proposed)": failure.view,
+        "What happened": what_happened,
+        "Explanation": explanation,
+        "Evidence / notes": notes,
+    }
 
 
 def _display_source(
@@ -490,7 +1085,9 @@ def _display_source(
         SourceInfo(
             source_id=group_id,
             firm=members[0].firm,
-            date=" | ".join(member.date for member in members),
+            # Dates are document-extracted and often blank; join only the
+            # non-blank ones so a grouped row never shows a stray " | ".
+            date=" | ".join(member.date for member in members if member.date),
             source=" | ".join(member.source for member in members),
             url=" | ".join(member.url for member in members),
         ),
@@ -505,18 +1102,35 @@ def _output_row(
     *,
     arbiter_note: str = "",
     locator_source: str = "",
-    corroboration: str = "",
+    merged_segments: tuple[tuple[str, str, str], ...] = (),
+    sibling_note: str = "",
+    challenge_note: str = "",
 ) -> dict[str, str]:
     candidate = scored.candidate
     lookup = taxonomy.output_fields_for(candidate.sub_asset_class)
-    commentary = _commentary(candidate, locator_source=locator_source)
-    if corroboration:
-        commentary += f" {corroboration}"
+    if merged_segments:
+        # Citation-preserving same-view merge: the kept candidate's own segment
+        # first, then each folded-in loser, all labeled per the shared
+        # convention. locator_source is the kept source's title for a grouped row.
+        primary_title = locator_source or source.source
+        commentary = merge_commentaries(
+            [
+                (primary_title, candidate.locator, _candidate_commentary_body(candidate)),
+                *merged_segments,
+            ]
+        )
+    else:
+        commentary = _commentary(candidate, locator_source=locator_source)
     if scored.evidence_check.degraded:
+        detail = scored.evidence_check.message or (
+            "cited page used degraded evidence verification "
+            "(confidence capped, review required)"
+        )
+        commentary += f" Evidence check: {detail}."
+    if scored.evidence_check.visual_unverified_by_text:
         commentary += (
-            " Evidence check: cited page detected as scrambled two-column text; "
-            "verbatim quote match degraded to key-token overlap "
-            "(confidence capped, review required)."
+            " Evidence check: snapshot text did not contain the table/visual tokens; "
+            "checker verified the cited page image instead."
         )
     if scored.cap_reason:
         commentary += f" {scored.cap_reason}"
@@ -532,6 +1146,14 @@ def _output_row(
     review_flag = scored.review_flag
     if arbiter_note:
         commentary += f" Arbiter: {arbiter_note}"
+        if review_flag == "none":
+            review_flag = "review"
+    if sibling_note:
+        commentary += f" {sibling_note}"
+        if review_flag == "none":
+            review_flag = "review"
+    if challenge_note:
+        commentary += f" {challenge_note}"
         if review_flag == "none":
             review_flag = "review"
     return {
@@ -550,6 +1172,8 @@ def _output_row(
         "review_flag": review_flag,
         "basis": candidate.basis,
         "checker_strength": scored.checker_strength,
+        "call_language": scored.call_language,
+        "quote_match": scored.evidence_check.quote_match,
     }
 
 
@@ -576,6 +1200,11 @@ def _group_scored(
     return groups
 
 
+def _cited_page(locator: str) -> int | None:
+    match = re.search(r"p\.?\s*(\d+)", locator, flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
 def _write_csv(path: Path, columns: tuple[str, ...], rows: list[dict[str, str]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=columns, extrasaction="ignore")
@@ -589,6 +1218,7 @@ def _manifest_text(
     chunk_failures: list[FailureRecord],
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
+    quote_visual_stats: dict[str, int] | None = None,
 ) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
@@ -631,6 +1261,31 @@ def _manifest_text(
             f"- {strength}: {count}" for strength, count in sorted(strength_counts.items())
         )
         lines.append("")
+    call_language_counts = Counter(
+        row.get("call_language") or "(none)" for row in result.output_rows
+    )
+    if call_language_counts:
+        lines.append("## Call language (kept rows)")
+        lines.extend(
+            f"- {language}: {count}"
+            for language, count in sorted(call_language_counts.items())
+        )
+        lines.append("")
+    quote_match_counts = Counter(
+        row.get("quote_match") or "(none)" for row in result.output_rows
+    )
+    if quote_match_counts:
+        lines.append("## Quote match tier (kept rows)")
+        lines.extend(
+            f"- {tier}: {count}" for tier, count in sorted(quote_match_counts.items())
+        )
+        lines.append("")
+    if quote_visual_stats:
+        lines.append("## Quote visual verification")
+        lines.extend(
+            f"- {key}: {count}" for key, count in sorted(quote_visual_stats.items())
+        )
+        lines.append("")
     reason_counts = Counter(
         failure.reason_code for failure in [*result.failures, *chunk_failures]
     )
@@ -644,12 +1299,20 @@ def _manifest_text(
     if source_summaries:
         lines.append("## Sources processed")
         for summary in source_summaries:
+            ingest_error = summary.get("ingest_error") or ""
             flag_text = " [visual_heavy]" if summary.get("visual_heavy") else ""
             if summary.get("printed_pdf"):
                 flag_text += " [printed-to-pdf]"
+            if ingest_error:
+                flag_text += f" [ingest-failed: {ingest_error}]"
             scrambled = summary.get("scrambled_pages") or []
             if scrambled:
                 flag_text += f" [scrambled pages: {', '.join(f'p.{n}' for n in scrambled)}]"
+            ocr_pages = summary.get("ocr_pages") or []
+            if ocr_pages:
+                flag_text += f" [OCR pages: {', '.join(f'p.{n}' for n in ocr_pages)}]"
+            if summary.get("ocr_note"):
+                flag_text += f" [OCR note: {summary.get('ocr_note')}]"
             pages = summary.get("page_count")
             chunk_count = summary.get("chunk_count", 0)
             size = f"{pages}p / {chunk_count} chunks" if pages else f"{chunk_count} chunks"

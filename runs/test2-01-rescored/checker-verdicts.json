@@ -1,0 +1,232 @@
+[
+  {
+    "global_index": 0,
+    "verdict_source": "claude/opus/medium",
+    "index": 0,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 1,
+    "verdict_source": "claude/opus/medium",
+    "index": 1,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 2,
+    "verdict_source": "claude/opus/medium",
+    "index": 2,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 3,
+    "verdict_source": "claude/opus/medium",
+    "index": 3,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 4,
+    "verdict_source": "claude/opus/medium",
+    "index": 4,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 5,
+    "verdict_source": "claude/opus/medium",
+    "index": 5,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 6,
+    "verdict_source": "claude/opus/medium",
+    "index": 6,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 7,
+    "verdict_source": "claude/opus/medium",
+    "index": 7,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 8,
+    "verdict_source": "claude/opus/medium",
+    "index": 8,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 9,
+    "verdict_source": "claude/opus/medium",
+    "index": 9,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 10,
+    "verdict_source": "claude/opus/medium",
+    "index": 10,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 11,
+    "verdict_source": "claude/opus/medium",
+    "index": 11,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "adequate",
+    "note": "USD underweight is a sound single inference from the GBP-over-USD pairwise dial, not a printed USD dial."
+  },
+  {
+    "global_index": 12,
+    "verdict_source": "claude/opus/medium",
+    "index": 12,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 13,
+    "verdict_source": "claude/opus/medium",
+    "index": 13,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 14,
+    "verdict_source": "claude/opus/medium",
+    "index": 14,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 15,
+    "verdict_source": "claude/opus/medium",
+    "index": 15,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 16,
+    "verdict_source": "claude/opus/medium",
+    "index": 0,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 17,
+    "verdict_source": "claude/opus/medium",
+    "index": 1,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 18,
+    "verdict_source": "claude/opus/medium",
+    "index": 2,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 19,
+    "verdict_source": "claude/opus/medium",
+    "index": 3,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 20,
+    "verdict_source": "claude/opus/medium",
+    "index": 4,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 21,
+    "verdict_source": "claude/opus/medium",
+    "index": 5,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  },
+  {
+    "global_index": 22,
+    "verdict_source": "claude/opus/medium",
+    "index": 6,
+    "supports_view": "pass",
+    "forward_looking": "pass",
+    "asset_match": "pass",
+    "evidence_strength": "decisive",
+    "note": ""
+  }
+]

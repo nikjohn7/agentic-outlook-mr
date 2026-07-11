@@ -30,5 +30,8 @@ temp/
 outputs/
 runs/
 work/
+# Production-batch artifacts (same convention as runs/: ignored, frozen
+# deliverables force-added when the batch is committed).
+client-runs/
 artifacts/
 *.tmp

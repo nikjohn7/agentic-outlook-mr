@@ -142,6 +142,18 @@ only; never emit or reason about numeric confidence.
     other prose call (same evidence contract; `evidence_kind: prose`);
   - **single step only** — one bridge from the prose to the leaf, never a chained
     chain of speculation;
+  - **infer at the granularity the prose names.** When the grounding prose names
+    a specific country or market and the taxonomy contains that country's leaf,
+    land the inference on the **named country leaf**, not a regional aggregate
+    ("Taiwan's chip exports are surging" → `Taiwan Equities`, not `Asia
+    Equities`). Emit the regional leaf only when the prose is genuinely regional
+    ("Asian equities broadly benefit…") or the named country has no leaf — then
+    snap to the nearest containing leaf (`taxonomy_match: semantic`), as usual.
+    If one passage names several countries, emit **one inferred candidate per
+    named country**, each carrying the same verbatim spans: every leaf is named
+    in the evidence, so this is the multi-call pattern, not a fan-out. This does
+    NOT license fanning a *broad stated* call down to countries it never names —
+    the Granularity rule above still governs stated calls;
   - if the implication is genuinely two-sided or weak, use `UNCERTAIN` or emit
     nothing;
   - an inference must **never replace or contradict a `stated` call on the same

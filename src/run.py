@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 from src.assemble import FailureRecord, assemble_candidates, write_run_outputs
+from src.confidence import evidence_context, evidence_passes
 from src.ingest import (
     IngestedSource,
     Chunk,
@@ -18,14 +19,17 @@ from src.ingest import (
     load_target_sources,
 )
 from src.llm import (
-    CODEX_MODEL,
+    CODEX_MODELS,
+    DEFAULT_CODEX_MODEL,
     ENGINE_CONFIGS,
     LLMParseError,
     call as llm_call,
     call_parsed,
     parse_arbitration,
     parse_groups,
+    parse_quote_visual_verification,
     parse_verdicts,
+    resolve_codex_model,
 )
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import load_taxonomy
@@ -38,6 +42,7 @@ CONVENTIONS_FILE = PROJECT_ROOT / "prompts" / "conventions.md"
 CHECK_PROMPT = PROJECT_ROOT / "prompts" / "check_candidates.md"
 ARBITER_PROMPT = PROJECT_ROOT / "prompts" / "arbitrate_conflict.md"
 GROUPS_PROMPT = PROJECT_ROOT / "prompts" / "resolve_groups.md"
+QUOTE_VISUAL_PROMPT = PROJECT_ROOT / "prompts" / "verify_quote_visual.md"
 
 # The chunk call can fail two ways worth catching per-chunk (so one bad chunk
 # never sinks the whole run): unparseable/contract-breaking output after the
@@ -52,21 +57,26 @@ def run_pipeline(
     engine: str,
     model: str | None = None,
     effort: str | None = None,
-    checker_engine: str = "codex",
-    checker_model: str | None = None,
-    checker_effort: str = "high",
+    checker_engine: str = "claude",
+    checker_model: str | None = "opus",
+    checker_effort: str = "medium",
+    checker_context: bool = False,
     arbiter_engine: str = "codex",
-    arbiter_model: str | None = None,
-    arbiter_effort: str = "medium",
+    arbiter_model: str | None = "gpt-5.6-luna",
+    arbiter_effort: str = "high",
     group_notes_text: str | None = None,
     group_notes_path: str | None = None,
-    grouper_engine: str = "codex",
-    grouper_model: str | None = None,
-    grouper_effort: str = "low",
+    grouper_engine: str = "claude",
+    grouper_model: str | None = "haiku",
+    grouper_effort: str = "high",
+    quote_visual_engine: str = "codex",
+    quote_visual_model: str | None = "gpt-5.6-luna",
+    quote_visual_effort: str = "high",
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
     brain_text: str | None = None,
     conventions_text: str | None = None,
+    out_root: str | Path | None = None,
 ):
     """Ingest each source, analyze every chunk, then check, score, and assemble.
 
@@ -78,17 +88,31 @@ def run_pipeline(
     any analysis).
     """
     enforce_source_limit(sources)
+    # A direct run_pipeline caller (e.g. a test) may leave a codex step's model
+    # None; fill the default so run_config always states the model. The CLI has
+    # already resolved these via resolve_engine_settings.
     if checker_engine == "codex" and checker_model is None:
-        checker_model = CODEX_MODEL
+        checker_model = DEFAULT_CODEX_MODEL
     if arbiter_engine == "codex" and arbiter_model is None:
-        arbiter_model = CODEX_MODEL
+        arbiter_model = DEFAULT_CODEX_MODEL
     if grouper_engine == "codex" and grouper_model is None:
-        grouper_model = CODEX_MODEL
+        grouper_model = DEFAULT_CODEX_MODEL
+    if quote_visual_engine == "codex" and quote_visual_model is None:
+        quote_visual_model = DEFAULT_CODEX_MODEL
     taxonomy = load_taxonomy()
     taxonomy_block = taxonomy.grouped_block()
     brain = brain_text if brain_text is not None else _brain_text()
     conventions = conventions_text if conventions_text is not None else _conventions_text()
-    work_dir = Path("work") / run_id
+    # Default paths (out_root absent) are exactly today's: work/<id> and runs/<id>.
+    # An out_root reroots both under it: <out_root>/work/<id> and <out_root>/<id> —
+    # so a production batch keeps all its artifacts out of the test/pilot trees.
+    if out_root is not None:
+        base = Path(out_root)
+        work_dir = base / "work" / run_id
+        run_dir = base / run_id
+    else:
+        work_dir = Path("work") / run_id
+        run_dir = Path("runs") / run_id
 
     group_map: dict[str, str] = {}
     grouping: dict[str, object] | None = None
@@ -118,23 +142,66 @@ def run_pipeline(
     snapshots: dict[tuple[str, str], str] = {}
     page_counts: dict[str, int] = {}
     scrambled_pages: dict[str, set[int]] = {}
+    ocr_pages: dict[str, set[int]] = {}
+    visual_pages: dict[str, set[int]] = {}
+    native_source_paths: dict[str, Path] = {}
     source_infos: dict[str, SourceInfo] = {}
     source_summaries: list[dict[str, object]] = []
     group_ledgers: dict[str, str] = {}
 
     for source in sources:
-        ingested = create_snapshot(source, work_dir)
+        source_infos[source.source_id] = SourceInfo(
+            source_id=source.source_id,
+            firm=source.firm,
+            date=source.date,
+            source=source.source,
+            url=source.url,
+        )
+        try:
+            ingested = create_snapshot(source, work_dir)
+        except Exception as exc:
+            message = _exception_summary(exc)
+            chunk_failures.append(
+                FailureRecord.from_chunk(
+                    "ingest_error", message, source.source_id, "ingest"
+                )
+            )
+            source_summaries.append(
+                {
+                    "source_id": source.source_id,
+                    "source_type": source.source_type,
+                    "page_count": None,
+                    "chunk_count": 0,
+                    "candidates": 0,
+                    "visual_heavy": False,
+                    "printed_pdf": False,
+                    "scrambled_pages": [],
+                    "ocr_pages": [],
+                    "ocr_note": "",
+                    "ingest_error": message,
+                }
+            )
+            continue
         snapshot_text = ingested.snapshot_text_path.read_text(encoding="utf-8")
         for chunk in ingested.chunks:
             snapshots[(source.source_id, chunk.chunk_id)] = snapshot_text
         if ingested.page_count is not None:
             page_counts[source.source_id] = ingested.page_count
+        native_source_paths[source.source_id] = Path(ingested.native_source_path)
         if ingested.scrambled_pages:
             scrambled_pages[source.source_id] = set(ingested.scrambled_pages)
+        if ingested.ocr_pages:
+            ocr_pages[source.source_id] = set(ingested.ocr_pages)
+        source_visual_pages: set[int] = set()
+        if (ingested.printed_pdf or ingested.visual_heavy) and ingested.page_count:
+            source_visual_pages = set(range(1, ingested.page_count + 1))
+            visual_pages[source.source_id] = source_visual_pages
         source_infos[source.source_id] = SourceInfo(
             source_id=source.source_id,
             firm=source.firm,
-            date=source.date,
+            # ingested.source, not source: create_snapshot fills a blank date
+            # from the document itself (see ingest's document-date fallback).
+            date=ingested.source.date,
             source=source.source,
             url=source.url,
         )
@@ -153,27 +220,42 @@ def run_pipeline(
             analyze_prompt=analyze_prompt,
             initial_memory=group_ledgers.get(group_id, "") if group_id else "",
         )
+        # The source's rolling memory is complete once every chunk is analyzed;
+        # it seeds the group ledger (grouped sources) and is handed to the
+        # checker as whole-file context for this same source.
+        source_memory = (work_dir / source.source_id / "memory.md").read_text(encoding="utf-8")
         if group_id:
-            memory_text = (work_dir / source.source_id / "memory.md").read_text(encoding="utf-8")
             group_ledgers[group_id] = (
                 "\n## Companion document already analyzed in this grouped source set\n"
                 "Report this document's own stances normally — corroboration and\n"
                 "conflicts across the set are resolved downstream; mark `conflict:\n"
                 "true` where this document disagrees with the companion.\n\n"
-                f"{memory_text}\n"
+                f"{source_memory}\n"
             )
         offset = len(all_candidates)
         all_candidates.extend(candidates)
         chunk_failures.extend(failures)
         if candidates:
+            visual_unverified = _visual_unverified_candidate_indexes(
+                candidates,
+                snapshot_text=snapshot_text,
+                visual_pages=source_visual_pages,
+            )
             source_verdicts, checker_failure = _check_candidates(
                 source,
                 candidates,
+                memory_text=source_memory,
                 conventions=conventions,
                 engine=checker_engine,
                 model=checker_model,
                 effort=checker_effort,
                 runner=runner,
+                native_source_path=ingested.native_source_path,
+                visual_unverified=visual_unverified,
+                checker_context=checker_context,
+                snapshot_text=snapshot_text,
+                scrambled_pages=frozenset(scrambled_pages.get(source.source_id, set())),
+                ocr_pages=frozenset(ocr_pages.get(source.source_id, set())),
             )
             verdicts.update(
                 {offset + local_index: verdict for local_index, verdict in source_verdicts.items()}
@@ -190,6 +272,8 @@ def run_pipeline(
                 "visual_heavy": ingested.visual_heavy,
                 "printed_pdf": ingested.printed_pdf,
                 "scrambled_pages": list(ingested.scrambled_pages),
+                "ocr_pages": list(ingested.ocr_pages),
+                "ocr_note": ingested.ocr_note,
             }
         )
 
@@ -200,6 +284,20 @@ def run_pipeline(
         effort=arbiter_effort,
         runner=runner,
     )
+    quote_visual_stats = {
+        "attempted": 0,
+        "present_verbatim": 0,
+        "present_paraphrase": 0,
+        "absent": 0,
+        "malformed": 0,
+    }
+    quote_visual_verifier = _make_quote_visual_verifier(
+        engine=quote_visual_engine,
+        model=quote_visual_model,
+        effort=quote_visual_effort,
+        runner=runner,
+        stats=quote_visual_stats,
+    )
     result = assemble_candidates(
         all_candidates,
         sources=source_infos,
@@ -207,30 +305,44 @@ def run_pipeline(
         snapshots=snapshots,
         page_counts=page_counts,
         scrambled_pages=scrambled_pages,
+        ocr_pages=ocr_pages,
+        visual_pages=visual_pages,
         verdicts=verdicts,
         arbiter=arbiter,
         group_map=group_map or None,
+        quote_visual_verifier=quote_visual_verifier,
+        native_source_paths=native_source_paths,
     )
     run_config = {
         "engine": engine,
         "model": model,
         "effort": effort,
         "checker": f"{checker_engine}/{checker_model}/{checker_effort}",
+        "checker context": "on" if checker_context else "off",
         "arbiter": f"{arbiter_engine}/{arbiter_model}/{arbiter_effort}",
+        "quote visual verifier": (
+            f"{quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
+        ),
     }
     if group_notes_text:
         run_config["grouper"] = f"{grouper_engine}/{grouper_model}/{grouper_effort}"
         run_config["group notes"] = group_notes_path or "(inline)"
-    run_dir = Path("runs") / run_id
     write_run_outputs(
         result,
         run_dir,
+        sources=source_infos,
         source_summaries=source_summaries,
         chunk_failures=chunk_failures,
         run_config=run_config,
         grouping=grouping,
+        quote_visual_stats=quote_visual_stats,
     )
     return result, chunk_failures, run_dir
+
+
+def _exception_summary(exc: Exception) -> str:
+    summary = f"{type(exc).__name__}: {exc}".strip()
+    return summary[:300]
 
 
 def analyze_source(
@@ -295,22 +407,42 @@ def _check_candidates(
     source,
     candidates: list[CandidateCall],
     *,
+    memory_text: str = "",
     conventions: str = "",
     engine: str,
     model: str | None,
     effort: str | None,
     runner=None,
+    native_source_path: str | Path | None = None,
+    visual_unverified: set[int] | None = None,
+    checker_context: bool = False,
+    snapshot_text: str = "",
+    scrambled_pages: frozenset[int] = frozenset(),
+    ocr_pages: frozenset[int] = frozenset(),
 ) -> tuple[dict[int, CheckVerdict], FailureRecord | None]:
     """One second-reader call for all of a source's candidates.
 
     Returns {local candidate index: verdict}. A failed checker call returns no
     verdicts plus a failure record — candidates then proceed capped and
     flagged for review, never silently promoted.
+
+    memory_text is the source's complete rolling memory (the same ledger built
+    during analyze). It is injected as whole-file context so the checker can see
+    whether a candidate is corroborated or contradicted elsewhere in the file —
+    but it never relaxes the per-candidate evidence bar (the prompt says so).
+
+    When checker_context is on, each candidate is deterministically routed
+    (src/confidence.evidence_context) to either a text context window
+    (`evidence_context`) or a visual fallback (`context_unreliable: true`,
+    reusing native_source_path + the cited page). Routing never fails a run or
+    blocks a candidate.
     """
+    native_pdf = _native_pdf_path(native_source_path)
     inputs = {
         "source_id": source.source_id,
         "firm": source.firm,
         "source_title": source.source,
+        "native_source_path": str(native_source_path) if native_source_path else "",
         "candidates": [
             {
                 "index": index,
@@ -323,6 +455,15 @@ def _check_candidates(
                 "locator": candidate.locator,
                 "reasoning": candidate.reasoning,
                 "basis": candidate.basis,
+                "text_unverifiable_visual": index in (visual_unverified or set()),
+                **_context_fields(
+                    candidate,
+                    enabled=checker_context,
+                    snapshot_text=snapshot_text,
+                    scrambled_pages=scrambled_pages,
+                    ocr_pages=ocr_pages,
+                    native_pdf_available=native_pdf is not None,
+                ),
             }
             for index, candidate in enumerate(candidates)
         ],
@@ -335,7 +476,7 @@ def _check_candidates(
             model=model,
             effort=effort,
             runner=runner,
-            template_vars={"conventions": conventions},
+            template_vars={"conventions": conventions, "memory": memory_text},
             parser=parse_verdicts,
         )
     except CHUNK_CALL_ERRORS as exc:
@@ -349,6 +490,63 @@ def _check_candidates(
         if 0 <= verdict.index < len(candidates)
     }
     return verdict_map, None
+
+
+def _visual_unverified_candidate_indexes(
+    candidates: list[CandidateCall],
+    *,
+    snapshot_text: str,
+    visual_pages: set[int],
+) -> set[int]:
+    if not visual_pages:
+        return set()
+    indexes: set[int] = set()
+    pages = frozenset(visual_pages)
+    for index, candidate in enumerate(candidates):
+        check = evidence_passes(candidate, snapshot_text, visual_pages=pages)
+        if check.visual_unverified_by_text:
+            indexes.add(index)
+    return indexes
+
+
+def _native_pdf_path(native_source_path: str | Path | None) -> Path | None:
+    """The native source path when it is a PDF a checker can open a page image
+    from, else None (a visual fallback needs a page image)."""
+    if native_source_path is None:
+        return None
+    path = Path(native_source_path)
+    return path if path.suffix.lower() == ".pdf" else None
+
+
+def _context_fields(
+    candidate: CandidateCall,
+    *,
+    enabled: bool,
+    snapshot_text: str,
+    scrambled_pages: frozenset[int],
+    ocr_pages: frozenset[int],
+    native_pdf_available: bool,
+) -> dict[str, object]:
+    """The candidate's evidence-context fields for the checker input.
+
+    Empty (no fields) unless --checker-context is on. A CLEAN route adds
+    `evidence_context` (the text window); a DEGRADED route adds
+    `context_unreliable: true` — but only when there is a PDF page image to open
+    (native PDF present and a cited page), otherwise nothing is attached and the
+    candidate is judged exactly as today. Never raises."""
+    if not enabled:
+        return {}
+    context = evidence_context(
+        candidate,
+        snapshot_text,
+        scrambled_pages=scrambled_pages,
+        ocr_pages=ocr_pages,
+    )
+    if context.route == "clean" and context.text:
+        return {"evidence_context": context.text}
+    if context.route == "degraded" and native_pdf_available and context.cited_page is not None:
+        return {"context_unreliable": True}
+    return {}
 
 
 def _make_arbiter(
@@ -403,6 +601,60 @@ def _make_arbiter(
         return result.payload
 
     return arbiter
+
+
+def _make_quote_visual_verifier(
+    *,
+    engine: str,
+    model: str | None,
+    effort: str | None,
+    runner=None,
+    stats: dict[str, int] | None = None,
+):
+    """Build the tier-3 categorical quote verifier.
+
+    The verifier is called only after deterministic tiers 1-2b fail. It fails
+    closed: non-PDF sources, malformed JSON, parser failures, and engine errors
+    all return a non-keeping judgment rather than crashing assembly.
+    """
+
+    def verifier(candidate: CandidateCall, source: SourceInfo, native_source_path: Path | None) -> str:
+        if stats is not None:
+            stats["attempted"] = stats.get("attempted", 0) + 1
+        if native_source_path is None or native_source_path.suffix.lower() != ".pdf":
+            if stats is not None:
+                stats["absent"] = stats.get("absent", 0) + 1
+            return "absent"
+        inputs = {
+            "source_id": source.source_id,
+            "firm": source.firm,
+            "source_title": source.source,
+            "native_source_path": str(native_source_path),
+            "locator": candidate.locator,
+            "evidence_quote": candidate.evidence_quote,
+            "sub_asset_class": candidate.sub_asset_class,
+            "view": candidate.view,
+        }
+        try:
+            result = call_parsed(
+                QUOTE_VISUAL_PROMPT,
+                inputs,
+                engine=engine,
+                model=model,
+                effort=effort,
+                runner=runner,
+                parser=parse_quote_visual_verification,
+            )
+        except CHUNK_CALL_ERRORS:
+            if stats is not None:
+                stats["malformed"] = stats.get("malformed", 0) + 1
+            return "malformed"
+        judgment = result.payload
+        if stats is not None:
+            stats[judgment] = stats.get(judgment, 0) + 1
+        return judgment
+
+    return verifier
 
 
 def _resolve_groups(
@@ -542,18 +794,34 @@ def _conventions_text() -> str:
     return "No house conventions are available for this run."
 
 
+def load_sources(spec: str) -> list[SourceRecord]:
+    """Resolve a ``--sources`` value to source records.
+
+    ``pilot`` and ``target`` load the built-in CSVs; any other value is a path
+    to a source CSV in the pilot column family (canonical firm/date/source/url +
+    optional local_file, header aliases accepted — see ``ingest._COLUMN_ALIASES``)
+    — so adding a second test set needs no code change. The <=20 source limit is
+    enforced by the caller for every case.
+    """
+    if spec == "pilot":
+        return load_pilot_sources()
+    if spec == "target":
+        return load_target_sources()
+    return load_pilot_sources(spec)
+
+
 def resolve_engine_settings(engine: str, model: str | None, effort: str | None) -> tuple[str, str]:
     """Validate and resolve the per-run model/effort so every run states them.
 
     claude: model is required (alias like ``fable``/``opus``/``sonnet`` or a
     full name) so a run never silently inherits the CLI's settings default.
-    codex: model is pinned to CODEX_MODEL; passing anything else is an error.
-    effort is required for both engines and must be a level the engine accepts.
+    codex: model defaults to ``DEFAULT_CODEX_MODEL`` when omitted and must be a
+    member of the codex allowlist otherwise. effort is required for both engines
+    and must be a level the engine accepts (the codex floor is ``low`` — no
+    ``minimal``).
     """
     if engine == "codex":
-        if model not in (None, CODEX_MODEL):
-            raise ValueError(f"--engine codex is pinned to {CODEX_MODEL}; drop --model")
-        model = CODEX_MODEL
+        model = resolve_codex_model(model)  # None → default; off-list → error
     elif not model:
         raise ValueError("--model is required with --engine claude (e.g. fable, opus, sonnet)")
 
@@ -565,35 +833,57 @@ def resolve_engine_settings(engine: str, model: str | None, effort: str | None) 
     return model, effort
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The run CLI's argument parser. Extracted so the resolved no-flags defaults
+    (the model matrix) are testable without invoking the pipeline."""
     parser = argparse.ArgumentParser(description="Markets Recon POC runner")
-    parser.add_argument("--sources", choices=("pilot", "target"), default="pilot")
+    parser.add_argument(
+        "--sources",
+        default="pilot",
+        help="'pilot', 'target', or a path to a source CSV (canonical columns "
+        "firm/date/source/url + optional local_file, with header aliases like "
+        "Entity Name/Title/External link accepted). A .pdf URL is downloaded and "
+        "read as a PDF; any other URL takes the HTML path. <=20 sources.",
+    )
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--engine", choices=("claude", "codex"), default="claude")
+    # Defaults below are the model matrix (revamp 2026-07-10); a bare
+    # `python -m src.run --run-id X --sources ...` resolves to it fully.
+    parser.add_argument("--engine", choices=("claude", "codex"), default="codex")
     parser.add_argument(
         "--model",
-        help="model for the run: required with --engine claude; pinned to "
-        f"{CODEX_MODEL} with --engine codex (omit it)",
+        default="gpt-5.6-sol",
+        help="model for the analyze run: with --engine codex one of "
+        f"{', '.join(CODEX_MODELS)} (default gpt-5.6-sol); required with --engine claude",
     )
     parser.add_argument(
         "--effort",
-        help="reasoning effort for the run (required): claude low|medium|high|xhigh|max; "
-        "codex minimal|low|medium|high|xhigh",
+        default="high",
+        help="reasoning effort for the analyze run (default high): claude "
+        "low|medium|high|xhigh|max; codex low|medium|high|xhigh",
     )
     parser.add_argument(
         "--checker-engine",
         choices=("claude", "codex"),
-        default="codex",
-        help="engine for the second-reader checker step (default codex)",
+        default="claude",
+        help="engine for the second-reader checker step (default claude)",
     )
     parser.add_argument(
         "--checker-model",
-        help="model for the checker step (required with --checker-engine claude)",
+        default="opus",
+        help="model for the checker step (default opus; required with --checker-engine claude)",
     )
     parser.add_argument(
         "--checker-effort",
-        default="high",
-        help="reasoning effort for the checker step (default high)",
+        default="medium",
+        help="reasoning effort for the checker step (default medium)",
+    )
+    parser.add_argument(
+        "--checker-context",
+        action="store_true",
+        help="attach a deterministically routed evidence-context window to each "
+        "checked candidate: the quote's surrounding paragraphs on a clean page, "
+        "or a visual-fallback flag on a scrambled/OCR/subsequence page (opt-in; "
+        "off by default pending A/B validation)",
     )
     parser.add_argument(
         "--arbiter-engine",
@@ -603,12 +893,13 @@ def main() -> int:
     )
     parser.add_argument(
         "--arbiter-model",
-        help="model for the arbiter step (required with --arbiter-engine claude)",
+        default="gpt-5.6-luna",
+        help="model for the arbiter step (default gpt-5.6-luna; required with --arbiter-engine claude)",
     )
     parser.add_argument(
         "--arbiter-effort",
-        default="medium",
-        help="reasoning effort for the arbiter step (default medium)",
+        default="high",
+        help="reasoning effort for the arbiter step (default high)",
     )
     parser.add_argument(
         "--group-notes",
@@ -618,26 +909,59 @@ def main() -> int:
     parser.add_argument(
         "--grouper-engine",
         choices=("claude", "codex"),
-        default="codex",
-        help="engine for the group-notes resolver step (default codex)",
+        default="claude",
+        help="engine for the group-notes resolver step (default claude)",
     )
     parser.add_argument(
         "--grouper-model",
-        help="model for the group-notes resolver (required with --grouper-engine claude)",
+        default="haiku",
+        help="model for the group-notes resolver (default haiku; required with --grouper-engine claude)",
     )
     parser.add_argument(
         "--grouper-effort",
-        default="low",
-        help="reasoning effort for the group-notes resolver (default low)",
+        default="high",
+        help="reasoning effort for the group-notes resolver (default high)",
+    )
+    parser.add_argument(
+        "--quote-visual-engine",
+        choices=("claude", "codex"),
+        default="codex",
+        help="engine for tier-3 visual quote verification (default codex)",
+    )
+    parser.add_argument(
+        "--quote-visual-model",
+        default="gpt-5.6-luna",
+        help="model for tier-3 visual quote verification (default gpt-5.6-luna)",
+    )
+    parser.add_argument(
+        "--quote-visual-effort",
+        default="high",
+        help="reasoning effort for tier-3 visual quote verification (default high)",
+    )
+    parser.add_argument(
+        "--out-root",
+        help="optional root for this run's artifacts: writes to <out-root>/<run-id>/ "
+        "and <out-root>/work/<run-id>/ instead of runs/<run-id> and work/<run-id> "
+        "(used to keep a production batch out of the test/pilot trees). Default keeps "
+        "today's paths.",
     )
     parser.add_argument("--ingest-only", action="store_true")
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
     args = parser.parse_args()
 
-    sources = load_pilot_sources() if args.sources == "pilot" else load_target_sources()
+    sources = load_sources(args.sources)
     enforce_source_limit(sources)
 
     if args.ingest_only:
-        work_dir = Path("work") / args.run_id
+        work_dir = (
+            Path(args.out_root) / "work" / args.run_id
+            if args.out_root
+            else Path("work") / args.run_id
+        )
         for source in sources:
             create_snapshot(source, work_dir)
         return 0
@@ -657,6 +981,9 @@ def main() -> int:
             grouper_model, grouper_effort = resolve_engine_settings(
                 args.grouper_engine, args.grouper_model, args.grouper_effort
             )
+        quote_visual_model, quote_visual_effort = resolve_engine_settings(
+            args.quote_visual_engine, args.quote_visual_model, args.quote_visual_effort
+        )
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
 
@@ -667,8 +994,11 @@ def main() -> int:
     )
     print(
         f"run {args.run_id}: engine={args.engine} model={model} effort={effort} | "
-        f"checker={args.checker_engine}/{checker_model}/{checker_effort} | "
-        f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort}{grouper_line}"
+        f"checker={args.checker_engine}/{checker_model}/{checker_effort}"
+        f"{'+context' if args.checker_context else ''} | "
+        f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort} | "
+        f"quote_visual={args.quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
+        f"{grouper_line}"
     )
     result, chunk_failures, run_dir = run_pipeline(
         sources=sources,
@@ -679,6 +1009,7 @@ def main() -> int:
         checker_engine=args.checker_engine,
         checker_model=checker_model,
         checker_effort=checker_effort,
+        checker_context=args.checker_context,
         arbiter_engine=args.arbiter_engine,
         arbiter_model=arbiter_model,
         arbiter_effort=arbiter_effort,
@@ -687,6 +1018,10 @@ def main() -> int:
         grouper_engine=args.grouper_engine,
         grouper_model=grouper_model,
         grouper_effort=grouper_effort,
+        quote_visual_engine=args.quote_visual_engine,
+        quote_visual_model=quote_visual_model,
+        quote_visual_effort=quote_visual_effort,
+        out_root=args.out_root,
     )
     kept = len(result.output_rows)
     failed = len(result.failures) + len(chunk_failures)

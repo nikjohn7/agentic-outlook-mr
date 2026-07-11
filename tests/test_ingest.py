@@ -1,19 +1,33 @@
 from __future__ import annotations
 
 import json
+import requests
 import shutil
+import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 from src.ingest import (
+    FETCH_MAX_ATTEMPTS,
+    HtmlFetchResult,
+    PDF_DATE_SCAN_CHARS,
     SourceRecord,
+    _download_pdf,
+    _extract_pdf_text,
+    _fetch_html,
+    _ocr_pdf_pages,
+    _pdf_filename_from_url,
+    _request_get_with_retries,
     count_visual_markup,
     create_snapshot,
     detect_scrambled_page,
     detect_source_type,
     enforce_source_limit,
+    extract_html_date,
+    extract_pdf_text_date,
     is_visual_heavy,
     load_pilot_sources,
     resolve_url,
@@ -66,6 +80,126 @@ class IngestTest(unittest.TestCase):
         enforce_source_limit(sources, limit=7)
         with self.assertRaises(ValueError):
             enforce_source_limit(sources, limit=6)
+
+    def test_pilot_resolution_regression(self) -> None:
+        # Golden (source_id -> local PDF name or None) captured from the
+        # firm/title mapping before it was replaced by the local_file column.
+        # The migrated pilot.csv must resolve byte-identically.
+        expected = {
+            "aberdeen-investments-emerging-markets-q2-2026-outlook-shifting-sands": None,
+            "alliancebernstein-global-macro-outlook-second-quarter-2026": "alliance-bernstein.pdf",
+            "schroders-quarterly-markets-review-q1-2026": "Quarterly markets review - Q1 2026.pdf",
+            "j-p-morgan-asset-management-global-fixed-income-views-2q-2026": "jp-morgan.pdf",
+            "pimco-layered-uncertainty-conflict-credit-stress-and-ai": "PIMCO.pdf",
+            "schroders-our-multi-asset-investment-views-march-2026": (
+                "Our multi-asset investment views – March 2026.pdf"
+            ),
+            "j-p-morgan-asset-management-global-asset-allocation-views-2q-2026": (
+                "Global Asset Allocation Views 2Q 2026 _ J.P. Morgan Asset Management.pdf"
+            ),
+        }
+        resolved = {
+            source.source_id: (source.local_path.name if source.local_path else None)
+            for source in load_pilot_sources()
+        }
+        self.assertEqual(expected, resolved)
+
+
+class LocalFileLoaderTest(unittest.TestCase):
+    """The optional `local_file` column's three-way contract."""
+
+    HEADER = "Firm,Date,Source,MR Link,local_file\n"
+
+    def _write_csv(self, temp_dir: str, body: str) -> Path:
+        path = Path(temp_dir) / "sources.csv"
+        path.write_text(self.HEADER + body, encoding="utf-8")
+        return path
+
+    def test_present_and_existing_local_file_is_ingested(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = self._write_csv(
+                temp_dir,
+                "Test Firm,4/2/2026,A Doc,https://example.test/a,prev-excel/PIMCO.pdf\n",
+            )
+            [source] = load_pilot_sources(csv_path)
+
+        self.assertEqual("pdf", source.source_type)
+        self.assertEqual("PIMCO.pdf", source.local_path.name)
+        self.assertEqual("https://example.test/a", source.url)  # URL kept as metadata
+
+    def test_missing_local_file_hard_errors_naming_the_row(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = self._write_csv(
+                temp_dir,
+                "Test Firm,4/2/2026,Ghost Doc,https://example.test/a,prev-excel/does-not-exist.pdf\n",
+            )
+            with self.assertRaises(FileNotFoundError) as ctx:
+                load_pilot_sources(csv_path)
+
+        self.assertIn("Ghost Doc", str(ctx.exception))
+        self.assertIn("does-not-exist.pdf", str(ctx.exception))
+
+    def test_empty_local_file_fetches_the_url(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            csv_path = self._write_csv(
+                temp_dir, "Test Firm,4/2/2026,A Doc,https://example.test/a.html,\n"
+            )
+            [source] = load_pilot_sources(csv_path)
+
+        self.assertIsNone(source.local_path)
+        self.assertEqual("html", source.source_type)
+
+    def test_absent_local_file_column_behaves_as_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "sources.csv"
+            path.write_text(
+                "Firm,Date,Source,MR Link\nTest Firm,4/2/2026,A Doc,https://example.test/a.html\n",
+                encoding="utf-8",
+            )
+            [source] = load_pilot_sources(path)
+
+        self.assertIsNone(source.local_path)
+        self.assertEqual("html", source.source_type)
+
+    def test_txt_local_file_loads_as_transcript_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            transcript = Path(temp_dir) / "vanguard-update.txt"
+            transcript.write_text("transcript body", encoding="utf-8")
+            csv_path = self._write_csv(
+                temp_dir,
+                f"Vanguard,,Mid-year update,https://example.test/video,{transcript}\n",
+            )
+            [source] = load_pilot_sources(csv_path)
+
+        self.assertEqual("txt", source.source_type)
+        self.assertEqual("vanguard-update.txt", source.local_path.name)
+        self.assertEqual("https://example.test/video", source.url)  # URL kept as metadata
+
+    def test_unsupported_local_file_extension_hard_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc = Path(temp_dir) / "outlook.docx"
+            doc.write_text("not ingestible", encoding="utf-8")
+            csv_path = self._write_csv(
+                temp_dir, f"Test Firm,,Word Doc,https://example.test/a,{doc}\n"
+            )
+            with self.assertRaises(ValueError) as ctx:
+                load_pilot_sources(csv_path)
+
+        self.assertIn(".docx", str(ctx.exception))
+        self.assertIn("Word Doc", str(ctx.exception))
+
+    def test_arbitrary_pilot_format_csv_loads_and_respects_the_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            body = "".join(
+                f"Firm {n},4/2/2026,Doc {n},https://example.test/{n}.html,\n" for n in range(3)
+            )
+            csv_path = self._write_csv(temp_dir, body)
+            sources = load_pilot_sources(csv_path)
+
+        self.assertEqual(3, len(sources))
+        enforce_source_limit(sources, limit=3)
+        with self.assertRaises(ValueError):
+            enforce_source_limit(sources, limit=2)
 
     def test_pilot_schroders_pair_maps_to_distinct_local_pdfs(self) -> None:
         schroders = [source for source in load_pilot_sources() if source.firm == "Schroders"]
@@ -205,6 +339,474 @@ class PrintToPdfIngestTest(unittest.TestCase):
         self.assertFalse(ingested.printed_pdf)
         self.assertIsNone(ingested.page_count)
         self.assertTrue(all(chunk.chunk_id.startswith("char:") for chunk in ingested.chunks))
+
+
+class FetchRetryTest(unittest.TestCase):
+    class FakeResponse:
+        def __init__(
+            self,
+            status_code: int = 200,
+            *,
+            text: str = "<html>ok</html>",
+            content: bytes = b"%PDF body",
+        ) -> None:
+            self.status_code = status_code
+            self.text = text
+            self.content = content
+            self.headers = {"Content-Type": "application/pdf"}
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                error = requests.exceptions.HTTPError(f"{self.status_code} error")
+                error.response = self
+                raise error
+
+    class FakeSession:
+        def __init__(self, outcomes: list[object]) -> None:
+            self.outcomes = outcomes
+            self.calls = 0
+
+        def get(self, *args, **kwargs):
+            self.calls += 1
+            outcome = self.outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    def test_retry_succeeds_on_second_try(self) -> None:
+        session = self.FakeSession(
+            [requests.exceptions.Timeout("slow"), self.FakeResponse(text="ok")]
+        )
+
+        with patch("src.ingest.time.sleep"):
+            response = _request_get_with_retries("https://x.test/a", session=session)
+
+        self.assertEqual("ok", response.text)
+        self.assertEqual(2, session.calls)
+
+    def test_retry_exhausts_and_raises_last_timeout(self) -> None:
+        session = self.FakeSession(
+            [requests.exceptions.Timeout("slow")] * FETCH_MAX_ATTEMPTS
+        )
+
+        with patch("src.ingest.time.sleep"):
+            with self.assertRaises(requests.exceptions.Timeout):
+                _request_get_with_retries("https://x.test/a", session=session)
+
+        self.assertEqual(FETCH_MAX_ATTEMPTS, session.calls)
+
+    def test_4xx_raises_immediately(self) -> None:
+        session = self.FakeSession(
+            [self.FakeResponse(403), self.FakeResponse(200, text="should not fetch")]
+        )
+
+        with self.assertRaises(requests.exceptions.HTTPError):
+            _request_get_with_retries("https://x.test/a", session=session)
+
+        self.assertEqual(1, session.calls)
+
+    def test_5xx_retries(self) -> None:
+        session = self.FakeSession(
+            [self.FakeResponse(503), self.FakeResponse(200, text="recovered")]
+        )
+
+        with patch("src.ingest.time.sleep"):
+            response = _request_get_with_retries("https://x.test/a", session=session)
+
+        self.assertEqual("recovered", response.text)
+        self.assertEqual(2, session.calls)
+
+
+class BrowserFallbackFetchTest(unittest.TestCase):
+    def test_blocked_status_uses_browser_fallback(self) -> None:
+        session = FetchRetryTest.FakeSession([FetchRetryTest.FakeResponse(403)])
+        browser_calls: list[str] = []
+
+        def browser_fetcher(url: str) -> str:
+            browser_calls.append(url)
+            return "<html><p>browser body</p></html>"
+
+        result = _fetch_html(
+            "https://x.test/blocked",
+            session=session,
+            browser_fetcher=browser_fetcher,
+        )
+
+        self.assertEqual("browser", result.fetched_via)
+        self.assertIn("browser body", result.html)
+        self.assertEqual(["https://x.test/blocked"], browser_calls)
+
+    def test_requests_success_never_touches_browser(self) -> None:
+        session = FetchRetryTest.FakeSession(
+            [FetchRetryTest.FakeResponse(text="<html><p>request body</p></html>")]
+        )
+
+        def forbidden_browser(url: str) -> str:
+            raise AssertionError("browser fallback must not run")
+
+        result = _fetch_html(
+            "https://x.test/ok",
+            session=session,
+            browser_fetcher=forbidden_browser,
+        )
+
+        self.assertEqual("requests", result.fetched_via)
+        self.assertIn("request body", result.html)
+
+    def test_browser_fallback_retries_transient_failures(self) -> None:
+        session = FetchRetryTest.FakeSession(
+            [requests.exceptions.Timeout("slow")] * FETCH_MAX_ATTEMPTS
+        )
+        browser_calls = 0
+
+        def flaky_browser(url: str) -> str:
+            nonlocal browser_calls
+            browser_calls += 1
+            if browser_calls < 3:
+                raise RuntimeError("ERR_NAME_NOT_RESOLVED")
+            return "<html><p>browser recovered</p></html>"
+
+        with patch("src.ingest.time.sleep"):
+            result = _fetch_html(
+                "https://x.test/flaky",
+                session=session,
+                browser_fetcher=flaky_browser,
+            )
+
+        self.assertEqual("browser", result.fetched_via)
+        self.assertIn("browser recovered", result.html)
+        self.assertEqual(3, browser_calls)
+
+    def test_fallback_result_flows_into_snapshot_meta(self) -> None:
+        browser_result = "<html><body><p>" + "browser prose " * 50 + "</p></body></html>"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html") as fetch:
+                fetch.side_effect = lambda url, browser_fetcher=None: (
+                    HtmlFetchResult(browser_result, "browser")
+                )
+                ingested = create_snapshot(
+                    _html_source(),
+                    temp_dir,
+                    browser_fetcher=lambda url: browser_result,
+                )
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            snapshot = ingested.snapshot_text_path.read_text(encoding="utf-8")
+
+        self.assertEqual("browser", meta["fetched_via"])
+        self.assertIn("browser prose", snapshot)
+
+
+class DocumentDateFallbackTest(unittest.TestCase):
+    """The source-CSV date is unreliable and never used: the run's Date always
+    comes from the document itself (strict DD/MM/YYYY) or stays blank."""
+
+    DATED_HTML = (
+        '<html><head><meta property="article:published_time" '
+        'content="2026-06-10T09:00:00+00:00"/></head><body><p>'
+        + "outlook prose " * 40
+        + "</p></body></html>"
+    )
+
+    def test_pdf_day_first_date_is_normalized(self) -> None:
+        self.assertEqual(
+            "15/06/2026", extract_pdf_text_date("Published 15 June 2026\nOutlook")
+        )
+
+    def test_pdf_month_first_date_is_normalized(self) -> None:
+        self.assertEqual(
+            "09/06/2026", extract_pdf_text_date("Mid-Year View\nJune 9, 2026")
+        )
+
+    def test_pdf_month_year_with_no_day_yields_blank(self) -> None:
+        # A bare month-year is not a full date; blank rather than a fabricated day.
+        self.assertEqual(
+            "", extract_pdf_text_date("EMD review and outlook\nMay 2026")
+        )
+
+    def test_pdf_full_date_beats_month_year(self) -> None:
+        self.assertEqual(
+            "15/06/2026",
+            extract_pdf_text_date("May 2026 review, published 15 June 2026"),
+        )
+
+    def test_pdf_numeric_and_absent_dates_stay_blank(self) -> None:
+        self.assertEqual("", extract_pdf_text_date("Published 15/06/2026"))
+        self.assertEqual("", extract_pdf_text_date("2026 Midyear Outlook"))
+
+    def test_pdf_date_beyond_first_page_window_is_ignored(self) -> None:
+        text = "x" * PDF_DATE_SCAN_CHARS + " 15 June 2026"
+        self.assertEqual("", extract_pdf_text_date(text))
+
+    def test_html_meta_date_is_extracted_day_first(self) -> None:
+        self.assertEqual("10/06/2026", extract_html_date(self.DATED_HTML))
+
+    def test_blank_csv_date_is_filled_from_html(self) -> None:
+        source = replace(_html_source(), date="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html", return_value=self.DATED_HTML):
+                ingested = create_snapshot(source, temp_dir)
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual("10/06/2026", ingested.source.date)
+        self.assertEqual("10/06/2026", meta["date"])
+        self.assertEqual("html", meta["date_from"])
+
+    def test_csv_date_is_ignored_document_date_used(self) -> None:
+        # The CSV row carries a date (_html_source: "6/1/2026"); ingestion must
+        # discard it and use the document's own date instead.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html", return_value=self.DATED_HTML):
+                ingested = create_snapshot(_html_source(), temp_dir)
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual("10/06/2026", ingested.source.date)
+        self.assertEqual("html", meta["date_from"])
+
+    def test_csv_date_ignored_undated_document_leaves_blank(self) -> None:
+        # A CSV date must not survive even when the document has no date.
+        html = "<html><body><p>" + "undated prose " * 40 + "</p></body></html>"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html", return_value=html):
+                ingested = create_snapshot(_html_source(), temp_dir)
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual("", ingested.source.date)
+        self.assertEqual("", meta["date_from"])
+
+    def test_undated_document_leaves_date_blank(self) -> None:
+        source = replace(_html_source(), date="")
+        html = "<html><body><p>" + "undated prose " * 40 + "</p></body></html>"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest._fetch_html", return_value=html):
+                ingested = create_snapshot(source, temp_dir)
+            meta = json.loads(
+                (Path(temp_dir) / "aberdeen-outlook" / "ingest_meta.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+
+        self.assertEqual("", ingested.source.date)
+        self.assertEqual("", meta["date_from"])
+
+
+class HeaderAliasTest(unittest.TestCase):
+    """A pilot-family CSV using aliased headers (Entity Name / Title / External
+    link) loads with no editing."""
+
+    def _load(self, temp_dir: str, text: str) -> list:
+        path = Path(temp_dir) / "sources.csv"
+        path.write_text(text, encoding="utf-8")
+        return load_pilot_sources(path)
+
+    def test_aliased_headers_map_to_canonical_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sources = self._load(
+                temp_dir,
+                "Entity Name,Title,Date,External link\n"
+                "BlackRock,Equity Outlook,3/25/2026,https://example.test/a.pdf\n"
+                "T. Rowe Price,Monthly Update,4/8/2026,https://example.test/b.html\n",
+            )
+
+        self.assertEqual(["BlackRock", "T. Rowe Price"], [s.firm for s in sources])
+        self.assertEqual(["Equity Outlook", "Monthly Update"], [s.source for s in sources])
+        self.assertEqual(["3/25/2026", "4/8/2026"], [s.date for s in sources])
+        # .pdf URL -> pdf route (remote), non-pdf -> html route.
+        self.assertEqual(["pdf", "html"], [s.source_type for s in sources])
+        self.assertEqual([None, None], [s.local_path for s in sources])
+
+    def test_missing_required_column_raises_naming_what_was_seen(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaises(ValueError) as ctx:
+                # No firm-like column.
+                self._load(temp_dir, "Title,Date,External link\nDoc,4/8/2026,https://x.test/a\n")
+
+        self.assertIn("firm", str(ctx.exception))
+        self.assertIn("Title", str(ctx.exception))
+
+    def test_local_file_alias_is_honoured(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            [source] = self._load(
+                temp_dir,
+                "Entity Name,Title,Date,External link,Local File\n"
+                "PIMCO,A Doc,4/8/2026,https://example.test/a,prev-excel/PIMCO.pdf\n",
+            )
+
+        self.assertEqual("PIMCO.pdf", source.local_path.name)
+        self.assertEqual("pdf", source.source_type)
+
+
+class RemotePdfTest(unittest.TestCase):
+    def _remote_pdf_source(self) -> SourceRecord:
+        return SourceRecord(
+            source_id="blackrock-outlook",
+            firm="BlackRock",
+            date="3/25/2026",
+            source="Equity Outlook",
+            url="https://example.test/docs/outlook.pdf?view=true",
+            resolved_url="https://example.test/docs/outlook.pdf?view=true",
+            source_type="pdf",
+            local_path=None,
+        )
+
+    def test_remote_pdf_is_downloaded_and_flows_through_the_pdf_path(self) -> None:
+        fetched: list[str] = []
+
+        def fake_downloader(url: str, output_dir: Path) -> Path:
+            fetched.append(url)
+            target = output_dir / "outlook.pdf"
+            shutil.copy2(FIXTURE_PRINTED_PDF, target)
+            return target
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ingested = create_snapshot(
+                self._remote_pdf_source(), temp_dir, downloader=fake_downloader
+            )
+
+        self.assertEqual(["https://example.test/docs/outlook.pdf?view=true"], fetched)
+        self.assertEqual(1, ingested.page_count)
+        self.assertEqual(["p1-1"], [chunk.chunk_id for chunk in ingested.chunks])
+
+    def test_filename_is_derived_from_the_url_path(self) -> None:
+        self.assertEqual(
+            "outlook.pdf", _pdf_filename_from_url("https://x.test/docs/outlook.pdf?view=true")
+        )
+        # A path without a .pdf suffix still lands on a .pdf file on disk.
+        self.assertEqual("report.pdf", _pdf_filename_from_url("https://x.test/report"))
+
+    def test_download_rejects_a_non_pdf_body(self) -> None:
+        # A .pdf URL that actually returns an HTML consent/error page must fail
+        # loudly, not feed junk to pdfplumber.
+        class FakeResponse:
+            status_code = 200
+            content = b"<!doctype html><html>Access denied</html>"
+            headers = {"Content-Type": "text/html"}
+
+            def raise_for_status(self) -> None:
+                pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.ingest.requests.get", return_value=FakeResponse()):
+                with self.assertRaises(ValueError) as ctx:
+                    _download_pdf("https://x.test/a.pdf", Path(temp_dir))
+
+        self.assertIn("did not return a PDF", str(ctx.exception))
+
+
+class OcrPdfTest(unittest.TestCase):
+    def test_extract_pdf_text_records_low_text_pages_and_replaces_with_ocr(self) -> None:
+        def fake_runner(command, **kwargs):
+            if command[0] == "pdftoppm":
+                Path(command[-1]).with_suffix(".png").write_text("image", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+            if command[0] == "tesseract":
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout="OCR text says Global Equities are overweight.",
+                    stderr="",
+                )
+            raise AssertionError(command)
+
+        text, page_count, scrambled_pages, ocr_pages, ocr_note = _extract_pdf_text(
+            FIXTURE_PRINTED_PDF,
+            ocr_runner=fake_runner,
+        )
+
+        self.assertEqual(1, page_count)
+        self.assertEqual((), scrambled_pages)
+        self.assertEqual((1,), ocr_pages)
+        self.assertIn("Global Equities", text)
+        self.assertIn("ocr applied", ocr_note)
+
+    def test_ocr_missing_tools_gracefully_returns_no_text(self) -> None:
+        with patch("src.ingest.shutil.which", return_value=None):
+            text_by_page, note = _ocr_pdf_pages(FIXTURE_PRINTED_PDF, [1])
+
+        self.assertEqual({}, text_by_page)
+        self.assertIn("missing tool", note)
+
+
+class TxtTranscriptIngestTest(unittest.TestCase):
+    """Local `.txt` transcripts (video sources) take a text path: the file is
+    the document AND the quote-check corpus, chunked by char ranges."""
+
+    BODY = (
+        "Recorded 22 June 2026. We stay overweight European equities into the "
+        "second half while trimming duration back to benchmark."
+    )
+
+    def _snapshot(self, body: str) -> tuple:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            transcript = Path(temp_dir) / "vanguard-update.txt"
+            transcript.write_text(body, encoding="utf-8")
+            source = SourceRecord(
+                source_id="vanguard-mid-year",
+                firm="Vanguard",
+                date="",
+                source="Mid-year update",
+                url="https://example.test/video",
+                resolved_url="https://example.test/video",
+                source_type="txt",
+                local_path=transcript,
+            )
+            work_dir = Path(temp_dir) / "work"
+            ingested = create_snapshot(source, work_dir)
+            snapshot_text = ingested.snapshot_text_path.read_text(encoding="utf-8")
+            meta = json.loads(
+                (work_dir / source.source_id / "ingest_meta.json").read_text(encoding="utf-8")
+            )
+        return ingested, snapshot_text, meta
+
+    def test_transcript_is_copied_and_snapshot_equals_the_file(self) -> None:
+        ingested, snapshot_text, meta = self._snapshot(self.BODY)
+
+        self.assertEqual(self.BODY, snapshot_text)
+        self.assertEqual("vanguard-update.txt", ingested.native_source_path.name)
+        self.assertEqual("txt", meta["source_type"])
+        self.assertIsNone(ingested.page_count)
+        self.assertFalse(ingested.visual_heavy)
+        self.assertFalse(ingested.printed_pdf)
+
+    def test_transcript_chunks_use_char_range_locators(self) -> None:
+        ingested, _, _ = self._snapshot(self.BODY)
+
+        self.assertEqual(1, len(ingested.chunks))
+        self.assertEqual(f"char:0-{len(self.BODY)}", ingested.chunks[0].locator)
+        self.assertEqual(
+            ingested.snapshot_text_path, ingested.chunks[0].source_path
+        )
+
+    def test_transcript_worded_date_is_extracted_with_txt_provenance(self) -> None:
+        ingested, _, meta = self._snapshot(self.BODY)
+
+        self.assertEqual("22/06/2026", ingested.source.date)
+        self.assertEqual("22/06/2026", meta["date"])
+        self.assertEqual("txt_text", meta["date_from"])
+
+    def test_transcript_without_worded_date_stays_blank(self) -> None:
+        ingested, _, meta = self._snapshot("No date is spoken in this video at all.")
+
+        self.assertEqual("", ingested.source.date)
+        self.assertEqual("", meta["date_from"])
 
 
 if __name__ == "__main__":
