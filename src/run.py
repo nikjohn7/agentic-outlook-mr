@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from src.assemble import FailureRecord, assemble_candidates, write_run_outputs
-from src.confidence import evidence_passes
+from src.confidence import evidence_context, evidence_passes
 from src.ingest import (
     IngestedSource,
     Chunk,
@@ -19,7 +19,8 @@ from src.ingest import (
     load_target_sources,
 )
 from src.llm import (
-    CODEX_MODEL,
+    CODEX_MODELS,
+    DEFAULT_CODEX_MODEL,
     ENGINE_CONFIGS,
     LLMParseError,
     call as llm_call,
@@ -28,6 +29,7 @@ from src.llm import (
     parse_groups,
     parse_quote_visual_verification,
     parse_verdicts,
+    resolve_codex_model,
 )
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import load_taxonomy
@@ -55,20 +57,21 @@ def run_pipeline(
     engine: str,
     model: str | None = None,
     effort: str | None = None,
-    checker_engine: str = "codex",
-    checker_model: str | None = None,
-    checker_effort: str = "high",
+    checker_engine: str = "claude",
+    checker_model: str | None = "opus",
+    checker_effort: str = "medium",
+    checker_context: bool = False,
     arbiter_engine: str = "codex",
-    arbiter_model: str | None = None,
-    arbiter_effort: str = "medium",
+    arbiter_model: str | None = "gpt-5.6-luna",
+    arbiter_effort: str = "high",
     group_notes_text: str | None = None,
     group_notes_path: str | None = None,
-    grouper_engine: str = "codex",
-    grouper_model: str | None = None,
-    grouper_effort: str = "low",
-    quote_visual_engine: str = "claude",
-    quote_visual_model: str | None = "sonnet",
-    quote_visual_effort: str = "medium",
+    grouper_engine: str = "claude",
+    grouper_model: str | None = "haiku",
+    grouper_effort: str = "high",
+    quote_visual_engine: str = "codex",
+    quote_visual_model: str | None = "gpt-5.6-luna",
+    quote_visual_effort: str = "high",
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
     brain_text: str | None = None,
@@ -85,14 +88,17 @@ def run_pipeline(
     any analysis).
     """
     enforce_source_limit(sources)
+    # A direct run_pipeline caller (e.g. a test) may leave a codex step's model
+    # None; fill the default so run_config always states the model. The CLI has
+    # already resolved these via resolve_engine_settings.
     if checker_engine == "codex" and checker_model is None:
-        checker_model = CODEX_MODEL
+        checker_model = DEFAULT_CODEX_MODEL
     if arbiter_engine == "codex" and arbiter_model is None:
-        arbiter_model = CODEX_MODEL
+        arbiter_model = DEFAULT_CODEX_MODEL
     if grouper_engine == "codex" and grouper_model is None:
-        grouper_model = CODEX_MODEL
+        grouper_model = DEFAULT_CODEX_MODEL
     if quote_visual_engine == "codex" and quote_visual_model is None:
-        quote_visual_model = CODEX_MODEL
+        quote_visual_model = DEFAULT_CODEX_MODEL
     taxonomy = load_taxonomy()
     taxonomy_block = taxonomy.grouped_block()
     brain = brain_text if brain_text is not None else _brain_text()
@@ -246,6 +252,10 @@ def run_pipeline(
                 runner=runner,
                 native_source_path=ingested.native_source_path,
                 visual_unverified=visual_unverified,
+                checker_context=checker_context,
+                snapshot_text=snapshot_text,
+                scrambled_pages=frozenset(scrambled_pages.get(source.source_id, set())),
+                ocr_pages=frozenset(ocr_pages.get(source.source_id, set())),
             )
             verdicts.update(
                 {offset + local_index: verdict for local_index, verdict in source_verdicts.items()}
@@ -308,6 +318,7 @@ def run_pipeline(
         "model": model,
         "effort": effort,
         "checker": f"{checker_engine}/{checker_model}/{checker_effort}",
+        "checker context": "on" if checker_context else "off",
         "arbiter": f"{arbiter_engine}/{arbiter_model}/{arbiter_effort}",
         "quote visual verifier": (
             f"{quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
@@ -404,6 +415,10 @@ def _check_candidates(
     runner=None,
     native_source_path: str | Path | None = None,
     visual_unverified: set[int] | None = None,
+    checker_context: bool = False,
+    snapshot_text: str = "",
+    scrambled_pages: frozenset[int] = frozenset(),
+    ocr_pages: frozenset[int] = frozenset(),
 ) -> tuple[dict[int, CheckVerdict], FailureRecord | None]:
     """One second-reader call for all of a source's candidates.
 
@@ -415,7 +430,14 @@ def _check_candidates(
     during analyze). It is injected as whole-file context so the checker can see
     whether a candidate is corroborated or contradicted elsewhere in the file —
     but it never relaxes the per-candidate evidence bar (the prompt says so).
+
+    When checker_context is on, each candidate is deterministically routed
+    (src/confidence.evidence_context) to either a text context window
+    (`evidence_context`) or a visual fallback (`context_unreliable: true`,
+    reusing native_source_path + the cited page). Routing never fails a run or
+    blocks a candidate.
     """
+    native_pdf = _native_pdf_path(native_source_path)
     inputs = {
         "source_id": source.source_id,
         "firm": source.firm,
@@ -434,6 +456,14 @@ def _check_candidates(
                 "reasoning": candidate.reasoning,
                 "basis": candidate.basis,
                 "text_unverifiable_visual": index in (visual_unverified or set()),
+                **_context_fields(
+                    candidate,
+                    enabled=checker_context,
+                    snapshot_text=snapshot_text,
+                    scrambled_pages=scrambled_pages,
+                    ocr_pages=ocr_pages,
+                    native_pdf_available=native_pdf is not None,
+                ),
             }
             for index, candidate in enumerate(candidates)
         ],
@@ -477,6 +507,46 @@ def _visual_unverified_candidate_indexes(
         if check.visual_unverified_by_text:
             indexes.add(index)
     return indexes
+
+
+def _native_pdf_path(native_source_path: str | Path | None) -> Path | None:
+    """The native source path when it is a PDF a checker can open a page image
+    from, else None (a visual fallback needs a page image)."""
+    if native_source_path is None:
+        return None
+    path = Path(native_source_path)
+    return path if path.suffix.lower() == ".pdf" else None
+
+
+def _context_fields(
+    candidate: CandidateCall,
+    *,
+    enabled: bool,
+    snapshot_text: str,
+    scrambled_pages: frozenset[int],
+    ocr_pages: frozenset[int],
+    native_pdf_available: bool,
+) -> dict[str, object]:
+    """The candidate's evidence-context fields for the checker input.
+
+    Empty (no fields) unless --checker-context is on. A CLEAN route adds
+    `evidence_context` (the text window); a DEGRADED route adds
+    `context_unreliable: true` — but only when there is a PDF page image to open
+    (native PDF present and a cited page), otherwise nothing is attached and the
+    candidate is judged exactly as today. Never raises."""
+    if not enabled:
+        return {}
+    context = evidence_context(
+        candidate,
+        snapshot_text,
+        scrambled_pages=scrambled_pages,
+        ocr_pages=ocr_pages,
+    )
+    if context.route == "clean" and context.text:
+        return {"evidence_context": context.text}
+    if context.route == "degraded" and native_pdf_available and context.cited_page is not None:
+        return {"context_unreliable": True}
+    return {}
 
 
 def _make_arbiter(
@@ -745,13 +815,13 @@ def resolve_engine_settings(engine: str, model: str | None, effort: str | None) 
 
     claude: model is required (alias like ``fable``/``opus``/``sonnet`` or a
     full name) so a run never silently inherits the CLI's settings default.
-    codex: model is pinned to CODEX_MODEL; passing anything else is an error.
-    effort is required for both engines and must be a level the engine accepts.
+    codex: model defaults to ``DEFAULT_CODEX_MODEL`` when omitted and must be a
+    member of the codex allowlist otherwise. effort is required for both engines
+    and must be a level the engine accepts (the codex floor is ``low`` — no
+    ``minimal``).
     """
     if engine == "codex":
-        if model not in (None, CODEX_MODEL):
-            raise ValueError(f"--engine codex is pinned to {CODEX_MODEL}; drop --model")
-        model = CODEX_MODEL
+        model = resolve_codex_model(model)  # None → default; off-list → error
     elif not model:
         raise ValueError("--model is required with --engine claude (e.g. fable, opus, sonnet)")
 
@@ -763,7 +833,9 @@ def resolve_engine_settings(engine: str, model: str | None, effort: str | None) 
     return model, effort
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The run CLI's argument parser. Extracted so the resolved no-flags defaults
+    (the model matrix) are testable without invoking the pipeline."""
     parser = argparse.ArgumentParser(description="Markets Recon POC runner")
     parser.add_argument(
         "--sources",
@@ -774,31 +846,44 @@ def main() -> int:
         "read as a PDF; any other URL takes the HTML path. <=20 sources.",
     )
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--engine", choices=("claude", "codex"), default="claude")
+    # Defaults below are the model matrix (revamp 2026-07-10); a bare
+    # `python -m src.run --run-id X --sources ...` resolves to it fully.
+    parser.add_argument("--engine", choices=("claude", "codex"), default="codex")
     parser.add_argument(
         "--model",
-        help="model for the run: required with --engine claude; pinned to "
-        f"{CODEX_MODEL} with --engine codex (omit it)",
+        default="gpt-5.6-sol",
+        help="model for the analyze run: with --engine codex one of "
+        f"{', '.join(CODEX_MODELS)} (default gpt-5.6-sol); required with --engine claude",
     )
     parser.add_argument(
         "--effort",
-        help="reasoning effort for the run (required): claude low|medium|high|xhigh|max; "
-        "codex minimal|low|medium|high|xhigh",
+        default="high",
+        help="reasoning effort for the analyze run (default high): claude "
+        "low|medium|high|xhigh|max; codex low|medium|high|xhigh",
     )
     parser.add_argument(
         "--checker-engine",
         choices=("claude", "codex"),
-        default="codex",
-        help="engine for the second-reader checker step (default codex)",
+        default="claude",
+        help="engine for the second-reader checker step (default claude)",
     )
     parser.add_argument(
         "--checker-model",
-        help="model for the checker step (required with --checker-engine claude)",
+        default="opus",
+        help="model for the checker step (default opus; required with --checker-engine claude)",
     )
     parser.add_argument(
         "--checker-effort",
-        default="high",
-        help="reasoning effort for the checker step (default high)",
+        default="medium",
+        help="reasoning effort for the checker step (default medium)",
+    )
+    parser.add_argument(
+        "--checker-context",
+        action="store_true",
+        help="attach a deterministically routed evidence-context window to each "
+        "checked candidate: the quote's surrounding paragraphs on a clean page, "
+        "or a visual-fallback flag on a scrambled/OCR/subsequence page (opt-in; "
+        "off by default pending A/B validation)",
     )
     parser.add_argument(
         "--arbiter-engine",
@@ -808,12 +893,13 @@ def main() -> int:
     )
     parser.add_argument(
         "--arbiter-model",
-        help="model for the arbiter step (required with --arbiter-engine claude)",
+        default="gpt-5.6-luna",
+        help="model for the arbiter step (default gpt-5.6-luna; required with --arbiter-engine claude)",
     )
     parser.add_argument(
         "--arbiter-effort",
-        default="medium",
-        help="reasoning effort for the arbiter step (default medium)",
+        default="high",
+        help="reasoning effort for the arbiter step (default high)",
     )
     parser.add_argument(
         "--group-notes",
@@ -823,33 +909,34 @@ def main() -> int:
     parser.add_argument(
         "--grouper-engine",
         choices=("claude", "codex"),
-        default="codex",
-        help="engine for the group-notes resolver step (default codex)",
+        default="claude",
+        help="engine for the group-notes resolver step (default claude)",
     )
     parser.add_argument(
         "--grouper-model",
-        help="model for the group-notes resolver (required with --grouper-engine claude)",
+        default="haiku",
+        help="model for the group-notes resolver (default haiku; required with --grouper-engine claude)",
     )
     parser.add_argument(
         "--grouper-effort",
-        default="low",
-        help="reasoning effort for the group-notes resolver (default low)",
+        default="high",
+        help="reasoning effort for the group-notes resolver (default high)",
     )
     parser.add_argument(
         "--quote-visual-engine",
         choices=("claude", "codex"),
-        default="claude",
-        help="engine for tier-3 visual quote verification (default claude)",
+        default="codex",
+        help="engine for tier-3 visual quote verification (default codex)",
     )
     parser.add_argument(
         "--quote-visual-model",
-        default="sonnet",
-        help="model for tier-3 visual quote verification (default sonnet)",
+        default="gpt-5.6-luna",
+        help="model for tier-3 visual quote verification (default gpt-5.6-luna)",
     )
     parser.add_argument(
         "--quote-visual-effort",
-        default="medium",
-        help="reasoning effort for tier-3 visual quote verification (default medium)",
+        default="high",
+        help="reasoning effort for tier-3 visual quote verification (default high)",
     )
     parser.add_argument(
         "--out-root",
@@ -859,6 +946,11 @@ def main() -> int:
         "today's paths.",
     )
     parser.add_argument("--ingest-only", action="store_true")
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
     args = parser.parse_args()
 
     sources = load_sources(args.sources)
@@ -889,11 +981,8 @@ def main() -> int:
             grouper_model, grouper_effort = resolve_engine_settings(
                 args.grouper_engine, args.grouper_model, args.grouper_effort
             )
-        quote_visual_arg_model = args.quote_visual_model
-        if args.quote_visual_engine == "codex" and quote_visual_arg_model == "sonnet":
-            quote_visual_arg_model = None
         quote_visual_model, quote_visual_effort = resolve_engine_settings(
-            args.quote_visual_engine, quote_visual_arg_model, args.quote_visual_effort
+            args.quote_visual_engine, args.quote_visual_model, args.quote_visual_effort
         )
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
@@ -905,7 +994,8 @@ def main() -> int:
     )
     print(
         f"run {args.run_id}: engine={args.engine} model={model} effort={effort} | "
-        f"checker={args.checker_engine}/{checker_model}/{checker_effort} | "
+        f"checker={args.checker_engine}/{checker_model}/{checker_effort}"
+        f"{'+context' if args.checker_context else ''} | "
         f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort} | "
         f"quote_visual={args.quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
         f"{grouper_line}"
@@ -919,6 +1009,7 @@ def main() -> int:
         checker_engine=args.checker_engine,
         checker_model=checker_model,
         checker_effort=checker_effort,
+        checker_context=args.checker_context,
         arbiter_engine=args.arbiter_engine,
         arbiter_model=arbiter_model,
         arbiter_effort=arbiter_effort,

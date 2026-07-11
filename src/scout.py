@@ -36,11 +36,12 @@ from src.run import resolve_engine_settings
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCOUT_PROMPT = PROJECT_ROOT / "prompts" / "scout_groups.md"
 
-# A light Claude tier at low effort: the task is short metadata triage, not
-# judgment-heavy extraction. Overridable via the CLI flags.
-DEFAULT_ENGINE = "claude"
-DEFAULT_MODEL = "haiku"
-DEFAULT_EFFORT = "low"
+# Metadata triage over same-firm titles: a fast codex 5.6 model at medium effort
+# (model revamp 2026-07-10; the earlier claude/haiku/low default was never
+# user-approved and is removed). Overridable via the CLI flags.
+DEFAULT_ENGINE = "codex"
+DEFAULT_MODEL = "gpt-5.6-luna"
+DEFAULT_EFFORT = "medium"
 
 # Same failure modes worth catching as the run pipeline (unparseable/contract-
 # breaking output after repair retries, or a non-zero engine exit): the scout
@@ -358,7 +359,11 @@ def main() -> int:
         help="path to write the per-firm reasoning sidecar (default: alongside --out)",
     )
     parser.add_argument("--engine", choices=("claude", "codex"), default=DEFAULT_ENGINE)
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="model (default haiku for claude)")
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"model (default {DEFAULT_MODEL}; codex allowlist member or claude model)",
+    )
     parser.add_argument("--effort", default=DEFAULT_EFFORT)
     args = parser.parse_args()
 

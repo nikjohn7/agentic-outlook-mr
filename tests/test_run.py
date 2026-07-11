@@ -189,9 +189,12 @@ class ResolveEngineSettingsTest(unittest.TestCase):
     def test_claude_passes_model_and_effort_through(self) -> None:
         self.assertEqual(("fable", "max"), resolve_engine_settings("claude", "fable", "max"))
 
-    def test_codex_pins_model_and_rejects_overrides(self) -> None:
+    def test_codex_defaults_model_and_accepts_the_allowlist(self) -> None:
         self.assertEqual(("gpt-5.5", "high"), resolve_engine_settings("codex", None, "high"))
         self.assertEqual(("gpt-5.5", "low"), resolve_engine_settings("codex", "gpt-5.5", "low"))
+        self.assertEqual(
+            ("gpt-5.6-sol", "high"), resolve_engine_settings("codex", "gpt-5.6-sol", "high")
+        )
         with self.assertRaises(ValueError):
             resolve_engine_settings("codex", "o3", "high")
 
@@ -202,6 +205,16 @@ class ResolveEngineSettingsTest(unittest.TestCase):
             resolve_engine_settings("claude", "fable", "minimal")
         with self.assertRaises(ValueError):
             resolve_engine_settings("codex", None, "max")
+
+    def test_codex_rejects_minimal_for_every_model(self) -> None:
+        # The codex floor is `low`; minimal is never accepted, not even on gpt-5.5.
+        for model in (None, "gpt-5.5", "gpt-5.6-luna"):
+            with self.assertRaises(ValueError):
+                resolve_engine_settings("codex", model, "minimal")
+        self.assertEqual(("gpt-5.5", "low"), resolve_engine_settings("codex", None, "low"))
+        self.assertEqual(
+            ("gpt-5.6-luna", "xhigh"), resolve_engine_settings("codex", "gpt-5.6-luna", "xhigh")
+        )
 
     def test_model_and_effort_reach_the_engine_command(self) -> None:
         commands: list[list[str]] = []
@@ -317,6 +330,80 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
         # the placeholder was substituted (no literal token leaks through).
         self.assertIn("MEMORY-LEDGER-MARKER", prompts[0])
         self.assertNotIn("{{memory}}", prompts[0])
+
+    def _verdict_runner(self, prompts: list[str]):
+        verdicts_json = json.dumps(
+            {
+                "verdicts": [
+                    {
+                        "index": 0,
+                        "supports_view": "pass",
+                        "forward_looking": "pass",
+                        "asset_match": "pass",
+                        "evidence_strength": "decisive",
+                        "note": "",
+                    }
+                ]
+            }
+        )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            prompts.append(prompt)
+            return subprocess.CompletedProcess(command, 0, stdout=verdicts_json, stderr="")
+
+        return runner
+
+    def test_checker_context_off_attaches_no_context(self) -> None:
+        prompts: list[str] = []
+        _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=self._verdict_runner(prompts),
+            snapshot_text="Before.\n\nWe are overweight the segment strongly.\n\nAfter.",
+        )
+        self.assertNotIn('"evidence_context"', prompts[0])
+        self.assertNotIn('"context_unreliable"', prompts[0])
+
+    def test_checker_context_clean_attaches_text_window(self) -> None:
+        prompts: list[str] = []
+        _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=self._verdict_runner(prompts),
+            checker_context=True,
+            snapshot_text=(
+                "Macro framing paragraph here.\n\n"
+                "We are overweight the segment. Fundamentals stay supportive.\n\n"
+                "A closing paragraph on rates."
+            ),
+        )
+        self.assertIn('"evidence_context"', prompts[0])
+        self.assertIn("Macro framing paragraph", prompts[0])
+        self.assertNotIn('"context_unreliable"', prompts[0])
+
+    def test_checker_context_scrambled_page_attaches_visual_flag(self) -> None:
+        prompts: list[str] = []
+        _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=self._verdict_runner(prompts),
+            native_source_path=Path("/tmp/doc.pdf"),
+            checker_context=True,
+            snapshot_text="Before.\n\nWe are overweight the segment strongly.\n\nAfter.",
+            scrambled_pages=frozenset({3}),
+        )
+        self.assertIn('"context_unreliable"', prompts[0])
+        # No trustworthy text is shipped for a degraded page.
+        self.assertNotIn('"evidence_context"', prompts[0])
 
     def test_check_candidates_engine_error_degrades_to_failure_record(self) -> None:
         def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:

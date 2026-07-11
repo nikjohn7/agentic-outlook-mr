@@ -8,7 +8,7 @@ across runs by the 20-items-per-run cap). It NEVER modifies any run output.
 
     .venv/bin/python -m src.crosscheck \\
         --outputs runs/a/output.csv runs/b/output.csv \\
-        --out-dir tmp/crosscheck [--engine claude --model haiku --effort medium]
+        --out-dir tmp/crosscheck [--engine claude --model sonnet --effort medium]
 
 What it does:
 
@@ -508,14 +508,17 @@ def run_crosscheck(
 
 
 def _resolve_model(engine: str, model: str | None) -> str | None:
-    """claude requires an explicit model; supply a light default when omitted.
-    codex is pinned to its own model, so leave it as passed (None)."""
+    """claude requires an explicit model; supply the default when omitted.
+    codex passes the model through unchanged — None → the adapter's default codex
+    model, a named codex model validated downstream (never silently dropped)."""
     if engine == "claude" and model is None:
-        return "haiku"
+        return "sonnet"
     return model
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The crosscheck CLI parser. Extracted so the no-flags conflict-pass defaults
+    (the model matrix) are testable."""
     parser = argparse.ArgumentParser(
         prog="python -m src.crosscheck",
         description="Post-run same-firm overlap cross-check across run outputs.",
@@ -532,7 +535,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--model",
         default=None,
-        help="model for the conflict pass (claude default: haiku; codex is pinned)",
+        help="model for the conflict pass (claude default: sonnet; codex: allowlist member, default gpt-5.5)",
     )
     parser.add_argument("--effort", default="medium", help="reasoning effort (default: medium)")
     parser.add_argument(
@@ -540,6 +543,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the review pass; every conflict falls back to needs_human",
     )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
 
     model = _resolve_model(args.engine, args.model)

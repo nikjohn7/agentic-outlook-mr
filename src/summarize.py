@@ -47,11 +47,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DIGEST_PROMPT = PROJECT_ROOT / "prompts" / "summarize_digest.md"
 FIRM_PAGE_PROMPT = PROJECT_ROOT / "prompts" / "summarize_firm_page.md"
 
-# Stage defaults (overridable by flags on every command, like every pipeline
-# step). Stage 1 is a high-volume reading/extraction job -> codex; stage 2 is
-# digest synthesis plus editorial prose -> claude/sonnet at high effort.
-DIGEST_ENGINE, DIGEST_MODEL, DIGEST_EFFORT = "codex", None, "medium"
-FIRMPAGE_ENGINE, FIRMPAGE_MODEL, FIRMPAGE_EFFORT = "claude", "sonnet", "high"
+# Both reader-summary stages produce client-facing prose, so both are pinned to
+# an EXACT Sonnet 4.6 model id rather than the `sonnet` alias: the alias re-points
+# over time and the client's approved voice must not silently drift (model revamp
+# 2026-07-10). The pinned id is verified against the installed claude CLI. Stage 1
+# (digest) reads documents; stage 2 (firmpages) synthesizes prose — both at high
+# effort. Overridable by flags on every command, like every pipeline step.
+PINNED_SONNET_ID = "claude-sonnet-4-6"
+DIGEST_ENGINE, DIGEST_MODEL, DIGEST_EFFORT = "claude", PINNED_SONNET_ID, "high"
+FIRMPAGE_ENGINE, FIRMPAGE_MODEL, FIRMPAGE_EFFORT = "claude", PINNED_SONNET_ID, "high"
 
 Runner = Callable[[list[str], str], object]
 
@@ -759,10 +763,12 @@ def bind_pages(pages_dir: Path, out_path: Path, *, title: str | None = None) -> 
 
 
 def _resolve_model(engine: str, model: str | None, default_model: str | None) -> str | None:
-    """codex is pinned to its own model; claude needs an explicit model, so fill
-    the stage default when the flag is omitted."""
+    """claude needs an explicit model, so fill the stage default when the flag is
+    omitted. codex passes the model through unchanged — None lets the adapter fill
+    DEFAULT_CODEX_MODEL, a named codex model is validated downstream (never
+    silently dropped)."""
     if engine == "codex":
-        return None
+        return model
     return model if model is not None else default_model
 
 
