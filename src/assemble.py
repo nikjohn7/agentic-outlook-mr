@@ -32,6 +32,40 @@ Arbiter = Callable[[list[ConfidenceResult]], tuple[int | None, str]]
 QuoteVisualVerifier = Callable[[CandidateCall, SourceInfo, Path | None], str]
 
 
+# The shared commentary-merge convention. Wherever two commentaries fold into one
+# row (same-view dedup here, and the firm-reconcile stage in src/reconcile.py),
+# each segment is labeled with its source title and locator and joined by this
+# separator, kept/primary segment first. Defined ONCE here and imported wherever
+# needed so the format can never drift between the two stages.
+COMMENTARY_MERGE_SEP = "  ||||  "
+
+
+def labeled_commentary_segment(title: str, locator: str, body: str) -> str:
+    """One `<Source Title> (<locator>): <commentary>` segment for a merged row.
+
+    A blank locator drops the parenthetical rather than rendering `()` — some
+    reconcile inputs carry the locator inside the commentary body instead of as a
+    separable field.
+    """
+    label = f"{title} ({locator})" if locator else title
+    return f"{label}: {body}"
+
+
+def merge_commentaries(segments: list[tuple[str, str, str]]) -> str:
+    """Join `(title, locator, body)` segments with COMMENTARY_MERGE_SEP, in the
+    order given (the kept/primary segment must be first)."""
+    return COMMENTARY_MERGE_SEP.join(
+        labeled_commentary_segment(title, locator, body) for title, locator, body in segments
+    )
+
+
+def _candidate_commentary_body(candidate: CandidateCall) -> str:
+    """The reasoning + evidence half of a merged segment. The locator is carried
+    by the segment label (see labeled_commentary_segment), so it is omitted here
+    to avoid stating it twice."""
+    return f"{candidate.reasoning} Evidence: {candidate.evidence_quote}."
+
+
 TARGET_OUTPUT_COLUMNS = (
     "Firm",
     "Date",
@@ -121,7 +155,24 @@ _ASSEMBLE_REASON_CODES = frozenset(
 _RUN_REASON_CODES = frozenset(
     {"json_parse_error", "engine_error", "checker_error", "ingest_error"}
 )
-ALL_REASON_CODES = _CONFIDENCE_REASON_CODES | _ASSEMBLE_REASON_CODES | _RUN_REASON_CODES
+# Emitted by the post-run firm-reconcile stage (src/reconcile.py) and folded into
+# the run's failure files at the combine step. Registered here so the mapping
+# test still enforces a client label for every code that can reach failures.csv.
+_RECONCILE_REASON_CODES = frozenset(
+    {
+        "merged_by_reconcile",
+        "superseded_by_reconcile",
+        # Phase 3 near-leaf pass (src/reconcile.py --near-leaf).
+        "near_leaf_merged",
+        "near_leaf_superseded",
+    }
+)
+ALL_REASON_CODES = (
+    _CONFIDENCE_REASON_CODES
+    | _ASSEMBLE_REASON_CODES
+    | _RUN_REASON_CODES
+    | _RECONCILE_REASON_CODES
+)
 
 # reason_code -> (What happened, Explanation), both written for a non-technical
 # reader. `What happened` is a short label; `Explanation` says in one plain
@@ -226,6 +277,23 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "The forecast change behind this call was too small to justify a view, "
         "so it was left out. No action needed.",
     ),
+    # Firm-reconcile outcomes (src/reconcile.py). Near the housekeeping end:
+    # superseded is a dropped-in-favour-of-a-newer-doc call an analyst may still
+    # want to eyeball; merged is pure de-duplication with the evidence visible in
+    # the reconciled row.
+    "superseded_by_reconcile": (
+        "Superseded — a newer document from this firm updated this view",
+        "Another document from the same firm took a different view on this asset, "
+        "and a more current (or otherwise preferred) call was kept in its place. "
+        "Review if the kept call looks wrong.",
+    ),
+    "near_leaf_superseded": (
+        "Merged into a related call — please review",
+        "This firm made views on two closely related assets (e.g. a broad category "
+        "and a specific part of it) that pointed different ways; they were read as "
+        "one collective call and the most relevant view was kept. Review that the "
+        "kept view is the right one.",
+    ),
     "duplicate_same_view": (
         "Duplicate — already covered",
         "The same view for this asset appears in another of this firm's "
@@ -237,7 +305,28 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "same piece of text; it was kept once to avoid double-counting. No "
         "action needed.",
     ),
+    "merged_by_reconcile": (
+        "Merged — same view stated in several documents",
+        "Several documents from this firm made the same call on this asset; they "
+        "were merged into one row and every document's wording is preserved in "
+        "that row's commentary. No action needed.",
+    ),
+    "near_leaf_merged": (
+        "Merged — same view on a closely related asset",
+        "This firm made the same call on two closely related assets (e.g. a broad "
+        "category and a specific part of it); they were merged into one row on the "
+        "most precise asset and every document's wording is preserved. No action "
+        "needed.",
+    ),
 }
+
+# Reason codes deliberately kept OUT of failures-client.csv (they stay in the
+# internal failures.csv for audit). A same-view duplicate's evidence is now
+# merged into the kept row's Full Commentary (Part A: citation-preserving
+# merges), so it is visibly in the output and there is nothing for the client to
+# review. Implemented as an explicit exclusion, NOT by deleting the label from
+# CLIENT_FAILURE_LABELS, so the mapping test still enforces a label for the code.
+_CLIENT_FILE_EXCLUDED_CODES = frozenset({"duplicate_same_view"})
 
 # Importance rank per reason code = its position in CLIENT_FAILURE_LABELS.
 _CLIENT_FAILURE_RANKS: dict[str, int] = {
@@ -362,7 +451,9 @@ class _Selected:
     display_source: SourceInfo
     member_count: int
     arbiter_note: str = ""
-    corroboration: str = ""
+    # Losing same-view candidates' commentary, as (title, locator, body) segments
+    # to fold into the kept row's Full Commentary (citation-preserving dedup).
+    merged_segments: tuple[tuple[str, str, str], ...] = ()
     # Set when a same-leaf implied call challenged the kept stated call
     # (deterministic stated-beats-implied resolution). Rendered on the kept row
     # and forces a review flag so a human sees the recommendation.
@@ -498,7 +589,7 @@ def assemble_candidates(
     for group in _group_scored(scored, group_map).values():
         views = {item.candidate.view for item in group}
         arbiter_note = ""
-        corroboration = ""
+        merged_segments: list[tuple[str, str, str]] = []
         challenge_note = ""
         if len(views) > 1:
             stated_resolution = _resolve_stated_vs_implied(group)
@@ -533,24 +624,25 @@ def assemble_candidates(
                 arbiter_note = reasoning
         else:
             selected = max(group, key=lambda item: item.confidence)
-            corroborators: list[str] = []
+            # Fold every losing same-view candidate's commentary into the kept
+            # row (within one source and across grouped companion sources — one
+            # convention). The failures.csv entry stays for audit, its note
+            # reworded to say the evidence was merged, not discarded.
             for item in group:
                 if item is selected:
                     continue
                 failures.append(
                     FailureRecord.from_candidate(
                         "duplicate_same_view",
-                        f"same view already kept from {selected.candidate.locator}",
+                        f"same view already kept from {selected.candidate.locator}; "
+                        "this evidence was merged into the kept row's commentary",
                         item.candidate,
                     )
                 )
-                if item.candidate.source_id != selected.candidate.source_id:
-                    dup_source = sources.get(item.candidate.source_id)
-                    title = dup_source.source if dup_source else item.candidate.source_id
-                    corroborators.append(f"{title} ({item.candidate.locator})")
-            if corroborators:
-                corroboration = (
-                    f"Corroborated by companion source: {'; '.join(corroborators)}."
+                dup_source = sources.get(item.candidate.source_id)
+                title = dup_source.source if dup_source else item.candidate.source_id
+                merged_segments.append(
+                    (title, item.candidate.locator, _candidate_commentary_body(item.candidate))
                 )
 
         source = sources.get(selected.candidate.source_id)
@@ -573,7 +665,7 @@ def assemble_candidates(
                 display_source=display_source,
                 member_count=member_count,
                 arbiter_note=arbiter_note,
-                corroboration=corroboration,
+                merged_segments=tuple(merged_segments),
                 challenge_note=challenge_note,
             )
         )
@@ -589,7 +681,7 @@ def assemble_candidates(
             taxonomy,
             arbiter_note=entry.arbiter_note,
             locator_source=entry.source.source if entry.member_count > 1 else "",
-            corroboration=entry.corroboration,
+            merged_segments=entry.merged_segments,
             sibling_note=sibling_notes.get(id(entry), ""),
             challenge_note=entry.challenge_note,
         )
@@ -914,9 +1006,11 @@ def write_run_outputs(
     show each firm/source title (absent -> the source_id is shown instead).
 
     Alongside `failures.csv` (unchanged, internal) a `failures-client.csv` is
-    written with the same rows but plain labels/explanations, grouped by label
-    and sorted most-important-first (CLIENT_FAILURE_LABELS order; stable within
-    a label, so per-source order is preserved inside each group).
+    written with plain labels/explanations, grouped by label and sorted
+    most-important-first (CLIENT_FAILURE_LABELS order; stable within a label, so
+    per-source order is preserved inside each group). `duplicate_same_view` rows
+    are excluded from the client file (their evidence is merged into the kept
+    row); they stay in the internal file for audit.
     """
     chunk_failures = chunk_failures or []
     run_dir = Path(output_dir)
@@ -928,8 +1022,12 @@ def write_run_outputs(
         FAILURE_COLUMNS,
         [failure.to_row() for failure in all_failures],
     )
+    # Exclude the merged-away same-view duplicates from the client file: their
+    # evidence is now folded into the kept row's commentary, so there is nothing
+    # for the client to review. They remain in the internal failures.csv above.
     client_failures = sorted(
-        all_failures, key=lambda failure: client_failure_rank(failure.reason_code)
+        (f for f in all_failures if f.reason_code not in _CLIENT_FILE_EXCLUDED_CODES),
+        key=lambda failure: client_failure_rank(failure.reason_code),
     )
     _write_csv(
         run_dir / "failures-client.csv",
@@ -1004,15 +1102,25 @@ def _output_row(
     *,
     arbiter_note: str = "",
     locator_source: str = "",
-    corroboration: str = "",
+    merged_segments: tuple[tuple[str, str, str], ...] = (),
     sibling_note: str = "",
     challenge_note: str = "",
 ) -> dict[str, str]:
     candidate = scored.candidate
     lookup = taxonomy.output_fields_for(candidate.sub_asset_class)
-    commentary = _commentary(candidate, locator_source=locator_source)
-    if corroboration:
-        commentary += f" {corroboration}"
+    if merged_segments:
+        # Citation-preserving same-view merge: the kept candidate's own segment
+        # first, then each folded-in loser, all labeled per the shared
+        # convention. locator_source is the kept source's title for a grouped row.
+        primary_title = locator_source or source.source
+        commentary = merge_commentaries(
+            [
+                (primary_title, candidate.locator, _candidate_commentary_body(candidate)),
+                *merged_segments,
+            ]
+        )
+    else:
+        commentary = _commentary(candidate, locator_source=locator_source)
     if scored.evidence_check.degraded:
         detail = scored.evidence_check.message or (
             "cited page used degraded evidence verification "

@@ -119,6 +119,41 @@ class AssembleTest(unittest.TestCase):
         self.assertEqual("a submitted quote", candidate_row["evidence_quote"])
         self.assertEqual("", chunk_row["evidence_quote"])
 
+    def test_same_source_same_view_dup_merges_commentary_and_leaves_client_file(self) -> None:
+        # Two same-view calls on one leaf from ONE document: kept once, but the
+        # losing candidate's evidence is folded into the kept row (Part A), and
+        # the duplicate_same_view row is kept internally yet dropped from the
+        # client file.
+        snapshots = {
+            ("source-1", "p1-5"): "EM equities are favored. " + "Context. " * 30,
+        }
+        candidates = [
+            _candidate(evidence_quote="EM equities are favored."),
+            _candidate(locator="p.9", evidence_quote="EM equities are favored."),
+        ]
+        result = assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots=snapshots,
+            page_counts={"source-1": 1},
+        )
+
+        self.assertEqual(1, len(result.output_rows))
+        commentary = result.output_rows[0]["Full Commentary"]
+        self.assertIn("  ||||  ", commentary)
+        # Same document, so the title repeats and only the locators differ.
+        self.assertIn("Shifting Sands (p.3): ", commentary)
+        self.assertIn("Shifting Sands (p.9): ", commentary)
+        self.assertEqual(["duplicate_same_view"], [f.reason_code for f in result.failures])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir, sources=self.sources)
+            internal = _read_csv(Path(temp_dir) / "failures.csv")
+            client = _read_csv(Path(temp_dir) / "failures-client.csv")
+        self.assertEqual(["duplicate_same_view"], [r["reason_code"] for r in internal])
+        self.assertEqual([], client)  # merged-away duplicate is not shown to the client
+
     def test_conflicting_duplicate_views_route_to_failures(self) -> None:
         candidates = [_candidate(view="O"), _candidate(view="U")]
         snapshots = {
@@ -247,21 +282,22 @@ class ClientFailuresFileTest(unittest.TestCase):
             internal = _read_csv(Path(temp_dir) / "failures.csv")
             client = _read_csv(Path(temp_dir) / "failures-client.csv")
 
+        # The internal file keeps every row in input order, including the two
+        # duplicate_same_view entries (audit trail).
         self.assertEqual(scrambled, [row["reason_code"] for row in internal])
+        # The client file is grouped/sorted most-important-first AND excludes the
+        # merged-away duplicate_same_view rows (their evidence is in the kept row).
         self.assertEqual(
             [
                 "Document could not be ingested",
                 "Conflicting views — none kept",
                 "Evidence could not be verified",
                 "Skipped — asset not on the list",
-                "Duplicate — already covered",
-                "Duplicate — already covered",
             ],
             [row["What happened"] for row in client],
         )
-        # Stable within a label: the two duplicate rows keep their input order.
-        self.assertEqual(
-            ["msg-0", "msg-4"], [row["Evidence / notes"] for row in client[-2:]]
+        self.assertNotIn(
+            "Duplicate — already covered", [row["What happened"] for row in client]
         )
 
     def test_unmapped_code_sorts_to_the_top(self) -> None:
@@ -590,7 +626,7 @@ class GroupedAssemblyTest(unittest.TestCase):
         }
         cls.page_counts = {"source-1": 1, "source-2": 1}
 
-    def test_same_view_across_grouped_docs_keeps_one_corroborated_row(self) -> None:
+    def test_same_view_across_grouped_docs_merges_both_commentaries(self) -> None:
         candidates = [_candidate(), _candidate(source_id="source-2", locator="p.7")]
 
         result = assemble_candidates(
@@ -608,12 +644,19 @@ class GroupedAssemblyTest(unittest.TestCase):
             "Quarterly Markets Review Q1 | Global Investment Outlook Q2", row["Source"]
         )
         self.assertEqual("3/10/2026 | 4/2/2026", row["Date"])
-        self.assertIn("Locator: p.3 (Quarterly Markets Review Q1).", row["Full Commentary"])
-        self.assertIn(
-            "Corroborated by companion source: Global Investment Outlook Q2 (p.7).",
-            row["Full Commentary"],
-        )
+        # Both companion documents' evidence is folded into the kept row using the
+        # shared labeled-segment convention, kept/primary segment first, joined by
+        # "  ||||  ". The bare "Corroborated by companion source" note is gone.
+        commentary = row["Full Commentary"]
+        self.assertNotIn("Corroborated by companion source", commentary)
+        self.assertIn("  ||||  ", commentary)
+        primary, companion = commentary.split("  ||||  ", 1)
+        self.assertTrue(primary.startswith("Quarterly Markets Review Q1 (p.3): "))
+        self.assertTrue(companion.startswith("Global Investment Outlook Q2 (p.7): "))
         self.assertEqual(["duplicate_same_view"], [f.reason_code for f in result.failures])
+        self.assertIn(
+            "merged into the kept row's commentary", result.failures[0].message
+        )
         # Reconciliation stays exact: every candidate is either kept or recorded.
         self.assertEqual(
             result.candidate_count, len(result.output_rows) + len(result.failures)
