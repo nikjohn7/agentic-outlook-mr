@@ -100,6 +100,17 @@ DEGRADED_PROSE_CAP = SCRAMBLED_PROSE_CAP
 SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP = 15
 SUBSEQUENCE_MAX_WINDOW_MULTIPLE = 3
 
+# Checker evidence-context window (opt-in --checker-context). Hard char cap on
+# the surrounding-text window handed to the checker so a wall-of-text page can
+# never blow up the prompt. The window is the quote's containing paragraph plus
+# one paragraph either side, then trimmed to this cap around the quote.
+EVIDENCE_CONTEXT_CHAR_CAP = 1200
+
+# Paragraph boundary in a snapshot: a blank line (a run of whitespace containing
+# at least two newlines). Per-page text is joined with "\n\n" in src/ingest, so
+# page breaks are also paragraph breaks.
+_PARAGRAPH_BREAK = re.compile(r"\n[^\S\n]*\n\s*")
+
 
 @dataclass(frozen=True, slots=True)
 class EvidenceCheck:
@@ -118,6 +129,26 @@ class EvidenceCheck:
     # Prose quote verification tier for audit: exact, normalized, subsequence,
     # visual, or key_tokens for legacy degraded scrambled/OCR fallback.
     quote_match: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceContext:
+    """Deterministic routing of a candidate's evidence-context window.
+
+    route:
+      "clean"    — the quote sits on a trustworthy page; `text` is the
+                   surrounding snapshot window (containing paragraph +/- one).
+      "degraded" — the surrounding text could not be trusted (subsequence match,
+                   or the cited page is scrambled/OCR); no text is shipped. The
+                   checker should open the page image instead. `cited_page` is
+                   the page to open (may be None when the locator names none).
+      "none"     — no context attached (non-prose, empty snapshot, or the quote
+                   could not be located); the candidate is judged as today.
+    """
+
+    route: str
+    text: str = ""
+    cited_page: int | None = None
 
 
 class EvidenceFailure(ValueError):
@@ -284,6 +315,125 @@ def evidence_passes(
         snapshot_text,
         visual_pages=visual_pages,
     )
+
+
+def evidence_context(
+    candidate: CandidateCall,
+    snapshot_text: str,
+    *,
+    scrambled_pages: frozenset[int] = frozenset(),
+    ocr_pages: frozenset[int] = frozenset(),
+) -> EvidenceContext:
+    """Route a candidate to a text context window, a visual fallback, or nothing.
+
+    Deterministic — the LLM never judges whether the text is trustworthy. Only
+    prose candidates are routed (table/visual evidence already has its own
+    visual verification route). The route reuses the quote gate's own matching
+    machinery to both classify the quote and locate it:
+
+    - CLEAN (quote_match exact/normalized AND the cited page is not scrambled or
+      OCR): extract the containing paragraph plus one either side from the same
+      string the quote matched in, bounded to EVIDENCE_CONTEXT_CHAR_CAP.
+    - DEGRADED (quote_match subsequence, or the cited page is scrambled/OCR):
+      never ship the scrambled text; return the cited page for a visual read.
+    - Fail-safe: a non-prose candidate, an empty snapshot, or a quote that
+      cannot be located returns route "none" and the candidate is judged as
+      today. This never raises.
+    """
+    if candidate.evidence_kind != "prose":
+        return EvidenceContext("none")
+    if not snapshot_text or not snapshot_text.strip():
+        return EvidenceContext("none")
+
+    cited_page = _cited_page(candidate.locator)
+    page_degraded = cited_page is not None and (
+        cited_page in scrambled_pages or cited_page in ocr_pages
+    )
+    if page_degraded:
+        # A flagged page routes visual regardless of how the quote matched: even
+        # an exact hit sits in column-interleaved / OCR text we must not trust.
+        return EvidenceContext("degraded", cited_page=cited_page)
+
+    check = _prose_evidence_passes(candidate, snapshot_text)
+    if not check.passed:
+        return EvidenceContext("none")
+    if check.quote_match in ("exact", "normalized"):
+        located = _locate_primary_span(candidate, snapshot_text, check.quote_match)
+        if located is None:
+            return EvidenceContext("none")
+        source, start, end = located
+        window = _extract_context_window(source, start, end)
+        return EvidenceContext("clean", text=window) if window else EvidenceContext("none")
+
+    # A subsequence match on an unflagged page: the verbatim guarantee was
+    # already relaxed, so the surrounding text is not trustworthy either.
+    return EvidenceContext("degraded", cited_page=cited_page)
+
+
+def _locate_primary_span(
+    candidate: CandidateCall, snapshot_text: str, quote_match: str
+) -> tuple[str, int, int] | None:
+    """Locate the primary (first) span, returning (source_string, start, end).
+
+    For an exact match the span is found in the raw snapshot; for a normalized
+    match, in the normalized snapshot (whitespace-collapsed, dehyphenated) — the
+    context window is extracted from whichever string the quote matched in.
+    Mirrors the first-span search in _spans_in_order (cursor starts at 0)."""
+    raw_spans = [span.strip() for span in candidate.evidence_spans if span.strip()]
+    if not raw_spans:
+        return None
+    if quote_match == "exact":
+        primary = raw_spans[0]
+        index = snapshot_text.find(primary)
+        return (snapshot_text, index, index + len(primary)) if index != -1 else None
+    source = normalize_quote_text(snapshot_text)
+    primary = normalize_quote_text(raw_spans[0])
+    if not primary:
+        return None
+    index = source.find(primary)
+    return (source, index, index + len(primary)) if index != -1 else None
+
+
+def _extract_context_window(source: str, start: int, end: int) -> str:
+    """The quote's containing paragraph plus one either side, capped.
+
+    Paragraphs are blank-line separated (a normalized single-line snapshot has
+    exactly one paragraph, so the whole line is the window before capping). The
+    cap keeps the quote fully covered and centered."""
+    paragraphs = _paragraphs(source)
+    containing = len(paragraphs) - 1
+    for index, (p_start, p_end) in enumerate(paragraphs):
+        if p_start <= start <= p_end:
+            containing = index
+            break
+    ctx_start = paragraphs[max(0, containing - 1)][0]
+    ctx_end = paragraphs[min(len(paragraphs) - 1, containing + 1)][1]
+    ctx_start, ctx_end = _cap_context_window(ctx_start, ctx_end, start, end)
+    return source[ctx_start:ctx_end].strip()
+
+
+def _paragraphs(source: str) -> list[tuple[int, int]]:
+    """(start, end) offsets of each blank-line-separated paragraph in source."""
+    starts = [0] + [match.end() for match in _PARAGRAPH_BREAK.finditer(source)]
+    ends = [match.start() for match in _PARAGRAPH_BREAK.finditer(source)] + [len(source)]
+    return list(zip(starts, ends))
+
+
+def _cap_context_window(
+    ctx_start: int, ctx_end: int, quote_start: int, quote_end: int
+) -> tuple[int, int]:
+    """Shrink [ctx_start, ctx_end] to at most the char cap while still covering
+    the quote span, centering the remaining budget on the quote."""
+    cap = EVIDENCE_CONTEXT_CHAR_CAP
+    if ctx_end - ctx_start <= cap:
+        return ctx_start, ctx_end
+    if quote_end - quote_start >= cap:
+        return quote_start, quote_end
+    slack = cap - (quote_end - quote_start)
+    new_start = max(ctx_start, quote_start - slack // 2)
+    new_end = min(ctx_end, new_start + cap)
+    new_start = max(ctx_start, new_end - cap)
+    return new_start, new_end
 
 
 def score_candidate(

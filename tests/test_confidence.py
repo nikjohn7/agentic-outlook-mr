@@ -17,7 +17,9 @@ from src.confidence import (
     SCRAMBLED_PROSE_CAP,
     SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP,
     SUBSEQUENCE_MAX_WINDOW_MULTIPLE,
+    EVIDENCE_CONTEXT_CHAR_CAP,
     VISUAL_UNVERIFIED_BY_TEXT,
+    evidence_context,
     evidence_passes,
     normalize_quote_text,
     score_candidate,
@@ -1095,6 +1097,142 @@ def _healthy_snapshot(quote: str) -> str:
     """Snapshot text containing the quote and passing the HTML read-quality floor."""
     filler = "Broader market commentary continues across the outlook document. "
     return quote + " " + filler * (MIN_HTML_SNAPSHOT_CHARS // len(filler) + 1)
+
+
+class EvidenceContextRoutingTest(unittest.TestCase):
+    """Deterministic routing of the checker evidence-context window."""
+
+    CLEAN_SNAPSHOT = (
+        "Intro paragraph about the macro backdrop and rates.\n\n"
+        "We are overweight EM equities given cheap valuations, "
+        "though we acknowledge idiosyncratic risks.\n\n"
+        "A closing paragraph about developed-market bonds."
+    )
+
+    def test_clean_exact_returns_text_window(self) -> None:
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.3"
+        )
+        context = evidence_context(candidate, self.CLEAN_SNAPSHOT)
+        self.assertEqual("clean", context.route)
+        self.assertIn("We are overweight EM equities", context.text)
+        # The neighbour paragraphs are included as context.
+        self.assertIn("macro backdrop", context.text)
+        self.assertIn("developed-market bonds", context.text)
+
+    def test_clean_normalized_match_returns_text_window(self) -> None:
+        # Extra internal whitespace/newlines: exact fails, normalized matches.
+        snapshot = "Lead-in.\n\nWe are   overweight\nEM equities this quarter.\n\nTail."
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.2"
+        )
+        context = evidence_context(candidate, snapshot)
+        self.assertEqual("clean", context.route)
+        self.assertIn("overweight EM equities", context.text)
+
+    def test_subsequence_match_routes_degraded_no_text(self) -> None:
+        # Injected sidebar noise between quote tokens: only the subsequence tier
+        # matches, so the surrounding text is not trustworthy.
+        snapshot = (
+            "Header.\n\nWe are overweight (see sidebar footnote twelve) "
+            "EM equities this quarter.\n\nFooter."
+        )
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.4"
+        )
+        context = evidence_context(candidate, snapshot)
+        self.assertEqual("degraded", context.route)
+        self.assertEqual(4, context.cited_page)
+        self.assertEqual("", context.text)
+
+    def test_scrambled_page_routes_degraded_even_when_exact(self) -> None:
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.3"
+        )
+        context = evidence_context(
+            candidate, self.CLEAN_SNAPSHOT, scrambled_pages=frozenset({3})
+        )
+        self.assertEqual("degraded", context.route)
+        self.assertEqual(3, context.cited_page)
+        self.assertEqual("", context.text)
+
+    def test_ocr_page_routes_degraded_even_when_exact(self) -> None:
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.3"
+        )
+        context = evidence_context(
+            candidate, self.CLEAN_SNAPSHOT, ocr_pages=frozenset({3})
+        )
+        self.assertEqual("degraded", context.route)
+        self.assertEqual(3, context.cited_page)
+
+    def test_unlocatable_quote_routes_none(self) -> None:
+        candidate = _candidate(
+            evidence_quote="This exact phrase appears nowhere in the source",
+            locator="p.3",
+        )
+        context = evidence_context(candidate, self.CLEAN_SNAPSHOT)
+        self.assertEqual("none", context.route)
+        self.assertEqual("", context.text)
+
+    def test_multi_span_windows_around_first_span(self) -> None:
+        snapshot = (
+            "Opening.\n\n"
+            "We are overweight emerging market equities given cheap valuations.\n\n"
+            "An unrelated paragraph sits in between over here.\n\n"
+            "Separately we trimmed duration modestly across the whole book.\n\n"
+            "Closing."
+        )
+        candidate = _candidate(
+            evidence_quote=[
+                "We are overweight emerging market equities given cheap valuations",
+                "we trimmed duration modestly across the whole book",
+            ],
+            locator="p.5",
+        )
+        context = evidence_context(candidate, snapshot)
+        self.assertEqual("clean", context.route)
+        # Window is around the primary (first) span, not the second.
+        self.assertIn("overweight emerging market equities", context.text)
+        self.assertNotIn("trimmed duration modestly", context.text)
+
+    def test_non_prose_candidate_routes_none(self) -> None:
+        candidate = _candidate(
+            evidence_kind="table",
+            evidence_quote="Regional grid places EM equities overweight",
+            locator="p.3 — Regional grid",
+        )
+        context = evidence_context(candidate, self.CLEAN_SNAPSHOT)
+        self.assertEqual("none", context.route)
+
+    def test_empty_snapshot_routes_none(self) -> None:
+        candidate = _candidate(evidence_quote="We are overweight EM equities")
+        self.assertEqual("none", evidence_context(candidate, "   ").route)
+
+    def test_window_is_capped(self) -> None:
+        # One huge paragraph (no blank lines): the window must be trimmed to the
+        # char cap while still covering the quote.
+        filler = "lorem ipsum dolor sit amet " * 300
+        snapshot = f"{filler} UNIQUEQUOTEMARKER stands here {filler}"
+        candidate = _candidate(evidence_quote="UNIQUEQUOTEMARKER stands here")
+        context = evidence_context(candidate, snapshot)
+        self.assertEqual("clean", context.route)
+        self.assertLessEqual(len(context.text), EVIDENCE_CONTEXT_CHAR_CAP)
+        self.assertIn("UNIQUEQUOTEMARKER stands here", context.text)
+
+    def test_member_snapshot_resolution(self) -> None:
+        # Grouped-source resolution: a candidate is located against the member
+        # source's own snapshot, not a companion's.
+        candidate = _candidate(
+            evidence_quote="We are overweight EM equities", locator="p.3"
+        )
+        companion_snapshot = "This companion document only discusses credit spreads."
+        self.assertEqual(
+            "none", evidence_context(candidate, companion_snapshot).route
+        )
+        self.assertEqual(
+            "clean", evidence_context(candidate, self.CLEAN_SNAPSHOT).route
+        )
 
 
 def _candidate(**overrides: object) -> CandidateCall:
