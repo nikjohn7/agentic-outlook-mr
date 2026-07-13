@@ -47,15 +47,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DIGEST_PROMPT = PROJECT_ROOT / "prompts" / "summarize_digest.md"
 FIRM_PAGE_PROMPT = PROJECT_ROOT / "prompts" / "summarize_firm_page.md"
 
-# Both reader-summary stages produce client-facing prose, so both are pinned to
-# an EXACT Sonnet 4.6 model id rather than the `sonnet` alias: the alias re-points
-# over time and the client's approved voice must not silently drift (model revamp
-# 2026-07-10). The pinned id is verified against the installed claude CLI. Stage 1
-# (digest) reads documents; stage 2 (firmpages) synthesizes prose — both at high
-# effort. Overridable by flags on every command, like every pipeline step.
-PINNED_SONNET_ID = "claude-sonnet-4-6"
-DIGEST_ENGINE, DIGEST_MODEL, DIGEST_EFFORT = "claude", PINNED_SONNET_ID, "high"
-FIRMPAGE_ENGINE, FIRMPAGE_MODEL, FIRMPAGE_EFFORT = "claude", PINNED_SONNET_ID, "high"
+# Both reader-summary stages produce client-facing prose, so each is pinned to an
+# exact model id rather than the `sonnet` alias: the alias re-points over time and
+# the client's approved voice must not silently drift. Stage 1 (digest) reads
+# documents; stage 2 (firmpages) synthesizes prose — both at high effort.
+# Overridable by flags on every command, like every pipeline step.
+PINNED_DIGEST_SONNET_ID = "claude-sonnet-5"
+PINNED_FIRMPAGE_SONNET_ID = "claude-sonnet-4-6"
+DIGEST_ENGINE, DIGEST_MODEL, DIGEST_EFFORT = "claude", PINNED_DIGEST_SONNET_ID, "high"
+FIRMPAGE_ENGINE, FIRMPAGE_MODEL, FIRMPAGE_EFFORT = "claude", PINNED_FIRMPAGE_SONNET_ID, "high"
 
 Runner = Callable[[list[str], str], object]
 

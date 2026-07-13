@@ -122,8 +122,8 @@ internal artifact optimized for faithful density, not prose. Hard grounding: sta
 only what the document/calls/memory contain; every figure/name/quote must appear
 in the source material; the stance summary must agree with the kept calls; no
 confidence numbers (house rule). Parsed by `summarize.parse_digest`. Default engine
-claude/claude-sonnet-4-6/high (model revamp 2026-07-10 — pinned Sonnet 4.6 id,
-client-facing prose, shared constant with the firm-page stage; overridable). Inputs (appended JSON):
+claude/claude-sonnet-5/high (pinned Sonnet 5 id, client-facing prose; overridable).
+Inputs (appended JSON):
 source_id, firm, document_title, url, date, native_source_path, kept_calls[].
 
 ### `summarize_firm_page.md` — v1.1 (2026-07-07)
@@ -144,9 +144,8 @@ described in-line as a divergence, never silently collapsed to one side. Length
 disciplined to ~500–800 words (one printed page). Single-source firms pass through
 the same call for a consistent voice. Parsed by `summarize.parse_firm_page` (requires
 the `# ` heading + a `## Sources` section). Default engine
-claude/claude-sonnet-4-6/high (model revamp 2026-07-10 — pinned Sonnet 4.6 id,
-the SAME shared constant as the digest stage so the client's approved voice
-cannot drift when the `sonnet` alias re-points; editorial prose); the agreed
+claude/claude-sonnet-4-6/high (pinned Sonnet 4.6 id for editorial prose; overridable);
+the digest stage uses its separate Sonnet 5 pin. The agreed
 escalation if a sample reads flat is claude/opus/medium. Inputs (appended JSON): firm, digests[], final_calls[] (with
 `unresolved`/`views`/`divergence` for unresolved keys), sources[].
 

@@ -1,6 +1,6 @@
 # Markets Recon / Allocator Pro POC — State
 
-_Last updated: 2026-07-11_
+_Last updated: 2026-07-13_
 
 ## Current State
 
@@ -50,7 +50,7 @@ and failures-client files to the client (plain-language labels for every
 internal reason_code, mapping test-enforced complete). A
 `.claude/settings.json` hook blocks commits containing Claude/Anthropic
 self-attribution — commit messages stay plain. Tests: `.venv/bin/python -m
-unittest discover -s tests` (the `-s tests` is required); 378 pass (1 skip).
+unittest discover -s tests` (the `-s tests` is required); 429 pass (1 skip).
 
 The run pipeline (`src/run.py`, ≤20 sources per run, `--out-root` to redirect
 artifacts) runs up to five LLM steps with per-step engine/model/effort flags:
@@ -96,8 +96,9 @@ month-year `01/MM`, quarter/season never fills; PDF-metadata tier excludes
 browser print-to-PDF captures by producer/creator signature; `--apply`
 rebuilds grouped `Date` cells and dedupes the `15/06/2026 | ×4` cosmetic),
 and `src/summarize.py`
-(reader summaries: per-source `digest` → deterministic reconcile →
-per-firm `firmpages` (claude/sonnet/high, no em dashes, v1.1) → `bind` to a
+(reader summaries: per-source `digest` (claude/claude-sonnet-5/high) →
+deterministic reconcile → per-firm `firmpages` (claude/claude-sonnet-4-6/high,
+no em dashes, v1.1) → `bind` to a
 python-docx Word binder; sample approved by Nikhil, opus/medium is the
 escalation if a page reads flat).
 
@@ -145,6 +146,19 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-13: Reader-summary model pins were split by stage: `digest` now
+  defaults to `claude/claude-sonnet-5/high`, while `firmpages` remains
+  `claude/claude-sonnet-4-6/high`. The model-matrix regression test and prompt
+  registry document the independent defaults; the full suite passes 429 tests
+  with one skip.
+- 2026-07-13: `docs/PIPELINE_RUNBOOK.md` written — the exact before/during/
+  after pipeline process (setup + model matrix, CSV intake → preflight →
+  scout → firm-whole splits, launch/monitor rules, per-source internals,
+  combine → datefill → reconcile order, multi-batch combine, human review
+  gates). Internal now; the client-facing "how to reproduce" doc derives
+  from it. Multi-batch rule recorded there: cross-batch final = ONE
+  `src.reconcile --near-leaf` pass over each batch's pre-reconcile DATED
+  concatenation (multiple `--outputs`), never over already-reconciled files.
 - 2026-07-11: Phase 3 near-leaf reconciliation built (ROADMAP v1.2 item 6 +
   the advisory portion of item 3; uncommitted on `phase-3`). Opt-in
   `src/reconcile.py --near-leaf` pass that runs AFTER the exact-leaf pass over
@@ -232,9 +246,10 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   codex/gpt-5.6-luna/high; crosscheck claude/sonnet/medium; reconcile scope
   gate claude/opus/medium (and `scripts/combine-98b.py`; effort raised
   low→medium same day); datefill primary
-  codex/gpt-5.6-luna/high + cascade claude/sonnet/medium; summarize digest AND
-  firmpages claude/`claude-sonnet-4-6`/high (ONE pinned Sonnet-4.6 constant so
-  client-voice can't drift when the `sonnet` alias re-points; id CLI-verified).
+  codex/gpt-5.6-luna/high + cascade claude/sonnet/medium; summarize digest
+  claude/`claude-sonnet-5`/high and firmpages
+  claude/`claude-sonnet-4-6`/high (separate pinned ids so client voice can't drift
+  when the `sonnet` alias re-points; ids CLI-verified).
   `run.py` argparse extracted to `build_parser()`; all step defaults filled so
   `python -m src.run --run-id X --sources ...` is fully specified. Suite
   385→394 (`tests/test_model_matrix.py`: per-tool no-flags→matrix regression
@@ -329,6 +344,25 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Next / Open
 
+- **Second client batch (145 rows) EXECUTING**: received as
+  `excel-file/additional-data.csv` (Firm+URL only); wired master
+  `client-runs/runs-13072026-145rows/additional-data (with local_file).csv` =
+  140 rows (2 GlobalX exact dupes + 3 drops: Victory Capital wrong-year-2025,
+  Angel Oak listing page, BNP Wealth cookie-wall HTML), slug/document-derived
+  titles, 38 files in `manual-sources/` (Wells Fargo PDF extracted from a
+  multipart capture). Preflight full/retry/confirm all clean. Four accepted
+  groups in `scout/group-notes.md` (Insight monthly+quarterly, Apollo
+  two-site, Coutts two-domain, Western Asset webcast summary+transcript;
+  Apollo/Coutts twins retitled to avoid source_id collisions). 14 firm-whole
+  10-row splits; command sheet `docs/run-records/145run-commands.md`. Splits
+  1–8 COMPLETE on the bare model matrix (937 kept / 395 failure rows; groups
+  resolved; no dead runs), digests 1–7 done, split-8 digest HELD (user:
+  limits low). Splits 9–14 pending via `AGENT-HANDOFF.md` (user runs:
+  `claude "Follow the instructions in client-runs/runs-13072026-145rows/
+  AGENT-HANDOFF.md exactly."`). Then per `docs/PIPELINE_RUNBOOK.md` §3–4:
+  combine → datefill → reconcile, and the cross-batch final = ONE
+  `reconcile --near-leaf` over `98b-combined/output.dated.csv` + batch 2's
+  dated combined → ONE final output.csv + ONE failures-client.csv.
 - **Phase 3 near-leaf output pending review** (uncommitted on `phase-3`,
   sibling not promoted): `client-runs/runs-07072026-98rows/reconcile-near-leaf/`
   holds the near-leaf reconciled `output.csv` + `reconcile-nearleaf-audit.csv` +

@@ -15,8 +15,8 @@ matching assertion here fails. The matrix (see the build instructions / STATE.md
     reconcile scope gate claude / opus        / medium
     datefill primary     codex / gpt-5.6-luna / high
     datefill cascade     claude / sonnet      / medium
-    summarize digest     claude / claude-sonnet-4-6 / high  (pinned id)
-    summarize firmpages  claude / claude-sonnet-4-6 / high  (pinned id, same const)
+    summarize digest     claude / claude-sonnet-5   / high  (pinned id)
+    summarize firmpages  claude / claude-sonnet-4-6 / high  (pinned id)
 """
 
 from __future__ import annotations
@@ -121,20 +121,17 @@ class DatefillMatrixTest(unittest.TestCase):
 
 
 class SummarizeMatrixTest(unittest.TestCase):
-    def test_both_stages_pinned_to_sonnet_46(self) -> None:
-        self.assertEqual("claude-sonnet-4-6", summarize.PINNED_SONNET_ID)
+    def test_digest_and_firmpages_have_independent_pinned_defaults(self) -> None:
+        self.assertEqual("claude-sonnet-5", summarize.PINNED_DIGEST_SONNET_ID)
+        self.assertEqual("claude-sonnet-4-6", summarize.PINNED_FIRMPAGE_SONNET_ID)
         self.assertEqual(
-            ("claude", "claude-sonnet-4-6", "high"),
+            ("claude", "claude-sonnet-5", "high"),
             (summarize.DIGEST_ENGINE, summarize.DIGEST_MODEL, summarize.DIGEST_EFFORT),
         )
         self.assertEqual(
             ("claude", "claude-sonnet-4-6", "high"),
             (summarize.FIRMPAGE_ENGINE, summarize.FIRMPAGE_MODEL, summarize.FIRMPAGE_EFFORT),
         )
-        # The point of pinning: digest and firmpages share ONE constant so the
-        # client's approved voice can't drift when the `sonnet` alias re-points.
-        self.assertEqual(summarize.DIGEST_MODEL, summarize.FIRMPAGE_MODEL)
-        self.assertIs(summarize.DIGEST_MODEL, summarize.PINNED_SONNET_ID)
 
 
 if __name__ == "__main__":
