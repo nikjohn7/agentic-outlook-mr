@@ -53,7 +53,7 @@ FIRM_PAGE_PROMPT = PROJECT_ROOT / "prompts" / "summarize_firm_page.md"
 # documents; stage 2 (firmpages) synthesizes prose — both at high effort.
 # Overridable by flags on every command, like every pipeline step.
 PINNED_DIGEST_SONNET_ID = "claude-sonnet-5"
-PINNED_FIRMPAGE_SONNET_ID = "claude-sonnet-4-6"
+PINNED_FIRMPAGE_SONNET_ID = "claude-sonnet-5"
 DIGEST_ENGINE, DIGEST_MODEL, DIGEST_EFFORT = "claude", PINNED_DIGEST_SONNET_ID, "high"
 FIRMPAGE_ENGINE, FIRMPAGE_MODEL, FIRMPAGE_EFFORT = "claude", PINNED_FIRMPAGE_SONNET_ID, "high"
 

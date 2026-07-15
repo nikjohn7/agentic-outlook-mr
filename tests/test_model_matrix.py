@@ -121,15 +121,15 @@ class DatefillMatrixTest(unittest.TestCase):
 
 
 class SummarizeMatrixTest(unittest.TestCase):
-    def test_digest_and_firmpages_have_independent_pinned_defaults(self) -> None:
+    def test_digest_and_firmpages_use_pinned_sonnet_5_defaults(self) -> None:
         self.assertEqual("claude-sonnet-5", summarize.PINNED_DIGEST_SONNET_ID)
-        self.assertEqual("claude-sonnet-4-6", summarize.PINNED_FIRMPAGE_SONNET_ID)
+        self.assertEqual("claude-sonnet-5", summarize.PINNED_FIRMPAGE_SONNET_ID)
         self.assertEqual(
             ("claude", "claude-sonnet-5", "high"),
             (summarize.DIGEST_ENGINE, summarize.DIGEST_MODEL, summarize.DIGEST_EFFORT),
         )
         self.assertEqual(
-            ("claude", "claude-sonnet-4-6", "high"),
+            ("claude", "claude-sonnet-5", "high"),
             (summarize.FIRMPAGE_ENGINE, summarize.FIRMPAGE_MODEL, summarize.FIRMPAGE_EFFORT),
         )
 
