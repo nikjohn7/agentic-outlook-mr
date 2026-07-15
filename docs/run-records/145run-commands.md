@@ -68,11 +68,20 @@ Split contents (firm-whole):
 
 ## After each split — digest (1 LLM call per source)
 
+Digest models alternate by split parity from split 7 onward (user decision
+2026-07-13, after a two-doc A/B found claude and luna equivalent on grounding;
+alternating spreads quota across providers). Odd splits use the code default
+(claude/claude-sonnet-5/high):
+
 ```bash
 .venv/bin/python -m src.summarize digest \
   --run client-runs/runs-13072026-145rows/145b-splitN \
   --out-dir client-runs/runs-13072026-145rows/digests/145b-splitN
 ```
+
+Even splits add `--engine codex --model gpt-5.6-luna --effort high`.
+Digests 1–6 predate the alternation (claude-sonnet-4-6); split 7's
+sonnet-4.6 originals are backed up at `digests-split7-sonnet46-backup/`.
 
 ## After all fourteen
 

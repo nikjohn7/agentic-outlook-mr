@@ -1,6 +1,6 @@
 # Markets Recon / Allocator Pro POC — State
 
-_Last updated: 2026-07-13_
+_Last updated: 2026-07-15_
 
 ## Current State
 
@@ -146,6 +146,38 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
 
 ## Recent Changes
 
+- 2026-07-15: Human review of the master-combined reconcile
+  (`client-runs/master-combined-15072026/`, the cross-batch 98b+145b
+  `--near-leaf` pass) — all 7 exact-pass and 15 near-leaf cross-view
+  supersessions plus the 1 needs-human key reviewed against member-row
+  commentary; PGIM Euro Govt Bonds and State Street Japan Duration verified
+  against the live sources (PGIM p.13 score legend: "Modest tightening" is the
+  4/5 POSITIVE excess-return rating — the O stands). 15 supersessions accepted;
+  4 overridden: Carmignac Europe Equities → UNCERTAIN (both rows the same doc
+  twice, evidence conditional, checker-unconfirmed O), AllianceBernstein
+  Duration → U (explicit "Underweight duration but tap income" beats FI-team
+  "holding duration"), Lion Global → Duration U (headline stance, conf 89;
+  canonical flipped from Duration - Short O), State Street Japan Duration → U
+  (source names Japan explicitly; the O inference is walked back in-document).
+  Triodos/Oil needs-human resolved to U (named reference scenario = base-case
+  declining path). Final: 3,630 output rows / 1,386 client failure rows.
+  Rationale: `review-decisions.md` in the run dir; pre-review backups
+  `*.pre-human-review.csv`; audit CSVs left as the unmodified machine record
+  (summary carries a human-review addendum). Overrides applied with reconcile
+  merge semantics preserved (max confidence, member-order Source/URL/Date
+  joins, primary-first commentary, new primary's per-row fields, review kept).
+- 2026-07-13: Digest-model A/B run over 2 split-7 docs (claude-sonnet-4-6 vs
+  codex/gpt-5.6-luna/high; both verified against the source PDFs including
+  chart-only data): both fully grounded, zero hallucinations; one minor
+  deviation each (sonnet asserted 2 stances beyond the kept calls, luna
+  softened one kept U to uncertain). Decision: digest models ALTERNATE by
+  split parity from split 7 — odd splits claude/claude-sonnet-5/high (code
+  default, bare command), even splits codex/gpt-5.6-luna/high — recorded in
+  `AGENT-HANDOFF.md` and `docs/run-records/145run-commands.md`. Split-7
+  digests were found incomplete (3/10 sources, not "done" as previously
+  recorded here); the sonnet-4.6 originals are backed up at
+  `client-runs/runs-13072026-145rows/digests-split7-sonnet46-backup/`, A/B
+  artifacts at `digests-luna-ab/145b-split7/`.
 - 2026-07-13: Reader-summary model pins were split by stage: `digest` now
   defaults to `claude/claude-sonnet-5/high`, while `firmpages` remains
   `claude/claude-sonnet-4-6/high`. The model-matrix regression test and prompt
@@ -266,18 +298,6 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   + 6 stated fills identical, only Morgan Stanley's one landing-page fill went
   fail-closed blank. A full judgment pass (like pilot-06's) would be needed to
   certify STATE-style "true recall / overreach" numbers.
-- 2026-07-10: Unpinned the codex model in `src/llm.py`. The single
-  `CODEX_MODEL = "gpt-5.5"` pin became an allowlist `CODEX_MODELS` (gpt-5.5 +
-  gpt-5.6-sol/terra/luna) with `DEFAULT_CODEX_MODEL = "gpt-5.5"`; `model=None`
-  emits a byte-identical command line, an off-list model raises. Codex effort
-  floor is `low` (`CODEX_EFFORTS = low/medium/high/xhigh`); `minimal` is rejected
-  for every codex model (user decision — never emitted; also cannot web-search).
-  Threaded as a flag through every codex call site (`run.py`, `datefill.py`,
-  `summarize.py`, `scout.py`, `preflight.py`, `crosscheck.py`, `reconcile.py`);
-  `summarize`'s `_resolve_model` no longer silently drops a passed codex model.
-  NO model default changed — plumbing only, until a 5.6 model is validated on a
-  real slice. CLI smoke (codex-cli 0.144.1): all three 5.6 ids reply `OK` at low;
-  `minimal` on a 5.6 model errors 400. Suite 378→385. Uncommitted on `phase-3`.
 - 2026-07-10: Phase 2 built (ROADMAP v1.2 item 1, marked built). Part A:
   `src/assemble.py` same-view dedup is now citation-preserving — the losing
   candidate's commentary folds into the kept row via the shared `"  ||||  "`
@@ -308,39 +328,16 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   22 conflicting by view; scope gate 41 same_claim/20 distinct_claims); 47
   merged, 5 superseded (recency×2, confidence×1 across 3 keys — PGIM/RBC GAM/
   Wellington), 44 kept_distinct, 0 needs_human.
-- 2026-07-10: Phase 1 built — `src/datefill.py` + `prompts/find_date.md` +
-  `tests/test_datefill.py` (45 tests; suite 313→358). Post-run date backfill,
-  crosscheck-shaped (report/patch + separate `--apply`, injectable runner,
-  mock-runner tests). Cascade validated live: codex/gpt-5.5/low (web search
-  via `-c tools.web_search=true`, NOT a `--search` flag) → claude/sonnet/low
-  on remaining blanks (prompt via stdin; tools WebSearch/WebFetch/Read, no
-  Bash). Ran for real over `98b-combined/output.csv`: 50 undated sources,
-  44 filled (6 stated-in-document, 37 PDF metadata, 1 landing page), 6
-  fail-closed blank (OCBC/LSEG no date; Merrill/BofA only quarter-partials;
-  Carmignac ambiguous `12/06/2026` numeric never-guessed; Allspring
-  image-only cover + one-off claude non-zero), 1 unmatched to master
-  (Aon/"Aon's" firm variant). The print-capture guard mattered: 16 manual
-  PDFs are browser Save-as-PDF (Skia/Chromium, macOS Quartz+Firefox) whose
-  CreationDate is a capture time — excluded by producer/creator signature.
-  `--apply` wrote `98b-combined/output.dated.csv` (SIBLING, not `output.csv`
-  — pending Nikhil review): 1221 Date cells changed (1195 filled + 26 RBC
-  grouped-date dedups), blank rows 1280→85 (the 6 blanks + Aon). ROADMAP
-  decision-11 note added (metadata fallback now allowed post-run; capture
-  dates still excluded). Everything uncommitted on `phase-3`.
-- 2026-07-09: Client feedback round analyzed (dates + firm-level merging) and
-  turned into build instructions: `tmp/phase1-date-backfill.md`
-  (`src/datefill.py` — post-run date backfill: sonnet-low agent finds stated /
-  landing-page dates, deterministic verification, fill order stated →
-  metadata → landing page → 01/MM from month-year partials; quarter/season
-  partials never fill) and `tmp/phase2-firm-reconcile.md`
-  (citation-preserving dedup in assemble + `src/reconcile.py`, the ROADMAP
-  v1.2 item-1 firm-reconcile: scope gate → recency → basis → band →
-  needs_human, never majority vote; `"  ||||  "` labeled commentary-merge
-  convention everywhere). Client decisions recorded: metadata publish dates
-  now allowed as fallback (supersedes part of decision 11; ROADMAP note
-  pending with the Phase-1 build), merged commentary labeled by source.
-  Measured gap driving Phase 1: 1280/1729 combined rows undated (51/91
-  sources, 43 of them PDFs; page-1-only worded-date scan is the bottleneck).
+- 2026-07-10: Phase 1 built and run for real — `src/datefill.py` +
+  `prompts/find_date.md` + `tests/test_datefill.py` (45 tests). Over
+  `98b-combined/output.csv`: 50 undated sources, 44 filled (6 stated, 37 PDF
+  metadata, 1 landing page), 6 fail-closed blank, 1 unmatched firm variant
+  (Aon/"Aon's"). The print-capture guard mattered: 16 manual PDFs are browser
+  Save-as-PDF whose CreationDate is a capture time — excluded by
+  producer/creator signature. `--apply` wrote the sibling
+  `98b-combined/output.dated.csv` (blank rows 1280→85). Client decision
+  recorded in ROADMAP (decision-11 note): metadata publish dates allowed as
+  post-run fallback, capture dates still excluded. Uncommitted on `phase-3`.
 
 ## Next / Open
 
@@ -356,8 +353,10 @@ python-docx; Tesseract 5.5.2 + Poppler for OCR.
   Apollo/Coutts twins retitled to avoid source_id collisions). 14 firm-whole
   10-row splits; command sheet `docs/run-records/145run-commands.md`. Splits
   1–8 COMPLETE on the bare model matrix (937 kept / 395 failure rows; groups
-  resolved; no dead runs), digests 1–7 done, split-8 digest HELD (user:
-  limits low). Splits 9–14 pending via `AGENT-HANDOFF.md` (user runs:
+  resolved; no dead runs), digests 1–6 done (claude-sonnet-4-6); split-7
+  (claude-sonnet-5) and split-8 (gpt-5.6-luna) digests launched 2026-07-13
+  under the new parity alternation, in flight. Splits 9–14 pending via
+  `AGENT-HANDOFF.md` (user runs:
   `claude "Follow the instructions in client-runs/runs-13072026-145rows/
   AGENT-HANDOFF.md exactly."`). Then per `docs/PIPELINE_RUNBOOK.md` §3–4:
   combine → datefill → reconcile, and the cross-batch final = ONE
