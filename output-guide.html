@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to read AI engine outputs</title>
+  <style>
+    :root {
+      --ink: #171515;
+      --muted: #5f625d;
+      --paper: #fffdfa;
+      --wash: #f3f0e9;
+      --line: #d7d1c4;
+      --olive: #596b46;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px 20px;
+      background: var(--wash);
+      color: var(--ink);
+      font-family: "Aptos", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+      line-height: 1.5;
+    }
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      padding: 32px 36px 40px;
+    }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    h2 {
+      font-size: 1.15rem;
+      margin: 32px 0 8px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid var(--ink);
+    }
+    p.lead { color: var(--muted); margin-top: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.92rem;
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+    }
+    th { background: var(--wash); }
+    td.col { white-space: nowrap; font-weight: 600; }
+    /* The failures labels can be long combined strings, so that column wraps
+       and is width-capped instead of pushing the Meaning column off-screen. */
+    table.wrap-first td.col { white-space: normal; width: 34%; }
+    code { background: var(--wash); padding: 1px 4px; border-radius: 3px; }
+    ul { padding-left: 20px; }
+    li { margin: 5px 0; }
+    .note { color: var(--muted); font-size: 0.9rem; }
+    .table-scroll { overflow-x: auto; }
+
+    @media print {
+      @page { margin: 14mm; }
+      body { padding: 0; background: #fff; font-size: 10.5pt; }
+      main { max-width: none; border: none; padding: 0; }
+      /* Let wide tables print in full instead of being clipped by the
+         on-screen scroll container. */
+      .table-scroll { overflow: visible; }
+      /* Keep headings with the content that follows, and never split a table
+         row across a page. */
+      h2 { break-after: avoid; }
+      tr, img { break-inside: avoid; }
+      thead { display: table-header-group; }  /* repeat header on each page */
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>How to read AI engine outputs</h1>
+  <p class="lead">A plain-language guide to the files each run produces.</p>
+
+  <p>
+    Each run reads a set of fund and asset-manager outlook documents and produces
+    two spreadsheets and one Word document. <code>output.csv</code> lists every
+    allocation call we kept, one row per call. <code>failures-client.csv</code>
+    lists everything we considered but did not keep, and why. The one-page firm
+    summaries Word document gives a readable, per-firm digest of each manager's
+    views. This guide explains the two spreadsheets and the actions to take.
+  </p>
+
+  <h2>output.csv — the calls we kept</h2>
+  <p>
+    Each row is one allocation call: a view on one sub-asset class, taken from one
+    source document, with the supporting text. The first ten columns are the core
+    output; the last six help you review it.
+  </p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Column</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td class="col">Firm</td><td>The asset manager that published the document.</td></tr>
+      <tr><td class="col">Date</td><td>The document's own publication date, as DD/MM/YYYY. It is read from the document itself, not from any source list; it is left blank when the document does not state a date.</td></tr>
+      <tr><td class="col">Source</td><td>The document title. When two related documents from the same firm are read together, their titles are joined with a <code>|</code>.</td></tr>
+      <tr><td class="col">URL</td><td>A link to the document (also joined with a <code>|</code> for grouped documents).</td></tr>
+      <tr><td class="col">Sub-Asset Class</td><td>The specific asset the call is about (e.g. "Emerging Market Equities"), taken from the approved asset list.</td></tr>
+      <tr><td class="col">Asset Class Category</td><td>The broad grouping the sub-asset sits under. Filled in automatically from the asset list.</td></tr>
+      <tr><td class="col">Canva Groupings</td><td>The display grouping for the sub-asset. Filled in automatically from the asset list.</td></tr>
+      <tr><td class="col">Asset Class</td><td>The mid-level asset class for the sub-asset. Filled in automatically from the asset list.</td></tr>
+      <tr><td class="col">View</td><td>The call: <code>O</code> overweight, <code>N</code> neutral, <code>U</code> underweight, <code>UNCERTAIN</code> when the document does not take a clear position.</td></tr>
+      <tr><td class="col">Full Commentary</td><td>The reasoning plus the exact supporting text (and its page or location), so you can see why the call was made and check it. When one call is supported by more than one document (or more than one place in a document), the commentary shows each source's wording as a separate labeled segment — <code>Source Title (locator): …</code> — joined by <code>&nbsp;||||&nbsp;</code>, so no supporting evidence is lost when calls are merged.</td></tr>
+      <tr><td class="col">confidence</td><td>A 0–100 score from fixed rules (evidence quality, how clearly the view is stated, whether a second reader confirmed it). It is <em>not</em> a model's own opinion of its confidence.</td></tr>
+      <tr><td class="col">band</td><td>The confidence score in words: High, Medium, or Low.</td></tr>
+      <tr><td class="col">review_flag</td><td>Whether a human should take a closer look. <code>review</code> means yes; <code>none</code> means it passed cleanly.</td></tr>
+      <tr><td class="col">basis</td><td>How the call was reached: <code>stated</code> (the document says it directly), <code>inferred</code> (we read it as a reasonable consequence of what the document says), or <code>forecast_delta</code> (derived from a change in a forecast).</td></tr>
+      <tr><td class="col">checker_strength</td><td>How strongly a second reader confirmed the evidence: decisive, adequate, or thin.</td></tr>
+      <tr><td class="col">call_language</td><td>How the view was expressed in the document — e.g. an explicit dial/grid, an explicit stance in prose, a directional lean, or an implied reading.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>failures-client.csv — what we considered but did not keep</h2>
+  <p>
+    This file records candidate calls that were set aside, and why. Most entries
+    are healthy: duplicates that were kept once, near-duplicate calls, or views
+    whose supporting text could not be verified and so were dropped rather than
+    kept unconfirmed. A large failures file is normal and usually means the
+    filtering is working. Rows are grouped by their <strong>What happened</strong>
+    label and sorted with the most important labels first: entries that may need
+    a decision or a re-run are at the top, and no-action housekeeping entries
+    (duplicates, too-small changes) are at the bottom. The table below lists the
+    labels in that same order:
+  </p>
+  <div class="table-scroll">
+  <table class="wrap-first">
+    <thead><tr><th>What happened</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="col">Document could not be ingested</td><td>A whole source couldn't be fetched or converted into text, so it was skipped while the rest of the run continued. Let us know so we can re-run it.</td></tr>
+      <tr><td class="col">Conflicting views — none kept</td><td>Two views disagreed and could not be reconciled automatically; neither was kept. A human should decide.</td></tr>
+      <tr><td class="col">Part of a document couldn't be read or processed / Second-reader check couldn't run / Skipped — source details missing</td><td>A processing issue affected part of a document. Let us know so we can re-run it.</td></tr>
+      <tr><td class="col">Suggestion — review recommended</td><td>An implied reading challenges the firm's stated call; the stated call was kept and the challenge recorded for review.</td></tr>
+      <tr><td class="col">Conflicting views — other call kept</td><td>Two documents disagreed; the more current/specific call was kept. Review if the kept call looks wrong.</td></tr>
+      <tr><td class="col">Evidence could not be verified (or "… verified visually")</td><td>The supporting text couldn't be confirmed — even after a visual page check, for the "visually" variant — so the call was dropped rather than kept unverified. A human can check the cited page.</td></tr>
+      <tr><td class="col">Evidence location missing</td><td>A chart/table call didn't record where it came from, so it couldn't be verified.</td></tr>
+      <tr><td class="col">Evidence points the other way / Evidence is about a different asset / Not a forward-looking view</td><td>A second reader found the cited text doesn't back the call as made, so it was dropped. A human can check the cited page.</td></tr>
+      <tr><td class="col">Skipped — asset not on the list</td><td>The asset named didn't match the approved list, so it was left out.</td></tr>
+      <tr><td class="col">Change too small to call</td><td>The forecast change behind the call was too small to justify a view.</td></tr>
+      <tr><td class="col">Superseded — a newer document from this firm updated this view</td><td>Another document from the same firm took a different view on this asset; a more current (or otherwise preferred) call was kept in its place. Review if the kept call looks wrong.</td></tr>
+      <tr><td class="col">Merged into a related call — please review</td><td>The firm made views on two closely related assets (e.g. a broad category and a specific part of it) that pointed different ways; they were read as one collective call and the most relevant view was kept. Review that the kept view is the right one.</td></tr>
+      <tr><td class="col">Duplicate — already covered</td><td>The same view for this asset appears in another of the firm's documents; kept once, with the other document's wording merged into the kept row's commentary. No action needed.</td></tr>
+      <tr><td class="col">Duplicate — same call, related asset</td><td>Repeats a view already kept for a closely related asset from the same text; kept once. No action needed.</td></tr>
+      <tr><td class="col">Merged — same view stated in several documents</td><td>Several of the firm's documents made the same call on this asset; they were merged into one row and every document's wording is preserved in that row's commentary. No action needed.</td></tr>
+      <tr><td class="col">Merged — same view on a closely related asset</td><td>The firm made the same call on two closely related assets (e.g. a broad category and a specific part of it); they were merged into one row on the most precise asset and every document's wording is preserved. No action needed.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">
+    The <strong>Explanation</strong> and <strong>Evidence / notes</strong> columns
+    in the file give the one-line meaning and the underlying text for each row.
+    Because the file is sorted most-important-first, start at the top: act when
+    you see "Document could not be ingested", "Conflicting views — none kept",
+    "Suggestion — review recommended", or a repeated "Part of a document
+    couldn't be…" for a document you expected calls from.
+  </p>
+
+  <h2>What to do with the output</h2>
+  <ul>
+    <li><strong>Review the flagged rows first.</strong> In <code>output.csv</code>, sort or filter on <code>review_flag = review</code> — these are the calls we think most warrant a human eye.</li>
+    <li><strong>Treat <code>UNCERTAIN</code> as a deliberate abstention, not an error.</strong> It means the document did not take a clear position on that asset; we chose not to invent one.</li>
+    <li><strong>Spot-check a call.</strong> Open the Full Commentary, read the quoted evidence, and confirm it against the cited page or location in the source document.</li>
+    <li><strong>Send back anything that looks wrong.</strong> If a kept call reads the wrong way, an expected call is missing, or a whole document produced no calls, let us know the Firm, Source, and Sub-Asset Class so we can look into it.</li>
+  </ul>
+</main>
+</body>
+</html>

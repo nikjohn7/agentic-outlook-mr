@@ -1,0 +1,365 @@
+{
+ "firm": "AllianceBernstein",
+ "exact_match": [
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Oil",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 6,
+   "gt_row": 18,
+   "model_confidence": "75",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "USD",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 9,
+   "gt_row": 17,
+   "model_confidence": "85",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Japan Govt Bonds",
+   "model_view": "N",
+   "gt_view": "U",
+   "view_agree": false,
+   "model_row": 16,
+   "gt_row": 27,
+   "model_confidence": "75",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "US Treasuries",
+   "model_view": "N",
+   "gt_view": "O",
+   "view_agree": false,
+   "model_row": 22,
+   "gt_row": 16,
+   "model_confidence": "75",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Europe Duration",
+   "model_view": "O",
+   "gt_view": "N",
+   "view_agree": false,
+   "model_row": 25,
+   "gt_row": 21,
+   "model_confidence": "75",
+   "model_band": "High",
+   "review_flag": "none"
+  }
+ ],
+ "model_only": [
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Alts - Private Markets General",
+   "view": "U",
+   "row": 7,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB is cautious on private markets because of opacity and possible excesses from rapid growth, while noting it does not expect a systemic crisis. Evidence: Private credit markets have also been in the spotlight, given their exposure to software companies. We share some of the concern in markets around the opacity of private markets, as well as potential excesses suggested by their explosive growth in recent years. Still, we think that any issues within private markets are unlikely to trigger a systemic crisis.. Locator: p.2."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Duration",
+   "view": "O",
+   "row": 8,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB expects markets to overprice tightening and for yields to fall over time, which is positive for broad duration. Evidence: Yields: We believe markets are likely to price too much tightening based on rising oil prices, which should bring yields down over time.. Locator: p.3 \u2014 'Forecast Overview' Central Narrative panel."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "China Govt Bonds",
+   "view": "U",
+   "row": 10,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts China 10-year bond yields rising from 2.00% in 2026 to 2.25% in 2027, implying a negative price view on China government bonds. Evidence: China \u2014 10-Yr. Bond Yield (%): 2026F 2.00; 2027F 2.25. Locator: p.5 \u2014 'China' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "CNY",
+   "view": "U",
+   "row": 11,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts the China FX rate versus USD rising from 7.10 to 7.20, implying CNY depreciation versus the dollar. Evidence: China \u2014 FX Rates vs. USD: 2026F 7.10; 2027F 7.20. Locator: p.5 \u2014 'China' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Euro Govt Bonds",
+   "view": "O",
+   "row": 12,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts Euro Area 10-year yields falling from 3.00% in 2026 to 2.60% in 2027, implying a positive view on euro government bonds. Evidence: Euro Area row, 10-Yr. Bond Yield (%): 2026F 3.00; 2027F 2.60. Locator: p.6 - 'Euro Area' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "EUR",
+   "view": "O",
+   "row": 13,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB's EUR/USD forecast rises from 1.16 to 1.17, implying euro appreciation against the dollar. Evidence: Euro Area row, FX Rates vs. USD: 2026F 1.16; 2027F 1.17. Locator: p.6 - 'Euro Area' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "UK Gilts",
+   "view": "O",
+   "row": 14,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts UK 10-year yields declining from 4.80% to 4.10%, implying a positive view on gilts. Evidence: UK row, 10-Yr. Bond Yield (%): 2026F 4.80; 2027F 4.10. Locator: p.7 - 'UK' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "GBP",
+   "view": "U",
+   "row": 15,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB's sterling forecast falls from 1.34 to 1.32 versus the dollar, implying GBP depreciation. Evidence: UK row, FX Rates vs. USD: 2026F 1.34; 2027F 1.32. Locator: p.7 - 'UK' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Emerging Markets - Sovereigns",
+   "view": "O",
+   "row": 17,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts EM ex China/Russia 10-year yields falling from 8.85% to 8.51%, implying a positive EM sovereign-bond view. Evidence: EM ex China/Russia row, 10-Yr. Bond Yield (%): 2026F 8.85; 2027F 8.51. Locator: p.8 - 'Emerging Markets' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Asia Fixed Income",
+   "view": "O",
+   "row": 18,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts Asian 10-year yields edging lower, implying a positive view on Asia fixed income. Evidence: Asia row, 10-Yr. Bond Yield (%): 2026F 5.71; 2027F 5.67. Locator: p.8 - 'Emerging Markets' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "LatAm Fixed Income",
+   "view": "O",
+   "row": 19,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts LatAm 10-year yields declining from 9.90% to 9.76%, implying a positive fixed-income view. Evidence: LATAM row, 10-Yr. Bond Yield (%): 2026F 9.90; 2027F 9.76. Locator: p.8 - 'Emerging Markets' forecast table."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Global Govt Bonds/SSAs",
+   "view": "O",
+   "row": 20,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts global long rates falling from 4.15% to 4.02%, implying a positive view on global government bonds. Evidence: Global row, Long Rates (%): 2026F 4.15; 2027F 4.02. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Developed Markets - Sovereigns",
+   "view": "O",
+   "row": 21,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts industrial-country long rates falling from 3.63% to 3.43%, implying a positive developed-market sovereign view. Evidence: Industrial Countries row, Long Rates (%): 2026F 3.63; 2027F 3.43. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Canada Govt Bonds",
+   "view": "O",
+   "row": 23,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts Canadian long rates falling from 3.25% to 3.00%, implying a positive view on Canada government bonds. Evidence: Canada row, Long Rates (%): 2026F 3.25; 2027F 3.00. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "CAD",
+   "view": "U",
+   "row": 24,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB's USD/CAD forecast rises from 1.40 to 1.42, implying Canadian-dollar depreciation. Evidence: Canada row, FX Rates vs. USD: 2026F 1.40; 2027F 1.42. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Australia Govt Bonds",
+   "view": "O",
+   "row": 26,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts Australian long rates declining from 4.75% to 4.25%, implying a positive view on Australia government bonds. Evidence: Australia row, Long Rates (%): 2026F 4.75; 2027F 4.25. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "AUD",
+   "view": "O",
+   "row": 27,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB's AUD/USD forecast rises from 0.75 to 0.77, implying Australian-dollar appreciation. Evidence: Australia row, FX Rates vs. USD: 2026F 0.75; 2027F 0.77. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Asia ex-China Fixed Income",
+   "view": "O",
+   "row": 28,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts Asia ex Japan and China long rates edging lower, implying a positive Asia ex-China fixed-income view. Evidence: Asia ex Japan & China row, Long Rates (%): 2026F 5.71; 2027F 5.67. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "India Govt Bonds",
+   "view": "O",
+   "row": 29,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts Indian long rates falling from 6.90% to 6.70%, implying a positive India government-bond view. Evidence: India row, Long Rates (%): 2026F 6.90; 2027F 6.70. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "BRL",
+   "view": "O",
+   "row": 30,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB's USD/BRL forecast falls from 5.40 to 5.20, implying Brazilian-real appreciation. Evidence: Brazil row, FX Rates vs. USD: 2026F 5.40; 2027F 5.20. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "CLP",
+   "view": "O",
+   "row": 31,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB's USD/CLP forecast falls from 900 to 875, implying Chilean-peso appreciation. Evidence: Chile row, FX Rates vs. USD: 2026F 900; 2027F 875. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Peso",
+   "view": "O",
+   "row": 32,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB's USD/MXN forecast falls from 18.8 to 18.5, implying Mexican-peso appreciation. Evidence: Mexico row, FX Rates vs. USD: 2026F 18.8; 2027F 18.5. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Polish Bonds",
+   "view": "O",
+   "row": 33,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts Polish long rates falling from 5.10% to 5.00%, implying a positive view on Polish bonds. Evidence: Poland row, Long Rates (%): 2026F 5.10; 2027F 5.00. Locator: p.10 - 'Forecast Table'."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "South Africa Fixed Income",
+   "view": "U",
+   "row": 34,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "AB forecasts South African long rates rising from 8.70% to 8.90%, implying a negative view on South Africa fixed income. Evidence: South Africa row, Long Rates (%): 2026F 8.70; 2027F 8.90. Locator: p.10 - 'Forecast Table'."
+  }
+ ],
+ "gt_only": [
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Japan Equities",
+   "view": "N",
+   "row": 19,
+   "source": "Global Macro Outlook: Second Quarter 2026",
+   "commentary": "Japan must import almost all its oil, creating direct vulnerability. But expansive fiscal policy is expected to offset the energy shock, allowing domestic demand to continue expanding. Wage and inflation data support further BOJ normalisation. AB forecasts 1.0% growth."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "China Equities",
+   "view": "N",
+   "row": 20,
+   "source": "Global Macro Outlook: Second Quarter 2026",
+   "commentary": "Growth stable at 4.5% with the first-ever sub-5% target. Oil reserves cushion the near-term blow, but weak domestic demand and near-deflationary conditions limit upside. PPI remains in deflationary territory. Policymakers focused on supply-side reforms rather than demand stimulus."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Cash/Money Markets",
+   "view": "N",
+   "row": 22,
+   "source": "Global Macro Outlook: Second Quarter 2026",
+   "commentary": "The easing cycle that characterised 2025 appears mostly spent. If energy prices stabilise, limited additional cuts in the US and UK could bring policy back to a neutral setting. Cash yields remain attractive near-term but offer no duration benefit."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Europe Equities",
+   "view": "U",
+   "row": 23,
+   "source": "Global Macro Outlook: Second Quarter 2026",
+   "commentary": "Higher energy prices will inevitably drag on growth; the hit could annihilate the positive impact from Germany's fiscal expansion. Growth revised down to 0.8% for 2026. Germany running behind fiscal implementation targets. Spain and periphery continue to outperform but at lower rates."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "UK Equities",
+   "view": "U",
+   "row": 24,
+   "source": "Global Macro Outlook: Second Quarter 2026",
+   "commentary": "Stagflationary backdrop with BoE on hold for an extended period. Unemployment already at 5.2% and rising, the economy has lost 75,000 jobs since January 2025, and business confidence is deteriorating. Growth forecast at just 0.7%. Rate at 3.75% remains restrictive."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "Emerging Markets Fixed Income",
+   "view": "U",
+   "row": 25,
+   "source": "Global Macro Outlook: Second Quarter 2026",
+   "commentary": "Volatile commodity prices transmitting into higher headline inflation across EM. Capital outflows, currency depreciation and tighter dollar-funding conditions compound pressure. EM ex-China/Russia inflation forecast at 6.2%. Easing cycles at risk of reversal. Oil-importing Asian economies and GCC-remittance-dependent markets most exposed."
+  },
+  {
+   "firm": "AllianceBernstein",
+   "leaf": "EM Basket",
+   "view": "U",
+   "row": 26,
+   "source": "Global Macro Outlook: Second Quarter 2026",
+   "commentary": "Risk-off dynamics and safe-haven USD flows driving broad EM currency weakness. Oil-importing Asian economies and GCC-remittance-dependent markets particularly exposed. Stronger dollar tightens financial conditions, especially for externally vulnerable economies."
+  }
+ ]
+}

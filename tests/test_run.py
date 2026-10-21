@@ -1,24 +1,32 @@
 from __future__ import annotations
 
+import csv
 import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from types import SimpleNamespace
 
 from src.ingest import Chunk, IngestedSource, SourceRecord
 from src.run import (
     analyze_source,
+    load_sources,
     resolve_engine_settings,
+    run_pipeline,
     _check_candidates,
     _chunk_content,
     _html_chunk_text,
     _make_arbiter,
+    _make_quote_visual_verifier,
     _resolve_groups,
 )
-from src.schemas import CandidateCall
+from src.schemas import CandidateCall, SourceInfo
+
+
+FIXTURE_PRINTED_PDF = Path(__file__).parent / "fixtures" / "printed_page.pdf"
 
 
 def _pdf_source() -> SourceRecord:
@@ -154,6 +162,25 @@ class AnalyzeSourceTest(unittest.TestCase):
         self.assertIn("json_parse_error; chunk skipped", memory)
 
 
+class LoadSourcesTest(unittest.TestCase):
+    def test_pilot_and_target_keywords_route_to_the_builtin_loaders(self) -> None:
+        self.assertEqual(7, len(load_sources("pilot")))
+        self.assertTrue(load_sources("target"))  # non-empty target batch
+
+    def test_arbitrary_path_loads_a_pilot_format_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "second-set.csv"
+            path.write_text(
+                "Firm,Date,Source,MR Link,local_file\n"
+                "Test Firm,4/2/2026,A Doc,https://example.test/a.html,\n",
+                encoding="utf-8",
+            )
+            sources = load_sources(str(path))
+
+        self.assertEqual(1, len(sources))
+        self.assertEqual("html", sources[0].source_type)
+
+
 class ResolveEngineSettingsTest(unittest.TestCase):
     def test_claude_requires_an_explicit_model(self) -> None:
         with self.assertRaises(ValueError):
@@ -162,9 +189,12 @@ class ResolveEngineSettingsTest(unittest.TestCase):
     def test_claude_passes_model_and_effort_through(self) -> None:
         self.assertEqual(("fable", "max"), resolve_engine_settings("claude", "fable", "max"))
 
-    def test_codex_pins_model_and_rejects_overrides(self) -> None:
+    def test_codex_defaults_model_and_accepts_the_allowlist(self) -> None:
         self.assertEqual(("gpt-5.5", "high"), resolve_engine_settings("codex", None, "high"))
         self.assertEqual(("gpt-5.5", "low"), resolve_engine_settings("codex", "gpt-5.5", "low"))
+        self.assertEqual(
+            ("gpt-5.6-sol", "high"), resolve_engine_settings("codex", "gpt-5.6-sol", "high")
+        )
         with self.assertRaises(ValueError):
             resolve_engine_settings("codex", "o3", "high")
 
@@ -175,6 +205,16 @@ class ResolveEngineSettingsTest(unittest.TestCase):
             resolve_engine_settings("claude", "fable", "minimal")
         with self.assertRaises(ValueError):
             resolve_engine_settings("codex", None, "max")
+
+    def test_codex_rejects_minimal_for_every_model(self) -> None:
+        # The codex floor is `low`; minimal is never accepted, not even on gpt-5.5.
+        for model in (None, "gpt-5.5", "gpt-5.6-luna"):
+            with self.assertRaises(ValueError):
+                resolve_engine_settings("codex", model, "minimal")
+        self.assertEqual(("gpt-5.5", "low"), resolve_engine_settings("codex", None, "low"))
+        self.assertEqual(
+            ("gpt-5.6-luna", "xhigh"), resolve_engine_settings("codex", "gpt-5.6-luna", "xhigh")
+        )
 
     def test_model_and_effort_reach_the_engine_command(self) -> None:
         commands: list[list[str]] = []
@@ -252,6 +292,118 @@ class CheckerAndArbiterStepTest(unittest.TestCase):
         # The house conventions were injected into the checker prompt.
         self.assertIn("A two-sided path nets to N.", prompts[0])
         self.assertNotIn("{{conventions}}", prompts[0])
+
+    def test_check_candidates_injects_rolling_memory(self) -> None:
+        prompts: list[str] = []
+        verdicts_json = json.dumps(
+            {
+                "verdicts": [
+                    {
+                        "index": 0,
+                        "supports_view": "pass",
+                        "forward_looking": "pass",
+                        "asset_match": "pass",
+                        "evidence_strength": "decisive",
+                        "note": "",
+                    }
+                ]
+            }
+        )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            prompts.append(prompt)
+            return subprocess.CompletedProcess(command, 0, stdout=verdicts_json, stderr="")
+
+        verdict_map, failure = _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            memory_text="## Chunk p1-5\nSummary: MEMORY-LEDGER-MARKER covered EM positioning.\n",
+            conventions="A two-sided path nets to N.",
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=runner,
+        )
+
+        self.assertIsNone(failure)
+        # The source's whole-file rolling memory reached the checker prompt, and
+        # the placeholder was substituted (no literal token leaks through).
+        self.assertIn("MEMORY-LEDGER-MARKER", prompts[0])
+        self.assertNotIn("{{memory}}", prompts[0])
+
+    def _verdict_runner(self, prompts: list[str]):
+        verdicts_json = json.dumps(
+            {
+                "verdicts": [
+                    {
+                        "index": 0,
+                        "supports_view": "pass",
+                        "forward_looking": "pass",
+                        "asset_match": "pass",
+                        "evidence_strength": "decisive",
+                        "note": "",
+                    }
+                ]
+            }
+        )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            prompts.append(prompt)
+            return subprocess.CompletedProcess(command, 0, stdout=verdicts_json, stderr="")
+
+        return runner
+
+    def test_checker_context_off_attaches_no_context(self) -> None:
+        prompts: list[str] = []
+        _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=self._verdict_runner(prompts),
+            snapshot_text="Before.\n\nWe are overweight the segment strongly.\n\nAfter.",
+        )
+        self.assertNotIn('"evidence_context"', prompts[0])
+        self.assertNotIn('"context_unreliable"', prompts[0])
+
+    def test_checker_context_clean_attaches_text_window(self) -> None:
+        prompts: list[str] = []
+        _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=self._verdict_runner(prompts),
+            checker_context=True,
+            snapshot_text=(
+                "Macro framing paragraph here.\n\n"
+                "We are overweight the segment. Fundamentals stay supportive.\n\n"
+                "A closing paragraph on rates."
+            ),
+        )
+        self.assertIn('"evidence_context"', prompts[0])
+        self.assertIn("Macro framing paragraph", prompts[0])
+        self.assertNotIn('"context_unreliable"', prompts[0])
+
+    def test_checker_context_scrambled_page_attaches_visual_flag(self) -> None:
+        prompts: list[str] = []
+        _check_candidates(
+            _pdf_source(),
+            [_call_candidate()],
+            engine="codex",
+            model=None,
+            effort="high",
+            runner=self._verdict_runner(prompts),
+            native_source_path=Path("/tmp/doc.pdf"),
+            checker_context=True,
+            snapshot_text="Before.\n\nWe are overweight the segment strongly.\n\nAfter.",
+            scrambled_pages=frozenset({3}),
+        )
+        self.assertIn('"context_unreliable"', prompts[0])
+        # No trustworthy text is shipped for a degraded page.
+        self.assertNotIn('"evidence_context"', prompts[0])
 
     def test_check_candidates_engine_error_degrades_to_failure_record(self) -> None:
         def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
@@ -369,6 +521,244 @@ class GroupResolutionTest(unittest.TestCase):
 
         self.assertEqual([], groups)
         self.assertIn("proceeds ungrouped", warnings[0])
+
+
+class RunPipelineOutRootTest(unittest.TestCase):
+    """--out-root reroots both the run dir and the work dir; absent keeps the
+    default runs/<id> + work/<id> paths."""
+
+    def _source(self) -> SourceRecord:
+        return SourceRecord(
+            source_id="fixture-doc",
+            firm="Fixture Firm",
+            date="",
+            source="Fixture Outlook",
+            url="https://example.test/fixture",
+            resolved_url="https://example.test/fixture",
+            source_type="pdf",
+            local_path=FIXTURE_PRINTED_PDF,
+        )
+
+    def _runner(self):
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            # The checker prompt is the only one carrying native_source_path in
+            # its appended inputs; everything else is an analyze chunk call.
+            if "native_source_path" in prompt:
+                out = json.dumps(
+                    {
+                        "verdicts": [
+                            {
+                                "index": 0,
+                                "supports_view": "pass",
+                                "forward_looking": "pass",
+                                "asset_match": "pass",
+                                "evidence_strength": "decisive",
+                                "note": "",
+                            }
+                        ]
+                    }
+                )
+            else:
+                out = _candidate_json("p1-1")
+            return subprocess.CompletedProcess(command, 0, stdout=out, stderr="")
+
+        return runner
+
+    def test_out_root_reroots_run_and_work_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            out_root = Path(temp_dir) / "client-runs" / "batch"
+            result, _failures, run_dir = run_pipeline(
+                sources=[self._source()],
+                run_id="pf-01",
+                engine="claude",
+                model="fable",
+                effort="high",
+                runner=self._runner(),
+                out_root=out_root,
+            )
+
+            self.assertEqual(out_root / "pf-01", run_dir)
+            self.assertTrue((out_root / "pf-01" / "output.csv").exists())
+            self.assertTrue((out_root / "work" / "pf-01" / "fixture-doc").is_dir())
+            # Nothing leaked into the default trees.
+            self.assertFalse((Path(temp_dir) / "runs").exists())
+            self.assertFalse((Path(temp_dir) / "work").exists())
+
+    def test_default_paths_are_runs_and_work(self) -> None:
+        import os
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cwd = os.getcwd()
+            os.chdir(temp_dir)
+            try:
+                _result, _failures, run_dir = run_pipeline(
+                    sources=[self._source()],
+                    run_id="pf-02",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    runner=self._runner(),
+                )
+            finally:
+                os.chdir(cwd)
+
+            self.assertEqual(Path("runs") / "pf-02", run_dir)
+            self.assertTrue((Path(temp_dir) / "runs" / "pf-02" / "output.csv").exists())
+            self.assertTrue((Path(temp_dir) / "work" / "pf-02" / "fixture-doc").is_dir())
+
+
+class RunPipelineIngestFaultToleranceTest(unittest.TestCase):
+    def _source(self, source_id: str, title: str) -> SourceRecord:
+        return SourceRecord(
+            source_id=source_id,
+            firm="Fixture Firm",
+            date="",
+            source=title,
+            url=f"https://example.test/{source_id}",
+            resolved_url=f"https://example.test/{source_id}",
+            source_type="pdf",
+            local_path=FIXTURE_PRINTED_PDF,
+        )
+
+    def test_one_ingest_failure_does_not_sink_multi_source_run(self) -> None:
+        good = self._source("good-doc", "Good Outlook")
+        bad = self._source("bad-doc", "Bad Outlook")
+
+        def fake_snapshot(source: SourceRecord, work_dir: Path) -> IngestedSource:
+            source_dir = Path(work_dir) / source.source_id
+            source_dir.mkdir(parents=True, exist_ok=True)
+            if source.source_id == "bad-doc":
+                raise RuntimeError("playwright ERR_NAME_NOT_RESOLVED")
+            snapshot_path = source_dir / "snapshot.txt"
+            snapshot_path.write_text("We are overweight the segment.", encoding="utf-8")
+            native_path = source_dir / "native.pdf"
+            native_path.write_bytes(b"%PDF fixture")
+            return IngestedSource(
+                source=source,
+                snapshot_text_path=snapshot_path,
+                native_source_path=native_path,
+                chunks=[Chunk(chunk_id="p1-1", locator="p.1", source_path=native_path)],
+                page_count=1,
+            )
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            if "native_source_path" in prompt:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "verdicts": [
+                                {
+                                    "index": 0,
+                                    "supports_view": "pass",
+                                    "forward_looking": "pass",
+                                    "asset_match": "pass",
+                                    "evidence_strength": "decisive",
+                                    "note": "",
+                                }
+                            ]
+                        }
+                    ),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=json.dumps(
+                    {
+                        "summary": "one supported view",
+                        "candidates": [
+                            {
+                                "source_id": "good-doc",
+                                "chunk_id": "p1-1",
+                                "sub_asset_raw": "EM equities",
+                                "sub_asset_class": "Emerging Markets Equities",
+                                "taxonomy_match": "exact",
+                                "view": "O",
+                                "call_language": "explicit_stance",
+                                "evidence_kind": "prose",
+                                "evidence_quote": "We are overweight the segment.",
+                                "locator": "p.1",
+                                "reasoning": "The source states an overweight.",
+                                "conflict": False,
+                            }
+                        ],
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            out_root = Path(temp_dir) / "out"
+            with patch("src.run.create_snapshot", side_effect=fake_snapshot):
+                result, failures, run_dir = run_pipeline(
+                    sources=[good, bad],
+                    run_id="ingest-fault",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    runner=runner,
+                    out_root=out_root,
+                )
+            with (run_dir / "output.csv").open(newline="", encoding="utf-8") as handle:
+                output_rows = list(csv.DictReader(handle))
+            with (run_dir / "failures.csv").open(newline="", encoding="utf-8") as handle:
+                failure_rows = list(csv.DictReader(handle))
+            client_text = (run_dir / "failures-client.csv").read_text(encoding="utf-8")
+            manifest = (run_dir / "manifest.md").read_text(encoding="utf-8")
+
+        self.assertEqual(1, len(result.output_rows))
+        self.assertEqual(1, len(output_rows))
+        self.assertEqual("bad-doc", failures[0].source_id)
+        ingest_rows = [row for row in failure_rows if row["reason_code"] == "ingest_error"]
+        self.assertEqual(1, len(ingest_rows))
+        self.assertEqual("bad-doc", ingest_rows[0]["source_id"])
+        self.assertIn("ERR_NAME_NOT_RESOLVED", ingest_rows[0]["message"])
+        self.assertIn("Document could not be ingested", client_text)
+        self.assertIn("bad-doc (pdf, 0 chunks): 0 candidates emitted [ingest-failed:", manifest)
+        self.assertIn("good-doc (pdf, 1p / 1 chunks): 1 candidates emitted", manifest)
+
+
+class QuoteVisualVerifierTest(unittest.TestCase):
+    def test_malformed_llm_response_fails_closed_and_updates_stats(self) -> None:
+        calls = 0
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            nonlocal calls
+            calls += 1
+            return subprocess.CompletedProcess(command, 0, stdout='{"judgment": "maybe"}', stderr="")
+
+        stats = {
+            "attempted": 0,
+            "present_verbatim": 0,
+            "present_paraphrase": 0,
+            "absent": 0,
+            "malformed": 0,
+        }
+        verifier = _make_quote_visual_verifier(
+            engine="claude",
+            model="sonnet",
+            effort="medium",
+            runner=runner,
+            stats=stats,
+        )
+        judgment = verifier(
+            _call_candidate(),
+            SourceInfo(
+                source_id="pimco-outlook",
+                firm="PIMCO",
+                date="",
+                source="Layered Uncertainty",
+                url="https://example.test/pimco",
+            ),
+            Path("/tmp/source.pdf"),
+        )
+
+        self.assertEqual("malformed", judgment)
+        self.assertEqual(3, calls)  # initial call + two repair attempts
+        self.assertEqual(1, stats["attempted"])
+        self.assertEqual(1, stats["malformed"])
 
 
 def _call_candidate() -> CandidateCall:

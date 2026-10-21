@@ -1,0 +1,14 @@
+Hi [Client Name],
+
+We’ve completed the full document batch.
+
+I’m sharing the final combined results with the three files below:
+1) output.csv — all extracted allocation calls (1,729 calls across 55 firms), one row per call with supporting evidence and page references.
+2) failures-client.csv — everything considered but not kept, with a plain explanation for each. The rows are sorted so the items most worth a closer look are at the top, with routine housekeeping items (such as duplicates) at the bottom.
+3) output-guide.pdf — a short guide explaining how to read both files.
+
+The one-page firm summaries document will follow tomorrow.
+
+If you spot anything that looks off (firm, document, or asset), please flag it and we can take a closer look.
+
+Nikhil

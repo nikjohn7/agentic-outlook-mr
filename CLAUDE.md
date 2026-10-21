@@ -28,7 +28,9 @@ class. `Target Output.csv` defines shape only — it is not a benchmark set.
 
 If the workbook conflicts with older notes, prefer the workbook unless the user says otherwise.
 
-Also read `POC_PLAN.md` — the agreed implementation plan and build order.
+Also read `POC_PLAN.md` — the agreed implementation plan and build order —
+and `ROADMAP.md` — the client's binding design decisions and the v1.2 / v2
+backlog.
 
 ## Current Pilot Run
 
@@ -141,13 +143,21 @@ Resolved (see `WORKBOOK_SCHEMA.md`):
 - ~~Is the workbook authoritative?~~ The taxonomy is "Locked" / authoritative;
   `Target Output.csv` is a format example, not ground truth.
 
+Resolved by the client's written answers, 2026-07-06 (full decisions in
+`ROADMAP.md`):
+
+- ~~Confirm the `View` legend (O/N/U/UNCERTAIN)?~~ Confirmed.
+- ~~Are page numbers required for all PDFs / what locator for HTML?~~ Current
+  capture (page + exact phrase for PDF; exact phrase(s) for HTML) confirmed
+  sufficient.
+- ~~What confidence threshold should trigger human review?~~ Client defers to
+  us; current bands stand.
+- Source scope: the provided link only; at most other same-firm sources
+  within the provided set.
+
 Still open:
 
-- Confirm the `View` legend (O/N/U/UNCERTAIN) with the client.
 - Is a fuller analyst-reviewed ground-truth set available for evaluation?
-- Are page numbers required for all PDFs, or only when extractable?
-- What locator should be used for HTML sources?
-- What confidence threshold should trigger human review?
 - Which model providers are acceptable for the POC?
 
 ## Definition Of Done

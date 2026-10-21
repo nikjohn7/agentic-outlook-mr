@@ -1,4 +1,10 @@
-"""Swappable headless LLM subprocess adapter."""
+"""Swappable headless LLM subprocess adapter.
+
+Both engines take a per-call model + reasoning effort. Codex is no longer pinned
+to one model: a codex call selects any model in ``CODEX_MODELS`` (default
+``DEFAULT_CODEX_MODEL``), exactly as a claude call selects a claude model. The
+codex effort floor is ``low`` — ``minimal`` is never emitted (see ``CODEX_EFFORTS``).
+"""
 
 from __future__ import annotations
 
@@ -14,8 +20,30 @@ from src.schemas import CandidateCall, CheckVerdict, SchemaError
 Runner = Callable[[list[str], str], subprocess.CompletedProcess[str]]
 
 
-# Codex runs are pinned to one model; only reasoning effort varies per task.
-CODEX_MODEL = "gpt-5.5"
+# The Codex CLI exposes several models; a task selects one exactly as it selects
+# a claude model. A codex call with model=None uses DEFAULT_CODEX_MODEL and emits
+# a command line byte-identical to the old single-pin behavior; a model outside
+# CODEX_MODELS raises. Adding the next model drop is a one-line edit here.
+CODEX_MODELS = ("gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
+DEFAULT_CODEX_MODEL = "gpt-5.5"
+
+# Reasoning efforts accepted for codex across every model. `minimal` is
+# deliberately excluded — the floor is `low` (project decision; minimal also
+# cannot web-search: API 400). gpt-5.5 additionally supports minimal at the CLI,
+# but we never emit it.
+CODEX_EFFORTS = ("low", "medium", "high", "xhigh")
+
+
+def resolve_codex_model(model: str | None) -> str:
+    """The effective codex model for a call: the default when omitted, otherwise
+    the validated allowlist member. Raises (listing the allowlist) on an off-list
+    model, in the explicit style of the former pin check."""
+    if model is None:
+        return DEFAULT_CODEX_MODEL
+    if model not in CODEX_MODELS:
+        valid = ", ".join(CODEX_MODELS)
+        raise ValueError(f"unknown codex model {model!r}; expected one of {valid}")
+    return model
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +61,7 @@ class EngineConfig:
     ) -> list[str]:
         args = list(self.command_prefix)
         if self.name == "codex":
-            args += ["-m", CODEX_MODEL]
+            args += ["-m", model or DEFAULT_CODEX_MODEL]
             if effort is not None:
                 args += ["-c", f'model_reasoning_effort="{effort}"']
         else:
@@ -47,7 +75,7 @@ class EngineConfig:
 
 ENGINE_CONFIGS = {
     "claude": EngineConfig("claude", ("claude", "-p"), ("low", "medium", "high", "xhigh", "max")),
-    "codex": EngineConfig("codex", ("codex", "exec"), ("minimal", "low", "medium", "high", "xhigh")),
+    "codex": EngineConfig("codex", ("codex", "exec"), CODEX_EFFORTS),
 }
 
 
@@ -93,10 +121,11 @@ def call(
     should read as prose rather than escaped JSON. The API port fills the same
     placeholders in the same prompt file.
 
-    model/effort select the underlying model and its reasoning effort. Codex is
-    pinned to CODEX_MODEL (passing anything else raises); claude accepts an
-    alias or full model name. When omitted, the engine CLI's own default
-    applies (the run CLI never omits them; tests may).
+    model/effort select the underlying model and its reasoning effort. Codex
+    accepts any model in CODEX_MODELS (model=None → DEFAULT_CODEX_MODEL; an
+    off-list model raises); claude accepts an alias or full model name. When
+    omitted, the engine CLI's own default applies (the run CLI never omits them;
+    tests may).
     """
     result = call_parsed(
         prompt_file,
@@ -134,8 +163,9 @@ def call_parsed(
     if config is None:
         valid = ", ".join(sorted(ENGINE_CONFIGS))
         raise ValueError(f"unknown LLM engine {engine!r}; expected one of {valid}")
-    if engine == "codex" and model not in (None, CODEX_MODEL):
-        raise ValueError(f"codex runs are pinned to {CODEX_MODEL}; got {model!r}")
+    if engine == "codex":
+        # Validate + normalize the model: off-list raises, None → default.
+        model = resolve_codex_model(model)
     if effort is not None and effort not in config.efforts:
         valid = ", ".join(config.efforts)
         raise ValueError(f"unknown {engine} effort {effort!r}; expected one of {valid}")
@@ -229,6 +259,21 @@ def parse_arbitration(raw_response: str) -> tuple[int | None, str]:
     if not isinstance(reasoning, str) or not reasoning.strip():
         raise ValueError("arbiter reasoning must be a non-empty string")
     return winning_index, reasoning
+
+
+def parse_quote_visual_verification(raw_response: str) -> str:
+    """Parse quote visual verifier response: {"judgment": "..."}."""
+    payload = json.loads(_extract_json(raw_response))
+    if not isinstance(payload, dict):
+        raise ValueError("quote visual verifier response must be a JSON object")
+    judgment = payload.get("judgment")
+    valid = {"present_verbatim", "present_paraphrase", "absent"}
+    if judgment not in valid:
+        raise ValueError(
+            "quote visual verifier judgment must be one of "
+            + ", ".join(sorted(valid))
+        )
+    return judgment
 
 
 def _default_runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:

@@ -1,0 +1,255 @@
+Mid-Year Credit Outlook 2026
+June 2026
+This material provides general information only and does not constitute investment advice or a recommendation.
+Forward-looking statements are not guarantees of future performance. Actual results may differ.
+
+Introduction High yield credit
+Coming into 2026, our central thesis was one of continued resilience The benign growth-and-disinflation story that anchored our initial
+in global fixed income markets. 2026 outlook for high yield bonds has been disrupted by the
+inflationary spillover of the Iran conflict. Yet the structural case for
+high yield remains firmly intact, in our view.
+This expectation was predicated on a stable New Fed chair Kevin Warsh arrives with a stated
+macroeconomic backdrop of above-trend US ‘regime change’ agenda – a smaller balance sheet,
+Absolute yields are elevated (see chart below), providing meaningful carry and a substantial breakeven
+growth, supported by fiscal stimulus and AI- less forward guidance, fewer Fed speakers and
+cushion. Default rates remain low and credit failures are mostly idiosyncratic, rather than reflecting sector-
+related investment, with the Federal Reserve tighter coordination with the Treasury – and a
+wide stress.4
+(Fed) delivering two or three US interest rate cuts clear preference for lower interest rates. This will
+to take the policy rate towards 3.25% by mid-year. be harder to deliver than at any point in the past The structure of the high yield market has also improved materially over past decades: the ICE BofA
+Europe was framed as steady. We anticipated 18 months as Warsh inherits an energy-driven Global High Yield Index is now tilted towards ‘BB’-rated bonds (the highest non-investment grade rating),
+long-end yields reflecting fiscal deficit concerns, inflation shock that monetary policy cannot duration sits near historic lows (at around three years) and the debt maturity wall has been pushed out to
+and credit spreads remaining broadly rangebound directly address. 2028 and beyond.5
+with modest near-term widening pressure from
+US consumer price inflation (CPI) rose to 3.8% in The bifurcation between disciplined public credit and stressed private credit – where defaults were
+heavy issuance.
+April, the highest since 2023 and up from 3.3% in estimated to be 9% in 2025 – has widened more starkly than anticipated.6 The collapse of First Brands
+In this context, our preference had been for higher- March, with core inflation at 2.8%.1 The Iran conflict and Tricolor, and subsequent fraud indictments brought against executives in both US businesses, lends
+quality credit, shorter-to-intermediate duration, is the proximate cause: gasoline prices are up support to ‘mark to myth’ valuation concerns. Since then, the non-traded business development company
+and selective exposure across sub-asset classes, nearly 50% since February.2 Inflationary pressure (BDC) structure for US private credit investments has been tested by redemption requests that have
+with strains in the private credit market flagged as is also visible in shelter, food and airfares. Rates forced some managers to restrict withdrawals. Structural guardrails have functioned as designed, but the
+a key contagion risk. futures are now assigning some probability that liquidity expectation embedded in the non-traded BDC wrapper has been meaningfully re-rated.
+interest rates will go up, not down, and real wages
+The path so far in 2026 has been more disruptive
+have turned negative.3 The outlook for US interest
+than our base case. The outbreak of conflict in Iran
+rates is unusually difficult to judge, and Fed
+in late February has driven Brent oil prices above
+credibility will be tested in real time.
+US$100 a barrel, raising headline inflation and so A looming maturity wall adds to software concerns in loans
+forcing the Fed into holding interest rates – markets In this mid-year outlook, we share our perspectives Value of US software sector debt maturing by year (US$bn)
+now price no further cuts in 2026. While credit on each of the main sub-asset classes that we
+spreads have remained remarkably resilient and focus on within fixed income and identify key 70
+stay at cycle tights, long-end core yields have risen. watch items for the second half of 2026.
+60
+50
+In this mid-year outlook, we 40
+share our perspectives on
+30
+each of the main sub-asset
+20
+classes that we focus on within
+fixed income and identify key 10
+watch items for the second
+0
+half of 2026. 2026 2027 2028 2029 2030 2031 2032 2033
+Leveraged loans High yield bonds
+Source: JP Morgan data, March 2026
+1 Bloomberg, as at 30 April 2026 4 JPMorgan Default Monitor, May 2026
+2 Bloomberg, as at 22 May 2026 5 Bloomberg, April 2026
+3 Bloomberg, as at 22 May 2026 6 Fitch Ratings, March 2026
+1 | Mid-Year Credit Outlook 2026 Mid-Year Credit Outlook 2026 | 2
+
+High yield credit (continued)
+Past performance is not indicative of future returns. Past performance is not indicative of future returns.
+A second narrative that we are watching is the potential for AI-driven disruption to software-as-a-service This is not a moment for high yield investors to be complacent. Dispersion is rising and contagion risk
+(SaaS) business models (the so-called ‘SaaSpocalypse’). High yield exposure to software is comparatively from private markets remains. Spreads – which are close to multi-decade tights – do not offer a generous
+modest: while the sector accounts for only 4.5% of the US high yield universe, its share of the US margin of safety.
+leveraged loans market is three times greater.7
+While the warning signs flagged at year-end are growing louder in private credit, public high yield
+The more material concern is a looming wall of debt maturing in 2028 and 2029 – much of it underwritten fundamentals so appear resilient. Investors are also compensated for risks with what we believe to be
+at low coupons and elevated leverage – that will require substantial refinancing (see chart below).8 We relatively compelling yields. This supports our constructive, if increasingly selective, stance on the asset
+continue to see selective opportunities, particularly within AI infrastructure, while remaining cautious on class.
+SaaS issuers where terminal economics appear inadequately priced.
+Credit spreads continue to trade at historically tight levels... … but yields remain elevated - and have ticked up
+Option-adjusted spread to worst by asset class, Jan 2010 to May 2026 (basis points) Yield to worst by asset class, Jan 2010 to May 2026 (%)
+1400 14%
+1200 12%
+1000 10%
+800 8%
+600 6%
+400 4%
+200 2%
+0 0
+2010 2012 2014 2016 2018 2020 2022 2024 2010 2012 2014 2016 2018 2020 2022 2024
+Global investment grade Emerging market investment grade Global investment grade Emerging market investment grade
+Global high yield Emerging market high yield Global high yield Emerging market high yield
+Source: Bloomberg, ICE BofA indices. 22 May 2026. ICE BofA Global Investment Grade Index; Global High Yield Source: Bloomberg, ICE BofA indices. 22 May 2026. ICE BofA Global Investment Grade Index; Global High Yield
+Index; Emerging Markets Corporate Investment Grade Index; Emerging Market Corporate High Yield Index. Index; Emerging Markets Corporate Investment Grade Index; Emerging Market Corporate High Yield Index.
+7 JP Morgan data, March 2026
+8 JP Morgan data, March 2026
+3 | Mid-Year Credit Outlook 2026 Mid-Year Credit Outlook 2026 | 4
+
+US investment grade credit Securitised products
+The US economy remains resilient, corporate earnings are strong, In the context of tight investment grade credit spreads, we believe
+balance sheets look fundamentally healthy and technical factors that securitised products offer a compelling, but increasingly
+remain generally supportive, despite minor signs of weakening. selective opportunity set heading into the second half of 2026.
+While this environment has been supportive of credit, two major shifts have emerged: a massive surge in Despite a subdued US housing market constrained by lack of affordability, mortgage market fundamentals
+AI-related data centre issuance and conflict in the Middle East. remain resilient. Residential mortgage-backed securities (RMBS), in particular, continue to provide stable
+income levels. Commercial mortgage-backed securities (CMBS) meanwhile appear to offer compelling
+Data centre financing is booming: it is estimated that investment grade debt issuance from the
+carry as fundamentals improve, in our view, although the recovery is uneven across sectors and further
+‘hyperscale’ cloud computing providers will exceed US$200bn this year, up from US$120bn in 2025.9 While
+spread tightening potential is limited.
+the market has largely digested this supply, some deals, such as Meta’s recent US$25bn offering, have
+required borrower concessions.10 We are monitoring this trend closely, remaining highly selective in the A divergence is emerging within asset-backed securities (ABS). Digital infrastructure ABS and CMBS are
+primary market for bonds issued by ‘hyperscalers’, to whom we maintain an underweight stance. benefiting from strong secular demand tied to the AI buildout (see rising issuance in the chart below),
+while consumer ABS is increasingly pressured by inflation and weaker lower-income borrowers. A similar
+Meanwhile, geopolitical events have raised the possibility of a US interest rate hike. While this materially
+split characterises the market for collateralised loan obligations (CLOs): senior ‘AAA’-rated tranches are
+raises the risk profile for investment grade credit, the market has largely looked past the conflict after the
+supported by strong demand, due to their attractive carry and structural protections, while lower-rated
+initial shock, focusing instead on stable economic data and strong corporate earnings. Indeed, investment
+tranches face challenges from increased credit dispersion and potential AI-driven credit deterioration.
+grade credit spreads are slightly tighter than at the start of the year.11
+Overall, supportive technical factors for securitised products – including deregulation, strong investor
+Given this backdrop, we retain our preference for high-quality corporate issuers with strong cash flow
+demand and elevated yields – are offset by headwinds from persistently high interest rates and emerging
+generation. We remain highly vigilant regarding elevated geopolitical risks and softening technical
+AI-related disruption risks.
+indicators, though.
+In this context, we maintain a preference for higher-quality assets and emphasise disciplined, bottom-
+up credit selection as macroeconomic and geopolitical uncertainties continue to shape market direction
+through the remainder of 2026.
+Given this backdrop, we retain
+our preference for high-quality
+corporate issuers with strong Securitising the engine rooms of AI
+Issuance of data centre ABS and CMBS (US$bn)
+cash flow generation. We remain
+highly vigilant regarding elevated 30
+Commercial mortgage-backed securities (CMBS)
+geopolitical risks and softening
+25
+technical indicators, though. Asset-backed securities (ABS)
+20
+15
+10
+5
+0
+2018 2020 2022 2024 Jan 2026
+9 Barbuscia, D., 21 May 2026: Big Tech’s AI Debt Binge Tests High-Grade Market, Barclays Says. Bloomberg
+10 Mutua, C., Gambale, M. & Gurumurthy, G., 30 April 2026: Meta Sells $35 Billion of Debt as Investor Worry, Fatigue Source: BofA Global Research, February 2026
+Builds. Bloomberg
+11 Bloomberg data, as at 22 May 2026
+5 | Mid-Year Credit Outlook 2026 Mid-Year Credit Outlook 2026 | 6
+
+Emerging market credit
+Contributors
+The structural case for emerging market credit remains intact, in Ross Pamphilon, David Kinsley,
+Chief Investment Officer Senior Portfolio Manager
+our view. Around 60% of the hard-currency universe is investment
+(Fixed Income)
+grade, leverage multiples sit below developed market peers, and Peter Schwab, CFA®,
+Liam Moore, CFA®, Senior Portfolio Manager
+default rates are expected to remain subdued.
+Portfolio Specialist
+Tony Trzinka,
+Stefan Balog, CFA®, Senior Portfolio Manager
+Portfolio Manager
+Further, high-quality corporate issuers trade wider The dominant near-term risk facing emerging Yvonne Tai,
+than their fundamentals warrant as valuations market credit, overall, remains the Middle East Co-Head of Global Credit Research
+are typically capped, in effect, by those of local conflict. The longer the Strait of Hormuz remains
+government bonds. Combined with negative effectively closed, the more second-order effects
+net supply and – in many emerging markets – surface; fertiliser supply chains, petrochemical
+supportive structural growth dynamics and easing margins and food-price transmission all bear
+monetary policy, we believe the asset class offers a monitoring. Important information
+compelling carry profile, overall.
+Also, monetary policy across emerging markets is
+As we highlighted earlier this year, emerging more mixed than it appeared at the start of 2026
+This material is intended for professional Impax Asset Management Ltd & Impax Asset
+markets’ return to favour is reflected in renewed as elevated oil prices complicate the disinflationary
+investors only. It provides general information Management (AIFM) are authorized and
+investor interest: investment flows into emerging path. Oil-exporting Colombia has raised interest
+only and does not constitute investment advice regulated by the Financial Conduct Authority.
+market fixed income strategies were positive in rates twice this year, for example. We still expect
+or a recommendation. Impax Asset Management Ireland Ltd is
+2025 after three years of net outflows. further interest rate cuts in Brazil, Turkey and
+authorised and regulated by the Central Bank
+selected other markets, however. This material is being provided for informational
+The picture for the rest of 2026 is nuanced. of Ireland (Reference No: C186651). Impax Asset
+purposes only. The material is not intended for
+Spreads are close to their tightest since 2007 In this context, we continue to favour high-quality Management GmbH is authorised and regulated
+use by persons in jurisdictions which prohibit
+with all-in yield, rather than spread compensation, credits and, given tight spreads, believe there by the Federal Financial Supervisory Authority of
+or restrict the distribution of the material and in
+doing most of the work in supporting investor is value in protecting against widening spreads. Germany (BaFin).
+certain countries, the material is provided upon
+demand. Nonetheless, in our view underlying Regional dispersion remains wide, supporting
+specific request. Under no circumstances should In the United Kingdom, this material is a financial
+credit quality is healthy, with strong bank and opportunities for active, bottom-up selection in
+the material, in whole or in part, be copied or promotion and has been approved by Impax Asset
+insurer results across the Middle East and Asia as our view.
+redistributed without consent from Impax. The Management Limited.
+well as manageable 2026 refinancing needs.
+material does not constitute a distribution, an
+The statements and opinions expressed are those
+offer, an invitation, recommendation or solicitation
+of the author, as of the date provided, and may
+to sell or buy any securities in any jurisdiction.
+not reflect current views. While the author has
+Impax Asset Management Group plc includes used reasonable efforts to obtain information
+Impax Asset Management Ltd, Impax Asset from reliable sources, we make no representations
+The longer the Strait of Hormuz remains
+Management (AIFM) Ltd., Impax Asset or warranties as to the accuracy, reliability or
+effectively closed, the more second-order
+Management Ireland Ltd, Impax Asset completeness of third-party information presented
+effects surface; fertiliser supply chains, Management LLC, Impax Asset Management herein. Any forward-looking statements or
+GmbH, and Impax Asset Management (Hong forecasts are based on assumptions and actual
+petrochemical margins and food-price
+Kong) Limited (together, “Impax”). results are expected to vary. References to specific
+transmission all bear monitoring. securities are for illustrative purposes only and
+Impax Asset Management Ltd, Impax Asset
+should not be considered as a recommendation to
+Management (AIFM) Ltd and Impax Asset
+buy or sell. This material may not be relied upon
+Management LLC are registered as investment
+as constituting any form of investment advice and
+advisers with the U.S. Securities and Exchange
+prospective investors are advised to ensure that
+Commission (“SEC”), pursuant the Investment
+they obtain appropriate independent professional
+Advisers Act of 1940 (“Advisers Act”). Registration
+advice before making any investment decision.
+with the SEC does not imply a certain level of skill
+or training. Past performance does not guarantee future
+results.
+7 | Mid-Year Credit Outlook 2026 Mid-Year Credit Outlook 2026 | 8
+
+Mid-Year Credit
+Outlook 2026
+Important Information, continued
+Nothing presented herein is intended to constitute investment
+advice and no investment decision should be made solely
+based on this information. Nothing presented should be
+construed as a recommendation to purchase or sell a
+particular type of security or follow any investment technique
+or strategy. Information presented herein reflects Impax Asset
+Management’s views at a particular time. Such views are to
+change at any point and Impax Asset Management shall not
+be obligated to provide any notice. Any forward-looking
+statements or forecasts are based on assumptions and actual
+results are expected to vary. While Impax Asset Management
+has used reasonable efforts to obtain information from
+reliable sources, we make no representations or warranties
+as to the accuracy, reliability or completeness of thirdparty
+information presented herein. No guarantee of investment
+performance is being provided and no inference to the
+contrary should be made.
+Impax is trademark of Impax Asset Management Group Plc.
+IMPAX ASSET MANAGEMENT
+Impax is a registered trademark in the EU, US, Hong Kong,
+and Australia. © Impax Asset Management LLC, Impax Asset  clientservices@impaxam.com
+Management Limited and/or Impax Asset Management
+(Ireland) Limited. All rights reserved. Impax Asset Management
+impaxam.com
+223a

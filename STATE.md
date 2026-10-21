@@ -1,272 +1,29 @@
-# Markets Recon / Allocator Pro POC — State
+# Markets Recon / Allocator Pro POC - State
 
-_Last updated: 2026-07-06_
+_Last updated: 2026-07-15_
 
 ## Current State
 
-POC for Markets Recon / Allocator Pro: ingest fund/asset-manager outlook sources
-(PDF/HTML) and produce reviewable sub-asset-class allocation calls (`O`/`N`/`U`/
-`UNCERTAIN`) with citations, against the locked taxonomy in `excel-file/Asset
-Class List - Locked.csv`. Full spec: `CLAUDE.md`, `POC_CONTEXT.md`,
-`WORKBOOK_SCHEMA.md`, `POC_PLAN.md`. Deterministic joins, lookups, and
-arithmetic (taxonomy, confidence, assembly) never route through a model;
-Haiku/Sonnet/Opus tiers are reserved for judgment-heavy extraction and review.
-
-The deterministic spine is `src/taxonomy.py` (exact 396-leaf validation +
-`grouped_block()` for prompt injection), `src/schemas.py` (LLM candidate
-contract), `src/confidence.py` (quote/table/visual evidence checks + rubric
-scoring, incl. per-source read-quality floors: PDF chars/page, HTML snapshot
-length, and a scrambled-page prose fallback that degrades to the key-token
-check with a confidence cap + review flag), `src/assemble.py`
-(`output.csv`/`failures.csv`/`manifest.md`), `src/ingest.py` (thin
-pilot/source loading, snapshots, chunk boundaries, visual-heavy detection,
-deterministic scrambled-page (column-interleave) detection, Playwright
-print-to-PDF capture of visual-heavy HTML),
-and `src/llm.py` (swappable headless `claude -p` / `codex exec`, with
-`{{name}}` template-var injection). Output rows are the 10 workbook columns
-plus `confidence`, `band`, `review_flag`, `basis`, and `checker_strength`;
-one-hot columns are intentionally omitted. A `.claude/settings.json` hook blocks git commits
-containing Claude/Anthropic self-attribution — commit messages stay plain.
-
-The pipeline runs up to four LLM steps, each with explicit per-step
-engine/model/effort flags (codex pinned to `gpt-5.5`; claude requires an
-explicit model): analyze (per-chunk extraction via `prompts/analyze_chunk.md`:
-injected taxonomy + conventions + brain examples + rolling `memory.md` +
-native chunk), a second-reader checker (`prompts/check_candidates.md`, one
-call per source, categorical verdicts plus `evidence_strength` feeding the
-deterministic rubric — never a self-confidence number; any `fail` verdict
-hard-fails the candidate, anything short of all-pass caps confidence at 74,
-`thin` caps below High, and `adequate` deducts deterministically, so High means
-a second model confirmed the evidence with enough force; default
-codex/gpt-5.5/high), a conflict arbiter
-(`prompts/arbitrate_conflict.md`, fires only on surviving view conflicts;
-default codex/gpt-5.5/medium), and a group-notes resolver
-(`prompts/resolve_groups.md`, only when `--group-notes` supplies analyst
-free-text pairing notes; default codex/gpt-5.5/low). The normative house
-rules live in `prompts/conventions.md`, injected into analyze, checker, and
-arbiter alike; `brain.md` carries worked examples + reasoning style,
-analyze-only. Both engine CLIs read PDF pages visually (codex renders pages
-to PNG itself), so engine routing is unconstrained by source type. All
-prompts are indexed in `prompts/REGISTRY.md`. The pilot set
-(`prev-excel/pilot.csv`) is now 7 docs / 2 grouped pairs (Schroders
-review+outlook, JPM GFICC+GAA). Blind pilots are frozen in `runs/`
-(gitignored; frozen runs are force-added when committed): `pilot-01`/`pilot-02`
-(analyze only, original 5 sources — pilot-01's 12 false `quote_not_found`
-failures drove the `evidence_kind: visual` tagging rule and print-to-PDF ingest
-of visual-heavy HTML), `pilot-03` (first with checker + arbiter), `pilot-04`
-(first with grouping), and `pilot-05` (first over all 7 docs / 2 groups, and
-first with providers swapped: codex/gpt-5.5/high analyze, claude checker/
-arbiter/grouper). `POC_PLAN.md` locks the 3-phase build order and LLM-native
-ingestion design. A `.venv` holds `pdfplumber`, `pdfminer.six`,
-`trafilatura`, `htmldate`, `playwright` (+ chromium). 144 unittests pass.
+Markets Recon is a local-first POC that ingests fund and asset-manager outlook documents and produces reviewable O/N/U/UNCERTAIN sub-asset-class calls against the locked taxonomy in `excel-file/Asset Class List - Locked.csv`. The pipeline is deterministic for ingestion normalization, taxonomy lookup, evidence validation, confidence scoring, assembly, date handling, and reconciliation; LLM calls are limited to extraction and categorical review. `src/run.py` processes up to 20 sources per run with per-step engine/model/effort defaults, and `src/reconcile.py` produces the final firm-level output from dated batch outputs. Reader summaries use `src/summarize.py`: `digest` and `firmpages` both default to `claude/claude-sonnet-5/high`, then `bind` produces the Word document deterministically. The 98-source production batch is complete and the reconciled cross-batch master deliverable contains 3,630 output rows and 1,386 client failure rows after human review. The second 145-row batch remains in progress; authoritative operational instructions are in `docs/PIPELINE_RUNBOOK.md`, `docs/run-records/`, and the batch handoff files. Run the test suite with `.venv/bin/python -m unittest discover -s tests`.
 
 ## Recent Changes
 
-- 2026-07-06: Shipped Rubric v2: graded categorical judgments now feed the
-  deterministic confidence arithmetic while band semantics stay unchanged.
-  Analyzer `call_language` widened to `explicit_dial` / `explicit_stance` /
-  `directional` / `implied` / `none`; legacy `explicit` and `implied` frozen
-  candidates still parse deterministically (`explicit` -> `explicit_stance`).
-  `explicit_dial` is guarded to table/visual evidence and downgrades to
-  `explicit_stance` on prose with a recorded note. Checker verdicts now carry
-  `evidence_strength` (`decisive` / `adequate` / `thin`): `decisive` preserves
-  all-pass behavior, `adequate` applies the tunable
-  `CHECKER_ADEQUATE_DEDUCTION = 4`, and `thin` applies the tunable
-  `CHECKER_THIN_CAP = 74` with review. Tunable call-language constants live in
-  `CALL_LANGUAGE_POINTS`; band thresholds remain 75/50. Output/failure rows add
-  `checker_strength` after `basis`, and manifests include a checker-strength
-  distribution. Prompt versions bumped (`analyze_chunk.md` v1.5,
-  `check_candidates.md` v1.4, `REGISTRY.md` updated). 17 new tests; 144 pass.
-- 2026-07-06: Shipped the pilot-05 fix list (Tasks 1–4) — deterministic gates
-  and a tagged inference tier, all behind a new required `basis` field on the
-  candidate schema (`stated` | `forecast_delta` | `inferred`; old frozen
-  candidates load as `stated`; `forecast_delta` also requires
-  `delta_value`/`delta_unit`, rejected at parse time if missing). (1)
-  **Materiality gate** (`src/confidence.py`): a `forecast_delta` move below the
-  floor (`MATERIALITY_FLOOR_BP = 25`, `MATERIALITY_FLOOR_PCT = 2.0`, both
-  provisional pending client answer) hard-fails to `delta_below_materiality`
-  (reviewable, reversible — never converted to `N`); at/above the floor it is
-  capped at 74 (below High) with a forced review flag, because delta-as-view is
-  unconfirmed. (2) **Cross-leaf dedup** (`src/assemble.py`): same source doc +
-  same view + identical normalized evidence spans clusters; within a cluster a
-  leaf survives if it is *named* in the evidence (leaf-name/evidence token
-  overlap, prefix-tolerant), so genuine multi-leaf sentences ("long NOK and
-  AUD", "IT and communication services") all survive while unnamed fan-out
-  leaves collapse to `duplicate_cross_leaf`; if no leaf is named, keep the
-  highest-overlap leaf (tie-break: locked-taxonomy order). Known limitation:
-  the trigger is *identical* evidence, so the AB global-duration triple
-  (different table row per leaf) is out of scope — partially mitigated by the
-  materiality gate. (3) **Convention tweaks** (`conventions.md` v1.1, mirrored
-  in `check_candidates.md` v1.3, examples in `brain.md` v1.3): closing/trimming
-  an overweight lands at the resulting stance (→ `N`/`O`, not `U`); a hedged
-  risk note with no position taken → `UNCERTAIN`, not `U`. (4) **Inference
-  tier** (`analyze_chunk.md` v1.4): the analyzer now SHOULD emit single-step
-  analyst inferences (`basis: inferred`, verbatim spans, never overriding a
-  stated call on the same leaf); `src/confidence.py` caps them at 74 (one band
-  below stated) with a forced review flag; the checker verifies each is a
-  plausible single step. Output/`failures.csv` gain a `basis` column after the
-  review fields and the manifest gains a kept-row basis breakdown. 32 new tests
-  (schema, materiality gate, caps, four frozen cross-leaf clusters +
-  no-named-leaf fallback, deterministic pilot-05 re-score of the AB overreach
-  rows and JPM GAA dials); 127 pass. No LLM pilot re-run (separate blind step).
-- 2026-07-06: User replaced `prev-excel/PIMCO.pdf` with the correct/full
-  Cyclical Outlook source (the previous file was the 2-page infographic only).
-  This makes the 5 PIMCO GT rows judged "not grounded in the ingested source"
-  in the pilot-05 comparison in-scope for the next run, and largely resolves
-  client question 5 (PIMCO source scope) in
-  `runs/pilot-05/gt-comparison.md`. No re-run yet.
-- 2026-07-06: Ran the pilot-05 GT comparison (deterministic firm+leaf join +
-  five parallel per-firm judgment agents verifying against the ingested
-  sources; report `runs/pilot-05/gt-comparison.md`, row-level JSONs in
-  `runs/pilot-05/gt-judgments/`). Recall 53/82 (65%, from 51% in pilot-04;
-  70% excluding 6 PIMCO GT rows not grounded in the ingested 2-pager —
-  GT authored from the full Cyclical Outlook article). All 6 view
-  disagreements judged convention disputes (mostly table-vs-prose), none a
-  reading error; all 24 JPM GAA dial signs verified correct; Schroders
-  28/28 again. Of 66 unmatched model rows: 38 defensible GT omissions, 18
-  convention disputes, 10 overreaches (8 pass at 75/High because the
-  forecast-delta convention has no materiality floor — AB 4-14bp deltas;
-  the rubric's 5 review flags correctly caught the prose-soft rows).
-  Dominant remaining miss cause is analyst-style inference depth (20/29),
-  a scope question, not a bug. New client questions: delta materiality
-  floor + prose-over-table precedence, inference-depth scope, dial level
-  policy, PIMCO source scope.
-- 2026-07-06: Ran pilot-05 blind — the provider-swap run over all 7 docs
-  (analyze codex/gpt-5.5/high, checker claude/opus/medium, arbiter
-  claude/sonnet/high, grouper claude/sonnet/medium, `--group-notes`). Single-
-  chunk smoke first (JPM GFICC, codex/high): 5 candidates, first attempt, no
-  repair — codex feeds the span-list schema natively. Grouper resolved both
-  pairs with zero warnings. 131 candidates → 119 kept, 12 failed (10
-  `duplicate_same_view` cross-doc dedups within the two groups, 1
-  `checker_sign_mismatch`, 1 `quote_not_found`); count check pass, 0 chunk
-  failures. Breadth up sharply vs pilot-04's 48 kept: Aberdeen now emits 4
-  (was 0 — priority-1 recall gap closed), AB 30, Schroders multi-asset 38, JPM
-  GAA 47 (the previously-uningested combined source), Schroders review-alone
-  still 0 (correct). Views O 59 / N 31 / U 29; bands High 114 / Medium 5;
-  5 review-flagged (all conf 74). Two non-dedup failures for analyst review:
-  AB JPY=N killed by opus checker reading USD/JPY 155→145 as monotonic yen
-  appreciation (→O, not two-sided-nets-to-N); JPM Short-Dated Bonds=O
-  `quote_not_found` (scrambled-page family, not rescued this run). Frozen on
-  disk at `runs/pilot-05/`; not yet committed.
-- 2026-07-05: Closed the JPM combined-source scope gap from the GT evaluation:
-  added a 7th pilot row ("Global Asset Allocation Views 2Q 2026", 4/30/2026,
-  local PDF in `prev-excel/`), a group note pairing it with the GFICC doc
-  (mirrors the Schroders pair), and title-disambiguated JPM entries in
-  `_pilot_local_pdf_for` (firm-only mapping would have sent both JPM rows to
-  `jp-morgan.pdf`). Pilot is now 7 docs / 2 groups. Tests updated (source
-  limit 7, JPM pair mapping); 95 pass. The recorded MR URL ends in "/c"
-  (likely truncated) — metadata only, the local PDF is ingested.
-- 2026-07-05: First ground-truth evaluation completed. User authored
-  `ground-truth/pilot-ground-truth.csv` (82 rows, all 5 pilot firms); a codex
-  agent ran the hybrid comparison against `runs/pilot-04-rescored/` (results
-  condensed in `runs/pilot-04-rescored/gt-comparison.md`). Direction accuracy
-  is excellent: 42/50 model rows align with GT, zero opposite-sign errors,
-  and the rubric's review flags caught the one overreach. Recall is the gap
-  (42/82 raw): 14 misses from Aberdeen emitting zero candidates, 16 from
-  table/infographic breadth (AB forecast table, PIMCO implication rows), 5
-  from JPM extraction breadth, and 5 because GT pairs JPM's GFICC doc with
-  "Global Asset Allocation Views 2Q 2026", which the pilot never ingested
-  (Schroders-style combined source). The grouped Schroders pair scored
-  28/28. Seven near-leaf disputes cluster on broad-vs-specific leaf snapping
-  (needs a convention decision).
-- 2026-07-05: Built `runs/pilot-04-rescored/` — the GT-comparison artifact for
-  the pilot-04 review. Both pilot-04 `quote_not_found` failures were re-scored
-  deterministically (no LLM calls; script + provenance README in the artifact)
-  under the new gates and pass: AB Euro Govt Bonds `N` via multi-span (2 spans,
-  clean p.7, strict verbatim path) and JPM Short-Dated US Treasuries `O` via
-  the scrambled-page fallback (p.2), both at 74/Medium/review (checker verdicts
-  were not persisted by the run, so the checker-unconfirmed cap applies; the
-  README documents all reconstruction assumptions). The 48 frozen rows are
-  preserved verbatim; rescued rows are inserted in their firm blocks;
-  `failures.csv` is header-only.
-- 2026-07-05: Ran the grouping live test blind (`pilot-04`, claude/opus/medium
-  + checker/arbiter/grouper on codex/gpt-5.5) with `--group-notes
-  prev-excel/group-notes.md`. The Schroders pair grouped with no warnings
-  (review doc alone: 0 candidates; outlook doc: 32). 50 candidates → 48 kept,
-  2 `quote_not_found`, 0 chunk failures, count check pass. Aberdeen emitted 0
-  candidates. Frozen at `runs/pilot-04/`. The two failures were diagnosed as
-  an honest elided quote (AB) and a column-interleaved text layer (JPM) —
-  drove the multi-span and scrambled-page fixes below.
-- 2026-07-05: Added deterministic scrambled-page detection to rescue prose
-  calls on column-interleaved PDF pages (the JPM pilot-04 JPM
-  `quote_not_found`: pdfplumber merges the two columns line-by-line, so no
-  contiguous quote of the rendered page survives the verbatim check).
-  `src/ingest.detect_scrambled_page` flags a page (1-indexed) when it has a
-  near-empty full-body-height vertical gutter separating two populated
-  columns — line length alone fails to separate them (AB's wide single-column
-  pages run longer than JPM's two-column page). Flags land in `IngestedSource`,
-  `ingest_meta.json`, and the run manifest source line. In `src/confidence.py`
-  a prose call citing a flagged page falls back to the key-token overlap check
-  (like table/visual), capping confidence at 74 (below High), forcing
-  `review`, and recording the degradation in the output/failure row; a clean
-  page still enforces verbatim, and a non-cited scrambled page is unaffected.
-  Threaded `scrambled_pages` through `assemble_candidates`/`score_candidate`.
-  Validated: flags JPM p.2 (+p.1/p.4), does NOT flag AB clean single-column
-  pages (incl. p.7, whose failure is a genuine stitched quote that stays
-  failed); only AB's real 3-col grid (p.3) and forecast table (p.10) flag.
-  Deterministically re-scored the frozen JPM pilot-04 `quote_not_found`: now
-  passes at confidence 74 / Medium / review / degraded. 11 new tests (real
-  word-box fixtures from JPM p2 + AB p7); 94 pass. No pilot re-run.
-- 2026-07-05: `evidence_quote` now accepts a list of verbatim spans (a lone
-  string is still one span), so an honest elision — two real passages joined
-  with "..." — no longer fails the prose quote gate. Schema
-  (`src/schemas.py`) parses string-or-list into `evidence_spans`;
-  `evidence_quote` became a property joining spans with " ... " (commentary,
-  failures, checker/arbiter inputs unchanged). The prose gate
-  (`src/confidence.py`) verifies each span verbatim individually and,
-  deterministically for multi-span only, enforces max 3 spans, ≥4 meaningful
-  tokens per span, and document order (blocks reversed stitching); ellipses
-  are never parsed out of free text — only an explicit list splits. Prompts:
-  `analyze_chunk.md` v1.3 emits span lists for elided prose (no more inline
-  "..."), `check_candidates.md` v1.2 reads the ` ... `-joined spans as one
-  body of evidence. Deterministically re-scored the frozen pilot-04 AB Euro
-  Govt Bonds `quote_not_found` (split its recorded quote on the ellipsis into
-  2 spans): now passes against the frozen snapshot; the JPM
-  `quote_not_found` (no ellipsis, a separate ingestion issue) still fails,
-  untouched. 6 new tests; 83 pass. No pilot re-run.
-- 2026-07-05: Applied both pilot-03 diagnosability fixes (delegated to an
-  Opus 4.8 subagent). (1) `failures.csv` now records `evidence_quote` (column
-  after `evidence_kind`; empty for chunk-level failures) so `quote_not_found`
-  rows are diagnosable at a glance. (2) `normalize_quote_text` canonicalizes
-  typographic/extraction seams symmetrically on quote and snapshot: soft
-  hyphen removed, all dash variants folded to `-`, and intra-word hyphens
-  removed after whitespace collapse — so a hyphenated word consumed by a PDF
-  line break ("AI-related" → "AIrelated") can no longer sink a correct quote,
-  in either direction. Word content/order still must match exactly
-  (paraphrase/stitch/reorder tests still fail). 6 new tests; 76 pass.
+- 2026-07-16: Folded `145b-retry2` into the master deliverable — nine 145-batch firms that were zero-call from bad ingest (Apollo, CCLA, Fiera Capital, GCM Grosvenor, Insight Investment, Matthews Asia, Payden & Rygel, Royal London, Van Lanschot Kempen), re-run end-to-end from clean manual local copies (bare model matrix; Apollo and Insight scout-grouped) and integrated **append-only, WITHOUT re-running the cross-batch reconcile** (same rule as retry1 — preserves the five human overrides). All 9 recovered (none zero-call again): 93 kept calls → near-leaf reconcile over retry2-only (93→92, 0 exact-leaf multi-row keys, 1 same-view VLK near-leaf merge, 0 superseded, 0 needs_human). Datefill filled 5/8 undated (2 landing-page, 3 native-PDF metadata; Fiera+Matthews blank, acceptable). Master `output.csv` 3,675 → **3,767** (+92), first 3,675 rows byte-for-byte unchanged (cmp-verified); `failures-client.csv` 1,386 → **1,401** (−1 now-resolved stale Payden EM-Debt row superseded by its clean kept O call, +16 retry2 dropped-candidate rows in label-block order). Reader deliverable: 11 retry2 digests promoted to `digests-all/` top level, 11 superseded zero-call digests removed from `_zero_call_no_page/` (Commerce Trust stays); firm pages regenerated for the 9 new firms only (bare default, empty crosscheck, no flat pages needing opus escalation, no em-dashes in prose). Verification gate passed: **150 pages == 150 output firms, exact 1:1**; the five human overrides present and uncontradicted on their (untouched) pages (AllianceBernstein/State Street-Japan/Lion Global Duration U, Carmignac Europe Equities UNCERTAIN, Triodos Oil U); every processed source has a digest; Carlyle and Commerce Trust remain correctly absent. Binder: `client-runs/master-combined-15072026/firm-summaries.docx`. Pre-fold files preserved as `*.pre-retry2.csv`; CSV local_file paths rewired repo-relative (`*.as-provided.csv` kept). Detail in the reconcile-summary retry2 addendum.
+- 2026-07-15: Built the FINAL combined reader deliverable (firm pages + Word binder) off the human-reviewed master `client-runs/master-combined-15072026/output.csv` (3,675 rows). Gathered all 237 per-source digests from both batches (98b splits 1-10, 145b splits 1-14, plus 145b-retry1) into `digests-all/`, canonicalizing two firm-name variants the digest model split off (`Global X ETFs`->`GlobalX ETFs`, `Janus Henderson`->`Janus Henderson Investors`) and routing the 10 genuine zero-call firms' 12 digests (incl. Commerce Trust) to a non-globbed `_zero_call_no_page/` subdir. Ran `summarize firmpages` at the bare default (claude/claude-sonnet-5/high, no flags) with an empty header-only crosscheck so the 29 distinct-claim conflicting-view keys resolve to `unresolved` (both views shown) rather than collapsing against human review; all 3,675 rows are represented, zero dropped. Firmpages died once at 32/141 on a transient `claude`-binary `FileNotFoundError` (homebrew swap) and was resumed for the remaining 109. Verification gate passed: firm coverage exactly **141 pages == 141 output firms**, 1:1 (Carlyle and Commerce Trust correctly absent, matching the zero-call precedent where sparse-but-nonzero firms like Deutsche Bank keep pages); the five human-review decisions reflected on-page (AllianceBernstein/State Street-Japan/Lion Global Duration U, Carmignac Europe Equities UNCERTAIN, Triodos Oil U); Nomura (34 rows) and Quintet (11 rows) grounded in their retry digests. Regenerated only the Triodos page at opus/medium because sonnet had followed the digest's duplicate "uncertain" oil stance and contradicted the reviewed Oil=U call; it now reads "negative oil view (underweight)". Remaining em dashes appear only in two verbatim source-document titles (Wellington "Bond Market Outlook - Credit"/"- Rates", American Century "... - Third Quarter") in Sources sections, not prose; left intact to avoid misrepresenting the sources. Binder: `client-runs/master-combined-15072026/firm-summaries.docx`. The stale batch-1 binder at `runs-07072026-98rows/98b-combined/firm-summaries.docx` is superseded. Final package review is the next follow-up.
+- 2026-07-15: Re-ingested the four upstream 145b ingest failures as `145b-retry1` (bare model matrix) and surgically integrated the results into the human-reviewed master deliverable — append-only, WITHOUT re-running the full 98b+145b cross-batch reconcile (which would re-invoke the nondeterministic scope gate and discard the four human overrides). Three of the four were transient DNS blips: **Nomura** (34 kept rows, native PDF, date 24/04/2026) and **Quintet** (11 kept rows, HTML, 08/06/2026, ingested via a merged same-command mini-run after a Playwright DNS flap) succeeded; **Commerce Trust** ingested with 0 calls (podcast landing page); **Carlyle** remains blocked by a Cloudflare bot-challenge (HTTP 403, defeats curl and headless chromium) and stays an ingest failure flagged for the client. Master `output.csv` 3,630 → **3,675** (+45); `failures-client.csv` stays **1,386** (−3 resolved ingest_errors + 3 new Nomura housekeeping rows; Carlyle deduped). First 3,630 rows byte-for-byte unchanged; all five human-review decisions intact. Intra-retry reconcile produced 0 merges/supersessions/needs_human. Pre-fold files preserved as `*.pre-retry1.csv`; full detail in `client-runs/master-combined-15072026/reconcile-summary.md` addendum. Firm pages + binder are the separate follow-up.
+- 2026-07-15: Verified 145-row digest coverage by set-diffing source ids against digest files (not counts): now **139/139** successfully-ingested sources have valid, contract-passing digests (was 136/136 before the retry added Commerce Trust, Nomura, Quintet digests). The one remaining gap is Carlyle — still an upstream ingest failure (Cloudflare 403), empty work dir, zero kept rows, in `failures-client.csv`, no `local_file`/manual PDF — so the digest stage cannot regenerate it; it needs a client-supplied copy, not a digest rerun. Sparse-but-valid digests: Commerce Trust (retry, 0 calls) joins Deutsche Bank CIO call, Royal London, Van Lanschot Kempen, Charles Schwab.
+- 2026-07-15: Aligned the firmpages default with digest at `claude/claude-sonnet-5/high`; updated the model-matrix regression test.
+- 2026-07-15: Completed human review of the cross-batch master reconcile, accepting 15 supersessions, applying four overrides, and resolving the Triodos/Oil needs-human item.
+- 2026-07-13: Evaluated Sonnet versus Codex Luna for digest generation; documented split-parity routing for the in-progress second batch.
+- 2026-07-13: Added `docs/PIPELINE_RUNBOOK.md` with the operational sequence from intake through final reconciliation.
+- 2026-07-11: Added the opt-in near-leaf reconciliation stage, audit output, taxonomy-coverage review, and regression tests.
+- 2026-07-10: Added checker evidence-context routing behind the opt-in `--checker-context` flag; the default remains off pending an isolated replay evaluation.
+- 2026-07-10: Established the current per-tool LLM model matrix and regression coverage in `tests/test_model_matrix.py`.
+- 2026-07-10: Built date backfill and firm reconciliation stages, including deterministic apply/rebuild paths and audit artifacts.
 
 ## Next / Open
 
-- Freeze pending: `runs/pilot-05/` (and still `runs/pilot-04/` +
-  `runs/pilot-04-rescored/`) are on disk but not yet committed — `runs/` is
-  gitignored; freeze by force-add when the analyst review confirms.
-- Pilot-05 fix list from the GT comparison (`runs/pilot-05/gt-comparison.md`):
-  items (1)–(3) are **done** (2026-07-06, see Recent Changes). (1)
-  materiality gate for forecast-delta evidence — DONE (prose-over-table
-  precedence deliberately NOT implemented; it is client question 1). (2)
-  cross-leaf dedup — DONE, scoped to identical-evidence clusters with a
-  named-leaf guard; the AB global-duration triple (different table row per
-  leaf) is a documented out-of-scope limitation of the identical-evidence
-  trigger, partially mitigated by (1). (3) convention fixes (close-an-
-  overweight → N, hedged risk → UNCERTAIN) — DONE. Still **flagged pending
-  client answers** and encoded only provisionally: the `MATERIALITY_FLOOR_BP`
-  = 25 / `MATERIALITY_FLOOR_PCT` = 2.0 values and whether a forecast delta is a
-  "view" at all (client question 1); inference-depth scope — the `inferred`
-  tier is built and segregated below stated calls, but whether analyst-style
-  macro→allocation inference is in scope (client question 2) still bounds
-  recall; dial main+sub level policy (question 3); leaf-snapping for the 9
-  near-leaf pairs (question 4). (PIMCO source scope resolved 2026-07-06.)
-- Grouping client questions from pilot-04: which Date/URL a combined
-  pipe-joined row should carry, and confirm the outlook-beats-review arbiter
-  rule.
-- Disputed ground-truth calls (7: BMO Cash/Quality/EM Debt/CAD prose-vs-dial,
-  Barings Hedge Funds/EM Equities/TIPs) and possibly-missing rows (3: BMO
-  Growth and Materials, Barings US Small Cap) were sent to the Markets Recon
-  team as review notes (drafted 2026-07-04, kept outside the repo); update
-  the GT CSV and, if conventions change, `prompts/brain.md` when they
-  respond.
-- Reconcile source count with client (user says 38, workbook CSV has 37) and
-  pick an output date-format policy (see `POC_PLAN.md` open items).
-- Open questions tracked in `CLAUDE.md` (View legend confirmation, ground-truth
-  availability, page-number requirements, HTML source locators, confidence
-  threshold).
+- Finish the remaining 145-row batch splits and reader digests, then combine, datefill, reconcile, generate firmpages, and bind the Word deliverable.
+- Review whether the opt-in near-leaf reconciliation and checker evidence-context features should be promoted to their default workflows.
+- Resolve the open ground-truth discrepancies with the Markets Recon team and obtain a broader analyst-reviewed evaluation set.
+- Confirm the set of acceptable model providers for the POC.

@@ -1,0 +1,497 @@
+{
+ "firm": "J.P. Morgan Asset Management",
+ "exact_match": [
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Securitized/Structured (ABS/MBS/CDS/Swaps/CLOs)",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 36,
+   "gt_row": 58,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "EM Debt - General",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "model_row": 86,
+   "gt_row": 66,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "UK Gilts",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 96,
+   "gt_row": 68,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Duration",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "model_row": 103,
+   "gt_row": 67,
+   "model_confidence": "100",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "US Treasuries",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "model_row": 110,
+   "gt_row": 64,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "US IG Credit",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "model_row": 115,
+   "gt_row": 65,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  }
+ ],
+ "model_only": [
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "High Quality Issuers",
+   "view": "O",
+   "row": 35,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan favors higher-quality credit because spreads remain tight versus history, making improved credit quality the attractive expression. Evidence: The group also saw an opportunity to go up in credit quality at a time when spreads generally remain narrow compared with history, especially across the European banking capital structure.. Locator: p.3 (Global Fixed Income Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Oil",
+   "view": "N",
+   "row": 81,
+   "confidence": "74",
+   "band": "Medium",
+   "review_flag": "review",
+   "commentary": "J.P. Morgan sees the oil shock as temporary, with Brent elevated in Q2 but normalizing over Q3-Q4, so the two-sided path nets to neutral for oil. Evidence: In our own base case scenario, in which Brent crude averages around $100 in Q2 before retreating to more normal levels over the course of Q3 and Q4, the global economy would likely be able to move past the energy shock and deliver solid growth.. Locator: p.1 (Global Asset Allocation Views 2Q 2026). Checker: unconfirmed (Quote is a macro base-case oil price path (elevated then retreating); the net direction reads as mildly downward as much as neutral, so N is plausible but not decisive.)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Equities - General",
+   "view": "O",
+   "row": 82,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan maintains a risk-on allocation stance and explicitly includes an equity overweight over the 12-18 month horizon. Evidence: This view sets the foundation for our continued risk-on stance, including an equity overweight, over a 12-18 month investment horizon.. Locator: p.1 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Duration - Short",
+   "view": "O",
+   "row": 83,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan favors shorter duration in fixed income as it expects yield curves to steepen. Evidence: Our equity outlook remains moderately pro-risk, reflecting our base case of solid economic growth and structural tailwinds from global fiscal stimulus and AI adoption. In fixed income, we are leaning into shorter duration as yield curves steepen. Credit positioning is neutral, reflecting the asymmetric distribution of returns in the current environment (Exhibit 2).. Locator: p.3 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Credit - General / Multi-Sector / Broad",
+   "view": "N",
+   "row": 84,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan explicitly keeps broad credit positioning neutral because return risks are asymmetric. Evidence: Our equity outlook remains moderately pro-risk, reflecting our base case of solid economic growth and structural tailwinds from global fiscal stimulus and AI adoption. In fixed income, we are leaning into shorter duration as yield curves steepen. Credit positioning is neutral, reflecting the asymmetric distribution of returns in the current environment (Exhibit 2).. Locator: p.3 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Global HY",
+   "view": "N",
+   "row": 85,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan maintains a neutral high yield stance because downside return asymmetry offsets attractive carry. Evidence: With asymmetric returns to the downside, we maintain a neutral stance on high yield and emerging market debt (Exhibit 3).. Locator: p.3 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Japan Equities",
+   "view": "O",
+   "row": 87,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan rates Japanese equities overweight on reflation, fiscal stimulus, governance reform, and supportive policy against the oil shock. Evidence: Japan \u2014 OW selected; Description: Japan\u2019s economic reflation, fiscal stimulus and improving corporate governance have created a structural opportunity in Japanese equities; strong policy support against oil shock.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Intermediate US Treasuries",
+   "view": "U",
+   "row": 88,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is short U.S. 10-year duration because it expects better growth and higher yields, implying an underweight to intermediate Treasuries. Evidence: Across rates and FX, we have moved to short U.S. 10-year duration, reflecting a fundamental outlook for better growth and higher yields.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "USD",
+   "view": "U",
+   "row": 89,
+   "confidence": "100",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan underweights the U.S. dollar because it expects weakness as global growth recovers and rate differentials narrow. Evidence: USD \u2014 UW selected; Description: Expect weakness as global growth recovers and interest rate differentials decline.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Gold/Precious",
+   "view": "O",
+   "row": 90,
+   "confidence": "74",
+   "band": "Medium",
+   "review_flag": "review",
+   "commentary": "J.P. Morgan continues to see gold as a valid portfolio diversifier despite recent ETF and central-bank flow concerns. Evidence: Looking forward, despite recent news on Turkish central bank gold holdings and a recent dip in certain gold ETF holdings, gold\u2019s role as a portfolio diversifier remains intact.. Locator: p.4 (Global Asset Allocation Views 2Q 2026). Checker: unconfirmed (Quote reaffirms gold's diversifier role 'remains intact' but does not clearly state an overweight/add, so the O sign is plausible but not decisive.)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Quality",
+   "view": "O",
+   "row": 91,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan says re-risking should focus on quality balance sheets, durable demand, and structural investment exposure. Evidence: When this period comes to an end, we think opportunistic re-risking in equity markets should focus on companies with quality balance sheets, durable demand, and exposure to structural investment cycles.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "IT/Tech/Telecomms (inc. AI)",
+   "view": "O",
+   "row": 92,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan explicitly maintains an overweight to information technology, supported elsewhere by AI, earnings growth, strong balance sheets, and valuation. Evidence: Therefore, as mentioned, we maintain conviction in our overweights to the information technology and communication services sectors, funded by our positions in consumer staples.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Communication Services",
+   "view": "O",
+   "row": 93,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan explicitly maintains an overweight to communication services alongside information technology. Evidence: Therefore, as mentioned, we maintain conviction in our overweights to the information technology and communication services sectors, funded by our positions in consumer staples.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Consumer Staples",
+   "view": "U",
+   "row": 94,
+   "confidence": "75",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan funds preferred sector overweights from consumer staples and says the sector is likely challenged by the macro and earnings backdrop. Evidence: Therefore, as mentioned, we maintain conviction in our overweights to the information technology and communication services sectors, funded by our positions in consumer staples. ... On the other hand, consumer staples will likely be challenged amid a healthy macro backdrop and tepid earnings growth.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Europe Equities",
+   "view": "U",
+   "row": 95,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan limits Europe exposure because of energy sensitivity and notes it was already the least-favored equity region. Evidence: We are also inclined to limit exposure to Europe given its greater sensitivity to energy dynamics; it was already our least-favored region coming into the Middle East conflict.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Australia Govt Bonds",
+   "view": "U",
+   "row": 97,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan\u2019s long Gilts versus Australian government bonds trade implies an underweight to Australian government bonds. Evidence: Expecting steeper yield curves as governments increase spending and global growth recovers, we have maintained our UST 5s30s steepener and remain long Gilts vs. Australian government bonds.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "NOK",
+   "view": "O",
+   "row": 98,
+   "confidence": "100",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is long NOK versus GBP because oil-exporter exposure benefits from the energy-shock dispersion. Evidence: In FX markets, the recent energy shock has created clear dispersion between exporters and importers, leaving us long NOK (an oil exporter) vs. GBP, and long AUD (with more persistent central bank hiking bias) vs. USD and GBP.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "GBP",
+   "view": "U",
+   "row": 99,
+   "confidence": "100",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is short GBP in both the NOK-vs.-GBP and AUD-vs.-GBP relative currency positions. Evidence: In FX markets, the recent energy shock has created clear dispersion between exporters and importers, leaving us long NOK (an oil exporter) vs. GBP, and long AUD (with more persistent central bank hiking bias) vs. USD and GBP.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "AUD",
+   "view": "O",
+   "row": 100,
+   "confidence": "100",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is long AUD versus USD and GBP due to a more persistent central-bank hiking bias. Evidence: In FX markets, the recent energy shock has created clear dispersion between exporters and importers, leaving us long NOK (an oil exporter) vs. GBP, and long AUD (with more persistent central bank hiking bias) vs. USD and GBP.. Locator: p.4 (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Momentum",
+   "view": "O",
+   "row": 101,
+   "confidence": "74",
+   "band": "Medium",
+   "review_flag": "review",
+   "commentary": "J.P. Morgan says elevated dispersion can favor momentum factor strategies. Evidence: This suggests wide performance gaps between high- and low-momentum stocks that can favor momentum-oriented factor strategies.. Locator: p.5 (Global Asset Allocation Views 2Q 2026). Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "US Small Cap",
+   "view": "O",
+   "row": 102,
+   "confidence": "74",
+   "band": "Medium",
+   "review_flag": "review",
+   "commentary": "J.P. Morgan identifies U.S. small caps as a pocket of opportunity within the dispersion backdrop. Evidence: Value dispersion shows a pocket of opportunity in U.S. small caps, while no monitored factor or universe is meaningfully compressed.. Locator: p.5 (Global Asset Allocation Views 2Q 2026). Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "US Large Cap",
+   "view": "O",
+   "row": 104,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan rates U.S. large caps overweight on earnings upgrades in technology and communication services alongside improved valuations. Evidence: U.S. Large Cap \u2014 OW selected; Description: Technology and communication services continue to see earnings upgrades and valuations have declined.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "UK Equities",
+   "view": "N",
+   "row": 105,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is neutral UK equities, balancing attractive dividends and free cash flow against the index\u2019s defensive tilt in an accelerating growth backdrop. Evidence: UK \u2014 N selected; Description: Attractive dividend yield and higher free cash flows support UK equities, but defensive nature of UK index a headwind if global growth accelerates.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Australia Equities",
+   "view": "U",
+   "row": 106,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan underweights Australian equities with high conviction because multiples are expensive and expected return rankings lag peers. Evidence: Australia \u2014 UW selected; Conviction: High; Description: Expensive multiples and ERRs continue to lag peers.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Canada Equities",
+   "view": "U",
+   "row": 107,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan underweights Canadian equities because valuations are rich and earnings prospects are weak. Evidence: Canada \u2014 UW selected; Description: Valuations are rich and the earnings outlook is weak.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Hong Kong Equities",
+   "view": "O",
+   "row": 108,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan rates Hong Kong equities overweight on strong growth, policy support for technology and innovation, and low valuations. Evidence: Hong Kong \u2014 OW selected; Description: Strong economic growth, strong policy support for technology and innovation, and low valuations.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Emerging Markets Equities",
+   "view": "O",
+   "row": 109,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan rates emerging market equities overweight as its most favored region after the U.S., helped by China\u2019s relative oil-shock insulation. Evidence: EM \u2014 OW selected; Description: Most favored region after the US; China more insulated from the oil shock than some other EMs.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "German Bunds",
+   "view": "U",
+   "row": 111,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan underweights German fixed income because rising fiscal and defense spending should support higher medium-term rates. Evidence: Germany FI \u2014 UW selected; Description: Rising fiscal and defense spending to support higher rates over medium term.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Japan Govt Bonds",
+   "view": "N",
+   "row": 112,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is neutral Japanese government bonds because gradually rising rates and reflation should keep JGB yields near current levels. Evidence: Japan FI \u2014 N selected; Change: positive arrow; Description: Gradually rising policy rates and continued reflation should support JGB yields near current levels.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Canada Govt Bonds",
+   "view": "N",
+   "row": 113,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is neutral Canadian government bonds despite unattractive valuations because inflation is stable but elevated and market pricing favors hikes over cuts. Evidence: Canada FI \u2014 N selected; Description: Inflation stable but elevated; valuations unattractive; market pricing hikes > cuts.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Italy Govt Bonds",
+   "view": "O",
+   "row": 114,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan overweights Italian government bonds as higher-carry assets expected to benefit versus German bonds. Evidence: Italy FI \u2014 OW selected; Description: Higher-carry asset that should benefit against German bonds.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "US HY",
+   "view": "N",
+   "row": 116,
+   "confidence": "100",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is neutral U.S. high yield because attractive yields and healthy fundamentals are balanced by tight spreads and asymmetric conflict-related returns. Evidence: US HY \u2014 N selected; Description: All-in yields are attractive and both fundamentals and technicals are healthy, but spreads are tight and distribution of returns under Iran conflict are assymetric.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "EM Sovereign Bonds",
+   "view": "N",
+   "row": 117,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is neutral EM sovereign debt because attractive yields are offset by oil-importer exposure and an asymmetric return profile. Evidence: EMD Sovereign \u2014 N selected; Change: negative arrow; Description: All-in yields are attractive but 2/3 of the index are net importers of oil; asymmetric return profile.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "EUR",
+   "view": "O",
+   "row": 118,
+   "confidence": "100",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan overweights the euro because it expects appreciation as euro-area growth improves and rate differentials narrow. Evidence: EUR \u2014 OW selected; Conviction: Low; Description: Euro to appreciate as growth in the euro area improves and rate differentials narrow.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "JPY",
+   "view": "N",
+   "row": 119,
+   "confidence": "100",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is neutral the yen because it expects range-bound trading amid gradual rate hikes and improving growth. Evidence: JPY \u2014 N selected; Description: JPY looks set to be range-bound against a backdrop of gradual rate hikes and improving growth.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "CHF",
+   "view": "N",
+   "row": 120,
+   "confidence": "100",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "J.P. Morgan is neutral Swiss franc because upside inflation risks and tepid growth leave the currency balanced. Evidence: CHF \u2014 N selected; Description: Rising upside risks to inflation and a tepid growth profile leave us balanced on CHF.. Locator: p.6 \u2014 'Active allocation views' table (Global Asset Allocation Views 2Q 2026)."
+  }
+ ],
+ "gt_only": [
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Short-Dated Bonds",
+   "view": "O",
+   "row": 56,
+   "source": "Global Fixed Income Views 2Q 2026",
+   "commentary": "The GFICC team identifies front-end government bonds as the most compelling opportunity in fixed income. Short-dated curves have repriced 60-100 bps higher on hawkish central bank rhetoric, creating attractive entry points. Front-end positioning serves a dual purpose: income generation through elevated carry and a natural hedge against a broader derisking event. The team explicitly prefers the front end over the long end."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Short-Dated US Treasuries",
+   "view": "O",
+   "row": 57,
+   "source": "Global Fixed Income Views 2Q 2026",
+   "commentary": "With the fed funds rate at 3.625% and the Fed explicitly on hold until more information about the conflict's impact emerges, the front end of the US Treasury curve offers better risk-reward than the long end. Chair Powell has indicated the vast majority of the FOMC do not see a hike as the base case, anchoring short-dated yields. The 10-year is expected to range 3.75%-4.25%, limiting upside further out the curve."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "US Agency MBS",
+   "view": "O",
+   "row": 59,
+   "source": "Global Fixed Income Views 2Q 2026",
+   "commentary": "Agency mortgage-backed securities offer yield with the backing of government-sponsored enterprises, providing a credit quality advantage during periods of elevated uncertainty. The team highlights agency MBS as part of their broader securitized credit overweight, noting that structural protections and US consumer resilience make this a preferred source of carry."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Global IG Credit",
+   "view": "O",
+   "row": 60,
+   "source": "Global Fixed Income Views 2Q 2026",
+   "commentary": "The team sees an opportunity to upgrade credit quality across portfolios as spreads remain narrow compared to history. Higher-quality investment grade issuers offer better risk-adjusted carry in a more uncertain macro backdrop. This is particularly relevant across the European banking capital structure, where the team recommends moving up from subordinated to senior exposure."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Cash/Money Markets",
+   "view": "N",
+   "row": 61,
+   "source": "Global Fixed Income Views 2Q 2026",
+   "commentary": "Cash and money market instruments offer attractive yields at current policy rates but face reinvestment risk as the team expects eventual rate cuts once the oil shock feeds through to weaker demand. The team does not advocate reducing risk entirely to cash, preferring to remain active in markets."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Subordinated",
+   "view": "U",
+   "row": 62,
+   "source": "Global Fixed Income Views 2Q 2026",
+   "commentary": "The team's call to \"go up in credit quality, especially across the European banking capital structure\" is a direct signal to reduce subordinated bank debt exposure. With recession probability rising to 25% and the ECB potentially hiking into a slowdown, lower tiers of the banking capital stack face disproportionate risk."
+  },
+  {
+   "firm": "J.P. Morgan Asset Management",
+   "leaf": "Europe HY",
+   "view": "U",
+   "row": 63,
+   "source": "Global Fixed Income Views 2Q 2026",
+   "commentary": "Narrow spreads relative to history offer insufficient compensation for the rising probability of recession in the UK and Europe. If the ECB and BoE hike rather than cut, the damage to European corporates \u2014 particularly highly leveraged issuers \u2014 could be severe. The team's bias to upgrade credit quality further argues against lower-rated credit."
+  }
+ ]
+}

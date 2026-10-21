@@ -1,0 +1,16 @@
+Hi Kyle,
+
+A quick update on the Allocator Pro POC.
+
+First, sorry for not replying to your earlier email. The sources you sent were genuinely useful, and the calls from those documents went straight into building the system's initial "analyst brain", its worked examples and house conventions. Thank you for those.
+
+The pilot run on the first sample set is finished, and the second test, another seven sources from last quarter, is now complete as well.
+
+I've attached the results from both tests, the reference calls we checked each set against, and a one-page comparison of the second-test output against its reference calls, along with a short summary of what's been built and a questions sheet we'd appreciate answers to.
+
+Two questions are worth calling out directly. First, for the 37-source list, can we assume each link points straight to the final PDF or page? Second, if some sources should be read together as pairs like last quarter, could you send a simple list of the firm plus the titles that belong together?
+
+On next steps, I'd like to move testing onto direct API access and confirm per-document processing costs before we scale to the full list.
+
+Thanks,
+Nikhil

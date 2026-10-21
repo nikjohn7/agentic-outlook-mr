@@ -1,0 +1,189 @@
+{
+ "firm": "PIMCO",
+ "exact_match": [
+  {
+   "firm": "PIMCO",
+   "leaf": "Inflation-Linked/TIPs",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 38,
+   "gt_row": 71,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Commodities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 39,
+   "gt_row": 75,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Real Assets",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 40,
+   "gt_row": 76,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "PD - Direct Lending",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "model_row": 41,
+   "gt_row": 81,
+   "model_confidence": "75",
+   "model_band": "High",
+   "review_flag": "none"
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "PD - Asset-Based/Asset-Backed",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "model_row": 42,
+   "gt_row": 74,
+   "model_confidence": "90",
+   "model_band": "High",
+   "review_flag": "none"
+  }
+ ],
+ "model_only": [
+  {
+   "firm": "PIMCO",
+   "leaf": "Fixed Income - General/Global",
+   "view": "O",
+   "row": 37,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "PIMCO is constructive on public fixed income because repriced central bank expectations have created opportunities and yields remain attractive with robust liquidity. Evidence: Investment implications grid: Geopolitical shocks box says \"The market\u2019s sharp repricing of central bank policy expectations creates opportunities across bond markets\"; Private credit concerns box says \"Look to opportunities in public fixed income, with attractive yields and robust liquidity profiles\". Locator: p.1 \u2014 'Our March 2026 Outlook focuses on three key themes' investment implications grid."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "RE Debt",
+   "view": "O",
+   "row": 43,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "PIMCO favors real estate debt as a more resilient private-credit area outside direct lending. Evidence: Private credit concerns investment implications box: \"Explore private credit investing beyond direct lending, including more resilient areas like asset-based finance and real estate debt\". Locator: p.1 \u2014 'Our March 2026 Outlook focuses on three key themes' investment implications grid."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "High Quality Issuers",
+   "view": "O",
+   "row": 44,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "PIMCO favors higher-quality credit exposure because AI disruption will create winners and losers and requires bottom-up issuer selection. Evidence: AI disruption investment implications box: \"Tilt up in quality, using rigorous bottom-up credit selection to identify risks\". Locator: p.1 \u2014 'Our March 2026 Outlook focuses on three key themes' investment implications grid."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Infra Debt",
+   "view": "O",
+   "row": 45,
+   "confidence": "90",
+   "band": "High",
+   "review_flag": "none",
+   "commentary": "PIMCO sees selective opportunities in AI infrastructure debt when pricing and lender covenants are favorable. Evidence: AI disruption investment implications box: \"We see sustainable opportunities in AI infrastructure lending when pricing is attractive and lender covenants are strong\". Locator: p.1 \u2014 'Our March 2026 Outlook focuses on three key themes' investment implications grid."
+  }
+ ],
+ "gt_only": [
+  {
+   "firm": "PIMCO",
+   "leaf": "US Treasuries",
+   "view": "O",
+   "row": 69,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "PIMCO favours a modest duration overweight centred on the US Treasury market, which retains its safe-haven status and offers valuable portfolio diversification. Balanced curve exposure is preferred as yields are attractive across maturities. Bonds can cushion equity volatility, provide liquidity for redeployment when markets dislocate, and generate meaningful income at current yield levels."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Global Govt Bonds/SSAs",
+   "view": "O",
+   "row": 70,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "High quality government bonds are positioned at the centre of PIMCO's portfolio construction framework. Starting yields well above 2022 levels provide a solid foundation for income, equity hedging and liquidity. PIMCO sees bonds as essential for navigating the wide distribution of outcomes created by the energy shock and geopolitical uncertainty."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "US Agency MBS",
+   "view": "O",
+   "row": 72,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "PIMCO identifies US agency mortgage-backed securities as one of the highest-value segments across the public-private credit continuum. Agency MBS offers investment grade quality, stable and predictable cash flows, and high quality securitised credit exposure \u2014 all priorities in an environment where liquidity and collateral quality are paramount."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Securitized/Structured (ABS/MBS/CDS/Swaps/CLOs)",
+   "view": "O",
+   "row": 73,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "High quality securitised credit alongside agency MBS is preferred. PIMCO favours collateral-backed, transparent structures over unsecured corporate direct lending, where illiquidity premia have compressed and late-cycle risks are most visible."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Equities - General",
+   "view": "N",
+   "row": 77,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "Equity ownership is at record highs as a share of household financial assets while fixed income is near record lows. PIMCO sees this as a moment for practical portfolio rebalancing toward bonds rather than an outright bearish equity call. The environment favours resilience and quality over concentrated directional bets."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Global IG Credit",
+   "view": "N",
+   "row": 78,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "IG credit carries attractive yields but spreads are tight and have repriced only modestly since the Middle East conflict. PIMCO emphasises selectivity: balance sheet strength, durable cash flows and high quality collateral matter more than headline yield. Bottom-up differentiation is increasingly important as the cycle matures."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Emerging Markets Fixed Income",
+   "view": "N",
+   "row": 79,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "EM central banks face a harder task than DM counterparts in looking through energy-driven inflation. Prospective easing has mostly been priced out. However, many EM economies started with greater real yield buffers and elevated policy rates. PIMCO sees differentiation between energy importers and exporters as the key positioning variable."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Europe Fixed Income",
+   "view": "N",
+   "row": 80,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "The BoE and ECB have been at the centre of the repricing storm, with markets aggressively adjusting rate expectations. PIMCO expects front-end sell-offs to partially reverse but notes high uncertainty for energy-importing economies. The eurozone and UK face the largest downside growth risks from the energy shock."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Private Credit/Debt",
+   "view": "U",
+   "row": 82,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "PIMCO draws explicit parallels between the current private credit market and the pre-GFC non-agency mortgage market, noting comparable size doubling. While not predicting systemic risk, the firm sees stress as likely to contribute to tighter financial conditions, weigh on hiring and investment, and create spillovers to public credit markets."
+  },
+  {
+   "firm": "PIMCO",
+   "leaf": "Global HY",
+   "view": "U",
+   "row": 83,
+   "source": "Layered Uncertainty: Conflict, Credit Stress, and AI",
+   "commentary": "PIMCO is cautious on lower-quality high yield issuers, particularly those with weak covenants, opaque vehicle structures and liquidity mismatches. The firm notes that stress in private credit could spill over to public HY markets and emphasises quality differentiation within the credit spectrum."
+  }
+ ]
+}

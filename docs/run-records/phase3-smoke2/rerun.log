@@ -1,0 +1,2 @@
+run phase3-smoke2: engine=codex model=gpt-5.5 effort=medium | checker=claude/sonnet/medium | arbiter=claude/sonnet/medium | quote_visual=claude/sonnet/medium
+run phase3-smoke2: 14 calls kept, 13 failed -> tmp/phase3-smoke2/out/phase3-smoke2

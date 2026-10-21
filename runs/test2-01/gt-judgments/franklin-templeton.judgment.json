@@ -1,0 +1,128 @@
+{
+  "firm": "Franklin Templeton",
+  "rows": [
+    {
+      "kind": "gt_only",
+      "leaf": "Global HY",
+      "model_view": "",
+      "gt_view": "N",
+      "classification": "near_leaf_covered",
+      "cite": "PDF p.12 'High Yield and Loans' pendulum = blue segments centered = Neutral; snapshot L487-492 'Spreads have widened but remain relatively tight... balance of risk and rewards favors neutrality.'",
+      "note": "FT prints a single combined 'High Yield and Loans' dial. GT filed the Neutral on the Global HY leaf; model filed the identical Neutral on Leveraged Loans (row 14/L143). Same claim, same dial, different half of the combined leaf. Not a recall gap."
+    },
+    {
+      "kind": "view_disagreement",
+      "leaf": "EM Debt - Local Currency",
+      "model_view": "U",
+      "gt_view": "N",
+      "classification": "reading_error",
+      "cite": "PDF p.12 'Emerging Market (EM) Debt' dial: blue segments centered at bottom (Neutral) with small left arrow; snapshot L498-499 'risks related to conflict in the Middle East see us neutralize our position.'",
+      "note": "Model side misread. Dial and prose both state Neutral. Model over-weighted the direction-of-travel prose (L493-494 'trimmed our exposure... more cautious') and emitted U. Internally inconsistent: model read the SAME dial as N for 'EM Debt - General' (row 9/L121). GT (N) is correct. Genuine defect; slipped through un-flagged (confidence 75, review_flag none)."
+    },
+    {
+      "kind": "view_disagreement",
+      "leaf": "US Large Cap",
+      "model_view": "O",
+      "gt_view": "N",
+      "classification": "convention_dispute",
+      "cite": "snapshot L189-191 'we see greater perceived safety in large-cap core equities, which are more defensive'; L189-190 'pushed us to neutralize our style-factor preferences'; theme L37-40 'Rotating toward core'. No printed large-cap dial; adjacent US equity dials are Growth N, Value N, Small-Cap U (PDF p.9).",
+      "note": "Both defensible, no dial to arbitrate. Model reads the flight-to-quality/rotation-into-large-cap-core as a positive tilt (O; large-cap is the counterpart of the explicit small-cap underweight). GT reads it as part of a neutralized, defensive book (N). Model self-flagged review, Medium/74."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Energy",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "snapshot L321-322 (Alternatives tier) 'increased demand from AI should offer long-term support to energy and industrial metals.'",
+      "note": "Grounded in explicit constructive prose on a sub-asset the neutral aggregate Alternatives dial (p.8) does not enumerate. Soft/secular ('long-term support'); model honestly scored it directional/75. Not a hallucination."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Global Govt Bonds/SSAs",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "snapshot L57-60 'Neutralizing government bonds - We expect demand destruction to play a greater role...'; Bonds dial p.8 = Neutral.",
+      "note": "Well-grounded neutral, matches the printed Bonds dial. GT simply did not enumerate this leaf."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "US Duration",
+      "model_view": "U",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "snapshot L63-65 'we stay underweight US duration'; US Treasuries dial p.11 = orange/left = underweight.",
+      "note": "Explicit statement plus confirming dial. Strong, well-grounded breadth."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Emerging Markets Equities",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "snapshot L195-201 'We have trimmed our overweight allocations to EMs... several factors inform our ongoing optimism toward these regions, despite reduced exposure'; Emerging ex China dial p.10 = bullish/right.",
+      "note": "Trimmed-but-retained overweight, confirmed by the bullish EM dial. Well grounded."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "EM Debt - General",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "near_leaf_of_gt",
+      "cite": "PDF p.12 'Emerging Market (EM) Debt' dial = Neutral; snapshot L498-499 'neutralize our position.'",
+      "note": "Same neutral EM Debt dial as GT's 'EM Debt - Local Currency' (N). Model read this leaf correctly (unlike the local-currency leaf it misread to U in row 3). Mirrors the GT call on a different leaf."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "UK Duration",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "snapshot L277-279 'we remain overweight duration in weaker economies that may require policy support, such as Canada and the United Kingdom'; UK Government Bonds dial p.11 = teal/right = overweight.",
+      "note": "Explicit statement plus confirming dial. Strong, well-grounded."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Copper/Industrial",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "snapshot L321-322 'increased demand from AI should offer long-term support to energy and industrial metals.'",
+      "note": "Same constructive prose as Energy; sub-asset lean not captured by the neutral aggregate Alternatives dial. Soft/secular but grounded; scored directional/75."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Alts - Private Markets General",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "snapshot L323-324 'we see structural attractions in naturally diversifying alternatives such as private assets.'",
+      "note": "Grounded in explicit positive prose; long-term/structural framing within a neutral aggregate Alternatives dial. Soft but not hallucinated."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "US Equities",
+      "model_view": "O",
+      "gt_view": "",
+      "classification": "sound_breadth",
+      "cite": "snapshot L349-351 'more immediate macro concerns mean we favor core US equities as a defensive measure.'",
+      "note": "Weakest of the breadth calls: grounded in an explicit 'favor core US equities' preference, but the aggregate US equity dials are neutral-to-underweight (Growth N, Value N, Small-Cap U), so an aggregate O is a prose-lean read in tension with the printed sub-dials. Same signal as the US Large Cap dispute. Not a hallucination; grounded text exists."
+    },
+    {
+      "kind": "model_only",
+      "leaf": "Leveraged Loans",
+      "model_view": "N",
+      "gt_view": "",
+      "classification": "near_leaf_of_gt",
+      "cite": "PDF p.12 'High Yield and Loans' dial = Neutral; snapshot L487-492 'balance of risk and rewards favors neutrality.'",
+      "note": "Other half of the combined 'High Yield and Loans' dial; mirrors GT's Global HY (N) on a different leaf."
+    }
+  ],
+  "summary": {
+    "view_disagreements": {"total": 2, "reading_errors": 1, "convention_disputes": 1, "model_correct": 0, "gt_correct": 0},
+    "misses": {"total": 1, "recall_gap": 0, "near_leaf_covered": 1, "not_grounded": 0, "defensible_omission": 0},
+    "model_only": {"total": 10, "sound_breadth": 8, "overreach": 0, "near_leaf_of_gt": 2},
+    "headline": "True recall is high: the model reproduced FT's full printed pendulum grid (all high-level, equity-region and fixed-income-sector dials) and added 8 well-grounded breadth calls; the single miss (Global HY N) is not a real gap but a combined-dial split, covered by the model's Leveraged Loans N from the same 'High Yield and Loans' pendulum. The one genuine defect is EM Debt - Local Currency: the model emitted U from trim/direction-of-travel prose even though the p.12 dial and the explicit 'neutralize our position' text both say Neutral (and the model read the same dial correctly as N for the general EM-debt leaf) - an internally inconsistent reading error that slipped through un-flagged. The remaining disagreement, US Large Cap O vs N, is a defensible convention dispute with no printed large-cap dial to arbitrate. No overreach or hallucination, and no true recall gaps."
+  }
+}

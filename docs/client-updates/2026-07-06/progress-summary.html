@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+  NOTE FOR NIKHIL: This page includes one optional plain-language headline from the
+  pilot evaluation, in the "Status and next step" section (the sentence beginning
+  "In the pilot run, the system found the large majority..."). Delete that one
+  sentence before sending if you'd rather not share a quality figure yet.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allocator Pro POC - Progress Summary</title>
+<style>
+  :root { --accent: #2f5d84; --ink: #1c1e21; --muted: #5a6069; --line: #e2e5ea; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 720px; margin: 0 auto; padding: 48px 44px 56px; }
+  header { border-bottom: 2px solid var(--accent); padding-bottom: 14px; margin-bottom: 24px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin: 0 0 4px; }
+  h1 { font-size: 23px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+  .intro { font-size: 15.5px; color: var(--ink); margin: 0 0 26px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); margin: 26px 0 10px; font-weight: 650; }
+  ul { margin: 0 0 4px; padding-left: 20px; }
+  li { margin: 0 0 8px; }
+  li strong { font-weight: 600; }
+  p { margin: 0 0 12px; }
+  footer { margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+  @media print {
+    body { font-size: 12px; }
+    .page { max-width: none; padding: 0.5in 0.6in; }
+    h1 { font-size: 20px; }
+    h2 { margin-top: 18px; }
+    li { margin-bottom: 5px; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <p class="eyebrow">Allocator Pro &middot; Proof of Concept</p>
+      <h1>What I've built so far</h1>
+    </header>
+
+    <p class="intro">
+      The first stage is done: the MVP is built and it's looking really good. Right now
+      it's being tested against some documents from last quarter, and I've already run it
+      through an initial pilot, which came back solid.
+    </p>
+
+    <h2>What it can do today</h2>
+    <ul>
+      <li>Reads both PDF documents and web pages.</li>
+      <li>Handles long documents by splitting them into sections without losing the thread between them.</li>
+      <li>Takes page snapshots and reads tables, images, and basic charts, not just plain text. Many allocation views live in dial graphics and tables rather than sentences, so this matters.</li>
+      <li>Was given a "financial analyst brain": worked examples and house conventions built from the sample documents in your earlier email, so it reasons like an analyst rather than a generic AI.</li>
+      <li>Produces one output spreadsheet per run in the agreed format: firm, date, source, sub-asset class, the call, and the exact supporting text with a page reference for every call.</li>
+    </ul>
+
+    <h2>How I keep it trustworthy</h2>
+    <ul>
+      <li>Every call must quote the exact source text and page that supports it. Calls that can't be verified against the source are rejected rather than kept.</li>
+      <li>A second, independent AI reviewer re-reads every call against the original source before it is accepted. Think of it as a built-in checker.</li>
+      <li>Dial and chart graphics are verified by that independent reviewer looking at the page image itself, not just the page text, so allocation views published as dials are read reliably.</li>
+      <li>Confidence is not the AI grading itself. It comes from a fixed, transparent set of rules (was the quote verified? did the checker agree? how direct was the language?), with the AI only supplying the raw ingredients. Anything low-confidence is automatically flagged for human review.</li>
+      <li>Where the evidence is genuinely weak or unclear, the system says "uncertain" instead of guessing.</li>
+      <li>Every run also produces a separate failures file alongside the results: calls the system attempted but rejected, for example because the supporting quote could not be verified, or the checker disagreed, each with the reason. This keeps rejected calls reviewable on their own, and keeps them distinct from "uncertain" calls. "Uncertain" means the document itself was ambiguous; a "failure" means the system found something but couldn't stand behind it.</li>
+      <li>Runs currently use the Claude and Codex subscriptions you purchased.</li>
+    </ul>
+
+    <h2>Status and next step</h2>
+    <ul>
+      <li>The pilot run on the first sample set is complete, and the results are attached.
+        In the pilot run, the system found the large majority of the calls my own review
+        identified, and where both made a call they agreed on direction over 90% of the time.</li>
+      <li>A second test, another seven sources from last quarter, is now complete, and those results are attached as well, along with a one-page comparison against our own reference calls.</li>
+      <li>For now the analysis is powered by the Claude and Codex subscriptions you set me up with, and it's working out quite cost-effectively. In the current setup Codex does the main work of reading the documents and making the sub-asset-class calls, and Claude acts as the independent verifier and settles any conflicting calls. On capability I'm happy with how this is performing; if I ever wanted to trim cost further there are cheaper model options to look at.</li>
+      <li>Next step is to finalise the pipeline, fold in your feedback, and run it across all 37 sources. I expect to have those results back to you comfortably within 48 hours, likely within the next day. Once the full run is done I can pull real cost figures from the subscription usage, which should closely track what the equivalent Claude or ChatGPT API access would cost, and later in the week I can start weighing up API pricing against staying on the subscriptions if you'd like to explore it. This is still the MVP: the priority right now is getting accurate results into your hands, then tidying it into something you can use day to day.</li>
+    </ul>
+
+    <footer>
+      Allocator Pro, proof of concept. Prepared for the Markets Recon team.
+    </footer>
+  </div>
+</body>
+</html>

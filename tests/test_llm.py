@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 from src.llm import (
-    CODEX_MODEL,
+    CODEX_MODELS,
+    DEFAULT_CODEX_MODEL,
     ENGINE_CONFIGS,
     call,
     call_parsed,
@@ -14,6 +15,7 @@ from src.llm import (
     parse_groups,
     parse_response,
     parse_verdicts,
+    resolve_codex_model,
 )
 from src.schemas import SchemaError
 
@@ -27,16 +29,54 @@ class LLMTest(unittest.TestCase):
         command = ENGINE_CONFIGS["claude"].command("go", model="fable", effort="high")
         self.assertEqual(["claude", "-p", "--model", "fable", "--effort", "high", "go"], command)
 
-    def test_codex_command_pins_model_and_sets_reasoning_effort(self) -> None:
+    def test_codex_default_model_command_is_byte_identical_to_old_pin(self) -> None:
+        # model=None must emit exactly the command the old single-pin produced.
         command = ENGINE_CONFIGS["codex"].command("go", effort="high")
         self.assertEqual(
-            ["codex", "exec", "-m", CODEX_MODEL, "-c", 'model_reasoning_effort="high"', "go"],
+            ["codex", "exec", "-m", "gpt-5.5", "-c", 'model_reasoning_effort="high"', "go"],
             command,
         )
+        self.assertEqual("gpt-5.5", DEFAULT_CODEX_MODEL)
 
-    def test_call_rejects_codex_model_override(self) -> None:
+    def test_codex_command_carries_each_allowlisted_model(self) -> None:
+        for model in CODEX_MODELS:
+            command = ENGINE_CONFIGS["codex"].command("go", model=model, effort="high")
+            self.assertEqual(
+                ["codex", "exec", "-m", model, "-c", 'model_reasoning_effort="high"', "go"],
+                command,
+            )
+
+    def test_call_rejects_offlist_codex_model(self) -> None:
         with self.assertRaises(ValueError):
             call("unused.md", {}, engine="codex", model="o3", runner=lambda c, p: None)
+
+    def test_call_accepts_allowlisted_codex_model(self) -> None:
+        commands: list[list[str]] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout=_valid_response(), stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            prompt_path = Path(temp_dir) / "prompt.md"
+            prompt_path.write_text("Analyze.", encoding="utf-8")
+            call(prompt_path, {"chunk_id": "p1-5"}, engine="codex", model="gpt-5.6-sol",
+                 effort="high", runner=runner)
+
+        self.assertIn("gpt-5.6-sol", commands[0])
+
+    def test_minimal_effort_is_rejected_for_every_codex_model(self) -> None:
+        # The codex floor is `low`; minimal is never accepted, not even on gpt-5.5.
+        for model in (None, "gpt-5.5", "gpt-5.6-terra"):
+            with self.assertRaises(ValueError):
+                call("unused.md", {}, engine="codex", model=model, effort="minimal",
+                     runner=lambda c, p: None)
+
+    def test_resolve_codex_model_defaults_and_validates(self) -> None:
+        self.assertEqual("gpt-5.5", resolve_codex_model(None))
+        self.assertEqual("gpt-5.6-luna", resolve_codex_model("gpt-5.6-luna"))
+        with self.assertRaises(ValueError):
+            resolve_codex_model("gpt-9")
 
     def test_call_rejects_unknown_effort(self) -> None:
         with self.assertRaises(ValueError):

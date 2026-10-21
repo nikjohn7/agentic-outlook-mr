@@ -1,5 +1,7 @@
 # House conventions — normative extraction rules
 
+_Version: v1.3_
+
 These rules bind every reader of an outlook source: the extractor when making
 a call, and any second reader when judging one. A call that follows these
 conventions is correct *by convention* — never penalize it for the convention
@@ -18,12 +20,21 @@ itself. They never override the locked taxonomy or the source's own words.
   overrides it. Change verbs describe the journey, not the destination: an
   upgrade that lands at neutral is `N`; "caution has increased" beside a
   printed Neutral dial is `N`.
-- **Closing or trimming a position lands at its resulting stance, not the
-  direction of travel.** "We are closing our overweight in X" → `N` (the end
-  state is flat/neutral), **not** `U`. Trimming but staying overweight → still
-  `O`; "reducing our underweight toward neutral" → `N`. The stance the source
-  lands on is the call; the direction-of-travel verb never overrides the stated
-  end state.
+- **A clear dial/table/chart call stands regardless of surrounding commentary
+  tone — unless the commentary explicitly addresses the same leaf.** Commentary
+  about a *narrower* sub-asset does not override a chart's call on the broader
+  leaf: cautious prose about gold *mining* does not turn a chart's
+  `Gold/Precious` overweight into a `U`. Only commentary on the *same* leaf the
+  visual charts can override or refine that visual call.
+- **Closing, reducing, neutralizing, or trimming a position lands at its
+  resulting stance, not the direction of travel.** "We are closing our
+  overweight in X" → `N` (the end state is flat/neutral), **not** `U`.
+  "Reducing", "neutralizing", "dialing back", "scaling back", "paring", or
+  "moving back to neutral" all follow the same rule: the call is the stance the
+  firm ends at, unless the text says the final position is still over- or
+  underweight. Trimming but staying overweight → still `O`; reducing an
+  underweight toward neutral → `N`. The direction-of-travel verb never
+  overrides the stated end state.
 - Ranked house scales collapse by tier: top tiers → `O`, middle → `N`,
   bottom → `U`.
 - When the house's own rating and its hedging prose diverge, the rating wins.
@@ -40,6 +51,13 @@ itself. They never override the locked taxonomy or the source's own words.
 - **Recommended hedge/ballast allocations are calls** (`O`).
 - **Stated risk posture is a two-sided call** ("high cash, low risk" → cash
   `O`, equities `U`).
+- **Rotation and diversification stances cut both ways.** When the source
+  favors one segment because it is cautious on another ("rotate away from X
+  into Y", "diversify out of expensive X toward cheaper Y"), emit both sides
+  where both leaves exist: the beneficiary gets its positive call and the source
+  of the rotation gets its cautionary/negative call. The cautionary side is a
+  legitimate call when the caution is explicit; use `basis: inferred` only when
+  it requires one clear analyst step.
 - **A two-sided path nets to `N`**: when the source commits to both directions
   across its horizon (hikes then cuts; a currency weak near-term but
   appreciating medium-term), the net call is `N` with both sides quoted —

@@ -1,0 +1,1434 @@
+{
+ "exact_match": [
+  {
+   "firm": "BlackRock",
+   "leaf": "AI",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Healthcare/Pharma",
+   "model_view": "O",
+   "gt_view": "N",
+   "view_agree": false,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Europe Equities - Financials",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "US Large Cap",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Hedge Funds/Liquid Alts/Absolute Return",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Gold/Precious",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Critical Minerals/Rare Earths",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Energy Transition/Clean Energy",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Industrials",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Private Infrastructure",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Copper/Industrial",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Fixed Income - General/Global",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Cash/Money Markets",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Global HY",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Europe Equities",
+   "model_view": "O",
+   "gt_view": "N",
+   "view_agree": false,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "UK Equities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Japan Equities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Emerging Markets Equities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Growth",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Small/Mid-Cap",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "GBP",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Equities - General",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "US Equities",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Australia Equities",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "China Equities",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "UK Gilts",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Inflation-Linked/TIPs",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "UK IG Credit",
+   "model_view": "N",
+   "gt_view": "U",
+   "view_agree": false,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "EM Debt - Hard Currency",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "EM Debt - Local Currency",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "EM Credit",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "EUR",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "JPY",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Global Equities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "US Equities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Europe Equities",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "UK Equities",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Emerging Markets Equities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "EM Debt - General",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Global Govt Bonds/SSAs",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Gold/Precious",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Japan Govt Bonds",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Europe IG Credit",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Europe HY",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Oil",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "EM Debt - Local Currency",
+   "model_view": "U",
+   "gt_view": "N",
+   "view_agree": false,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "US Value",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "US Large Cap",
+   "model_view": "O",
+   "gt_view": "N",
+   "view_agree": false,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Japan Equities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Europe Equities",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "UK Equities",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "review"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Canada Govt Bonds",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "US Treasuries",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Equities - General",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Fixed Income - General/Global",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Alternatives - General",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Cash/Money Markets",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "US Growth",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "US Small Cap",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Canada Equities",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Australia Equities",
+   "model_view": "U",
+   "gt_view": "U",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Emerging Markets ex-China Equities",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "China Equities",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Euro Govt Bonds",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "UK Gilts",
+   "model_view": "O",
+   "gt_view": "O",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Japan Govt Bonds",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Australia Govt Bonds",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Global IG Credit",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Japan Equities",
+   "model_view": "N",
+   "gt_view": "N",
+   "view_agree": true,
+   "abstain": false,
+   "review_flag": "none"
+  }
+ ],
+ "model_only": [
+  {
+   "firm": "BlackRock",
+   "leaf": "Global Equities",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock has a constructive global equity outlook supported by broad earnings strength across sectors and geographies. Evidence: Overall, we begin the second half of 2026 with a constructive outlook for equities. Earnings trends have been strong across sectors and geographies, reinforcing the case for exploring a larger cross-section of investment themes.. Locator: p.3. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Energy Sector",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock sees underappreciated equity opportunities in energy as part of diversifying beyond the core AI theme. Evidence: At the same time, we recognize the importance of diversification. We see value in broadening our focus to other areas of the global markets and note potentially underappreciated opportunities in places such as energy, materials and infrastructure (pages 7-9).. Locator: p.3. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Materials",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock identifies materials as an underappreciated opportunity while broadening the equity opportunity set. Evidence: At the same time, we recognize the importance of diversification. We see value in broadening our focus to other areas of the global markets and note potentially underappreciated opportunities in places such as energy, materials and infrastructure (pages 7-9).. Locator: p.3. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Infrastructure",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock calls out infrastructure as a potentially underappreciated equity opportunity beyond the narrow AI theme. Evidence: At the same time, we recognize the importance of diversification. We see value in broadening our focus to other areas of the global markets and note potentially underappreciated opportunities in places such as energy, materials and infrastructure (pages 7-9).. Locator: p.3. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Emerging Markets Equities",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "BlackRock has a positive view on emerging market equities because AI-linked earnings momentum is expected to continue. Evidence: We see a bright outlook for emerging market stocks, particularly in Asia, where many large companies benefit from the trillions in global AI spending.. Locator: p.10 — 'How AI is powering equities in Asia' callout."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Asia Equities",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "BlackRock is especially constructive on Asian equities because many large regional companies benefit from AI spending. Evidence: We see a bright outlook for emerging market stocks, particularly in Asia, where many large companies benefit from the trillions in global AI spending.. Locator: p.10 — 'How AI is powering equities in Asia' callout."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Industrials",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock sees some of the strongest AI-buildout opportunities in the industrial layer supporting investment. Evidence: Some of the strongest opportunities have emerged through more discrete expressions within the infrastructure, power and industrial layers supporting that investment.. Locator: p.5. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Oil",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock expects tighter energy supply conditions to support higher prices, implying a positive view on oil. Evidence: Infrastructure damage, inventory depletion, slow reservoir ramp-up and shipping delays are likely to create a longer-term supply shock, resulting in structurally tighter supply and higher prices.. Locator: p.7. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Mining Equities",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock highlights metals and mining stocks as attractively valued within the materials opportunity set. Evidence: Metals and mining stocks currently show FCF yields over 7%, well above their historical premium to the market.. Locator: p.7. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required). Checker: unconfirmed (Quote is a bare FCF-yield valuation stat; the positive stance is implied from context rather than stated.)."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Energy Transition/Clean Energy",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock sees value in clean energy and energy efficiency names because valuations are below the broader market. Evidence: Listed infrastructure is at a discount to global equities, having historically traded at a premium, while clean energy stocks and energy efficiency names are also on lower valuations than the broader market.. Locator: p.9. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Taiwan Equities",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock implies a positive Taiwan equity view through strong forecast earnings growth tied to northern Asia's AI-led strength. Evidence: Much of this strength comes from the northern part of Asia, with earnings in Taiwan forecast to grow 34% in 2026, and South Korean earnings 220%.. Locator: p.10. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required). Basis: inferred — single-step analyst inference from macro/thematic prose; segregated one band below stated calls, review required. Checker: evidence_strength thin — quoted evidence supports the view only just; confidence capped below High and review required. Checker: checker evidence_strength is thin; confidence capped below High and review required."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "South Korea Equities",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock implies a positive South Korea equity view from exceptional earnings growth and corporate reform aimed at shareholder value. Evidence: In the case of South Korea, some of the earnings drivers are particular to the country. The government is pushing a program of corporate reform — similar to that seen in Japan — with the aim of increasing shareholder value.. Locator: p.10. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required). Basis: inferred — single-step analyst inference from macro/thematic prose; segregated one band below stated calls, review required."
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Technology (Sector)",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "BlackRock says AI investment is flowing to Asian semiconductor makers while memory demand remains above supply, implying a positive view on technology-sector beneficiaries. Evidence: Much of the enormous AI investment from the big U.S. tech companies ― we estimate up to US$10 trillion by 203012 ― is flowing to the large Asian makers of the semiconductors essential for AI expansion, as well as the supply chains that have developed around these giants. ... Memory shortages are expected to persist for at least two years, with demand around 20%-30% above supply, according to our analysis.. Locator: p.11. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required). Basis: inferred — single-step analyst inference from macro/thematic prose; segregated one band below stated calls, review required."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Materials",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM's modular equities playbook tilts to Materials for raw-supply exposure in security, energy, and resource-transition themes. Evidence: tilt Materials/Energy. Locator: p.8."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Green/Blue Bonds",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists green bonds as a long-term fixed income investment solution. Evidence: Fixed Income row — > 2 Years: Green Bonds. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Infra - Digital",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "GSAM points to AI infrastructure requirements as an alternatives opportunity, supporting a positive view on digital infrastructure. Evidence: Alternatives: Infrastructure requirements for AI and electrification.. Locator: p.1. Checker: unconfirmed (Thematic header on AI infrastructure; no explicit stance and the digital-infra mapping is inferred.)."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Infra - Renewables/Decarb",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM maintains conviction in longer-term energy transition infrastructure opportunities despite near-term disruption risks. Evidence: Key Takeaways panel says: \"we maintain conviction in longer-term opportunities related to energy transition infrastructure, defense-linked industrials, and resource circularity.\". Locator: p.1 — 'Key Takeaways' panel."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Emerging Markets Equities",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists EM equities as a base-case equity investment solution. Evidence: Equity row — Base Case: EM Equities. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "US Equities",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists US equities as a base-case equity investment solution. Evidence: Equity row — Base Case: US Equites. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Europe Equities",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "GSAM lists Europe equities as a base-case equity investment solution. Evidence: Equity row — Base Case: Europe Equities. Locator: p.12 — 'Market Solutions' table. Arbiter: Rule 1 and rule 2: the 'Market Solutions' table listing Europe Equities as a Base Case is a printed grid cell naming the sub-asset class directly, which outranks the quote panel's general 'European risk positioning' prose (not explicitly equities-specific) and far outranks the implied, non-positioning commentary about Europe's industrial competitiveness."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "China Equities",
+   "view": "N",
+   "review_flag": "review",
+   "commentary": "GSAM presents China as dominant in resource supply chains but offset by structural cracks and external pressure, netting to a neutral country-market read. Evidence: China's current position in supply-chain control is unmatched. It is dominant in rare earth mining and refining—inputs critical to EVs, wind, defense, and AI. ... Structural cracks remain. An aging population and slowing growth squeeze fiscal room. Property-sector stress drags on demand. US-led tech restrictions are forcing costly chip import-substitution. And overcapacity in solar, batteries, and EVs, while an export advantage, is fueling trade friction with the EU and US.. Locator: p.5. Basis: inferred — single-step analyst inference from macro/thematic prose; segregated one band below stated calls, review required."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Equities - General",
+   "view": "N",
+   "review_flag": "review",
+   "commentary": "GSAM keeps a medium-term equity overweight but pairs it with a short-term neutral stance, so the horizon-mixed equity view nets to neutral. Evidence: overweight equities medium-term but neutral short-term. Locator: p.6. Checker: unconfirmed (Medium-term overweight paired with short-term neutral arguably nets to O rather than N.). Arbiter: Candidate 1's 'broad-based selling pressure' is explicitly scenario/conditional (a recession scenario projection), so under rule 3 it loses to candidate 0's stated current positioning; that current stance is itself a two-sided horizon path (medium-term OW, short-term N) which per house convention nets to N."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Fixed Income - General/Global",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists flexible bonds as a short-to-medium term base-case investment solution in the fixed income row. Evidence: Fixed Income row — Base Case: Flexible Bonds. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Global Macro - Systematic Diversified/CTAs/Directional",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists trend following strategies as risk-scenario alternatives solutions and trend hedge funds as a long-term solution. Evidence: Alternatives row — Key Upside/Downside Risks: Trend Following Strategies; > 2 Years: Trend and Multi-Strategy Hedge Funds. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Duration - Short",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists short duration as a fixed income solution for key upside/downside risk scenarios. Evidence: Fixed Income row — Key Upside/Downside Risks: Short Duration. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Global Govt Bonds/SSAs",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM would increase government bond exposure in recession because it expects capital appreciation and portfolio ballast as yields fall. Evidence: increase exposure to government bonds. Locator: p.6."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Multi-Strategy Hedge Funds",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists multi-strategy hedge funds as alternatives solutions in both risk scenarios and the long-term column. Evidence: Alternatives row — Key Upside/Downside Risks: Multi-Strategy Hedge Funds; > 2 Years: Trend and Multi-Strategy Hedge Funds. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "PE - Middle Market",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "GSAM sees private equity middle and upper-middle-market opportunities benefiting from demand for mitigation, resilience, and adaptation strategies. Evidence: middle and upper middle market stands out. Locator: p.7. Checker: unconfirmed ('Middle and upper middle market stands out' is tied to private equity only through the reasoning, not the quote.)."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Private Infrastructure - Mid-Cap",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "GSAM sees sustainable middle-market infrastructure as offering strong value creation potential with exits to larger platforms. Evidence: strong value creation potential. Locator: p.7. Checker: unconfirmed ('Strong value creation potential' maps to private-infrastructure mid-cap only via the reasoning; the quote does not name the asset.)."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "PD - Structured Credit",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "GSAM sees rising demand for bespoke structured private credit to finance clean energy infrastructure build-out. Evidence: bespoke, structured debt financing solutions. Locator: p.7. Checker: unconfirmed ('Bespoke structured debt financing solutions' names an instrument; the positive stance rests on the reasoning about rising demand.)."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Energy Sector",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists natural resources, explicitly including energy, as a long-term equity investment solution. Evidence: Equity row — > 2 Years: Natural Resources (Materials & Energy). Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "IT/Tech/Telecomms (inc. AI)",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists digitalization and AI, explicitly tied to tech, as a long-term equity investment solution. Evidence: Equity row — > 2 Years: Digitalization and AI (Tech). Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Utilities",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "GSAM identifies utilities with contracted renewable revenues as a longer-term return stream within the equity theme. Evidence: utilities with contracted renewable revenues. Locator: p.8. Checker: unconfirmed (Bare descriptor 'utilities with contracted renewable revenues'; the positive stance rests on the playbook reasoning.)."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Mining Equities",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM names miners as near-term opportunities positioned for cyclical re-rating within the resource-transition theme. Evidence: Potential near-term opportunities include miners. Locator: p.8."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Alts - Private Markets General",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists private assets as a long-term alternatives investment solution. Evidence: Alternatives row — > 2 Years: Private Assets. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Data Centers",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "GSAM links hyperscaler AI capex and datacenter build-out to the private-asset capital formation opportunity. Evidence: investment now flowing into compute, datacenters. Locator: p.10. Basis: inferred — single-step analyst inference from macro/thematic prose; segregated one band below stated calls, review required. Checker: unconfirmed (Inferred from 'investment flowing into datacenters'—a flow observation—to a positive Data Centers stance.)."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "EM Debt - General",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists emerging market debt as both a base-case and long-term fixed income investment solution. Evidence: Fixed Income row — Base Case: Emerging Market Debt; > 2 Years: Emerging Market Debt. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Securitized/Structured (ABS/MBS/CDS/Swaps/CLOs)",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists securitized credit as a base-case fixed income investment solution. Evidence: Fixed Income row — Base Case: Securitized Credit. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Duration - Intermediate",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists intermediate bonds as a long-term fixed income investment solution. Evidence: Fixed Income row — > 2 Years: Intermediate Bonds. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "High Dividend/Dividends/Income",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists high dividend equities twice as equity solutions for key upside/downside risk scenarios. Evidence: Equity row — Key Upside/Downside Risks: High Dividend Equities; High Dividend Equities. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Healthcare/Pharma",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists rising healthcare needs, explicitly tied to healthcare, as a long-term equity investment solution. Evidence: Equity row — > 2 Years: Rising Healthcare Needs (Healthcare). Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Private Credit/Debt",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists private credit as a base-case alternatives investment solution. Evidence: Alternatives row — Base Case: Private Credit. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Energy",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "GSAM lists energy commodities as a long-term alternatives investment solution. Evidence: Alternatives row — > 2 Years: Energy & Industrial Commodities. Locator: p.12 — 'Market Solutions' table."
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "USD",
+   "view": "N",
+   "review_flag": "review",
+   "commentary": "GSAM's FX row is two-sided, with dollar weakness in the base case and long term but dollar-positive risk scenarios, leaving the net dollar call balanced. Evidence: FX row — Base Case: Slight Dollar Weakness; Key Upside/Downside Risks: Dollar-Positive; Dollar-Positive; > 2 Years: Dollar-Negative. Locator: p.12 — 'Market Solutions' table. Checker: unconfirmed (FX row nets to neutral, but base-case and long-term both dollar-negative could read as a slight USD underweight.)."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Value",
+   "view": "U",
+   "review_flag": "none",
+   "commentary": "T. Rowe Price's pairwise row favors growth over value, making value the relative underweight. Evidence: Growth vs value row sits in the light-green Overweight box for Growth, implying value is the underweight side of the pair.. Locator: p.2 — 'Global asset allocation - as of March 2026' positioning grid (Monthly Asset Allocation Update - April 2026). Corroborated by companion source: Global Asset Allocation: The View From the UK (p.2 — 'Equity market views' grid)."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Large Cap Equities",
+   "view": "U",
+   "review_flag": "none",
+   "commentary": "T. Rowe Price's pairwise size row favors small caps over large caps, making large caps the relative underweight. Evidence: Small-cap vs large-cap row sits in the light-green Overweight box for Small-cap, implying large-cap is the underweight side of the pair.. Locator: p.2 — 'Global asset allocation - as of March 2026' positioning grid (Monthly Asset Allocation Update - April 2026). Corroborated by companion source: Global Asset Allocation: The View From the UK (p.2 — 'Equity market views' grid)."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "US Value",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "T. Rowe Price increased its tilt toward US large-cap value as a more resilient equity area. Evidence: We reduced our overall equity overweight and shifted away from more energy-sensitive regions such as Europe, while increasing our tilt toward more resilient areas, including US large-cap value.. Locator: p.3 (Monthly Asset Allocation Update - April 2026)."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Duration",
+   "view": "U",
+   "review_flag": "review",
+   "commentary": "T. Rowe Price maintains a short-duration stance, which is an underweight duration call. Evidence: Fixed income bullet says “We maintain our short duration position.”. Locator: p.2 — 'Asset class positioning' dials (Global Asset Allocation: The View From the UK). Arbiter: Rule 1: the printed dial ('We maintain our short duration position') is the actual stance, while candidate 0's 'added back some duration to take profits... while remaining cautious overall' is journey/tone language that itself confirms the position stays cautious (underweight), not a shift to overweight — the tactical add is a partial trim of the underweight, not a new overweight call."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "EM Debt - General",
+   "view": "U",
+   "review_flag": "review",
+   "commentary": "T. Rowe Price reduced emerging market debt exposure to limit risk. Evidence: We also reduced our exposure to emerging market debt to limit risk and increased cash slightly to maintain flexibility.. Locator: p.3 (Monthly Asset Allocation Update - April 2026)."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "U.S. Fixed Income",
+   "view": "U",
+   "review_flag": "none",
+   "commentary": "T. Rowe Price underweights US IG aggregate as resilient growth and sticky inflation put upward pressure on rates while spreads are expensive. Evidence: US IG Aggregate row in the 'Fixed income market views' grid is marked U under Underweight.. Locator: p.3 — 'Fixed income market views' grid (Global Asset Allocation: The View From the UK)."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Europe Fixed Income",
+   "view": "U",
+   "review_flag": "none",
+   "commentary": "T. Rowe Price underweights European IG aggregate because energy prices, tight labour markets, and German fiscal expansion may keep the ECB hawkish. Evidence: European IG Aggregate row in the 'Fixed income market views' grid is marked U under Underweight.. Locator: p.3 — 'Fixed income market views' grid (Global Asset Allocation: The View From the UK)."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "USD",
+   "view": "U",
+   "review_flag": "none",
+   "commentary": "T. Rowe Price underweights USD versus GBP through the pairwise overweight in GBP, while noting flight-to-quality risk to the dollar. Evidence: GBP vs. USD row in the 'Currency Market Views' grid is marked O for GBP under Overweight.. Locator: p.3 — 'Currency Market Views' grid (Global Asset Allocation: The View From the UK)."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Credit - General / Multi-Sector / Broad",
+   "view": "N",
+   "review_flag": "review",
+   "commentary": "Wellington shifted broad credit to neutral because spread tightening reduced expected excess return, even though it remains constructive on the asset class. Evidence: A significant tightening in spreads has prompted us to shift our overall stance on credit to neutral. Markets moved in our favour, prompting us to step back to neutral across both investment grade and high yield.. Locator: p.4 — 'CREDIT SPREADS' summary box (Monthly Asset Allocation Outlook). Arbiter: Both are published levels (rule 1 ties), but rule 3 (current beats conditional/prior) decides: candidate 1's neutral reflects spread tightening that occurred after the overweight call in candidate 0, making it the more current stance."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Europe Credit",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "Wellington favors European credit after spread widening while emphasizing better fundamentals and vigilance around private-credit spillover risk. Evidence: To take advantage of wider spreads while staying alert to potential spillover risk from the private credit space, we favor European credit including investment-grade and high-yield bonds.. Locator: p.7 (QUARTERLY ASSET ALLOCATION OUTLOOK: Q2 2026)."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Commodities",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "Wellington is moderately overweight commodities, with the stance expressed through gold and supported by cleaner positioning and a bullish secular trend. Evidence: We have a moderately overweight view on commodities, expressed in gold, where speculative excess and leverage have largely been neutralized and we expect a bullish secular trend.. Locator: p.2 — 'Key points' box (QUARTERLY ASSET ALLOCATION OUTLOOK: Q2 2026)."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Asia Equities",
+   "view": "N",
+   "review_flag": "none",
+   "commentary": "The regional equity dashboard marks Asia developed markets as neutral, snapped to the closest Asia equity leaf. Evidence: Global equities — Asia developed markets — Neutral. Locator: p.3 — 'Global equities' views table (QUARTERLY ASSET ALLOCATION OUTLOOK: Q2 2026)."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Global IG Credit",
+   "view": "N",
+   "review_flag": "review",
+   "commentary": "Wellington dialed investment-grade credit back to neutral as spread compression reduced remaining upside, despite resilient fundamentals and supportive all-in yields. Evidence: Investment-grade credit row shows 'N' in the center cell with a downward change arrow.. Locator: p.4 — 'CREDIT SPREADS' view grid (Monthly Asset Allocation Outlook). Arbiter: Rule 3 (current beats conditional/base-case wins): both are published dials, but the monthly outlook's grid explicitly shows a downward change arrow into the neutral cell, reflecting Wellington's mid-cycle repositioning of Global IG Credit as spread compression eroded conviction — this supersedes the quarterly outlook's earlier moderately-OW dial as the source's current stance; the change verb describes the journey but the landed printed level (N) is the destination that wins."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Global HY",
+   "view": "N",
+   "review_flag": "review",
+   "commentary": "Wellington moved high-yield credit to neutral after significant spread tightening left valuations less compelling. Evidence: High yield row shows 'N' in the center cell with a downward change arrow.. Locator: p.4 — 'CREDIT SPREADS' view grid (Monthly Asset Allocation Outlook). Arbiter: Rule 1 ties (both are printed dials), so recency decides: candidate 1's grid shows an explicit downward change arrow off the prior overweight level, marking it as the current, updated positioning that supersedes the earlier 'Moderately OW' print in candidate 0."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Japan Duration",
+   "view": "U",
+   "review_flag": "none",
+   "commentary": "Wellington keeps Japan duration moderately underweight because it sees inflation and real-rate risks underpriced and risks skewed toward higher yields. Evidence: Japan is the one market where we maintain a moderate duration underweight.. Locator: p.4 (QUARTERLY ASSET ALLOCATION OUTLOOK: Q2 2026)."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "USD",
+   "view": "U",
+   "review_flag": "review",
+   "commentary": "Wellington expects a weaker US dollar and continued diversification away from it, which implies a negative USD view. Evidence: We were encouraged by a 20% drop from the recent peak in prices, more neutral technicals, and our confidence in a continued positive secular trend linked to our expectations for a weaker US dollar and a bias among central banks and investors to diversify away from the dollar.. Locator: p.4 (QUARTERLY ASSET ALLOCATION OUTLOOK: Q2 2026). Basis: inferred — single-step analyst inference from macro/thematic prose; segregated one band below stated calls, review required."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "US Mega-Cap (Tech)",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "Wellington says US mega-cap tech has become attractive again after valuation adjustment, giving a positive directional stance. Evidence: Meanwhile, US mega-cap tech companies have seen a big adjustment in relative valuations, making them attractive again from a PE perspective.. Locator: p.6 (QUARTERLY ASSET ALLOCATION OUTLOOK: Q2 2026)."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Duration - Long",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "Wellington maintains a long-duration stance because carry is more attractive and two macro paths could push yields lower. Evidence: We have maintained our long-duration stance based on more attractive carry and two potential states of the world that could lead to lower yields.. Locator: p.7 (QUARTERLY ASSET ALLOCATION OUTLOOK: Q2 2026)."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "US Duration",
+   "view": "N",
+   "review_flag": "none",
+   "commentary": "Wellington moved US rates from underweight to neutral after the recent move in US-Germany yield differentials, despite higher inflation and fiscal risks. Evidence: US row shows 'N' in the center cell with an upward change arrow.. Locator: p.3 — 'GOVERNMENT BONDS' view grid (Monthly Asset Allocation Outlook)."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Europe Duration",
+   "view": "N",
+   "review_flag": "none",
+   "commentary": "Wellington neutralized European rates after market moves in US and German yields, even though Germany remains its preferred regional play. Evidence: Europe ex-UK row shows 'N' in the center cell with a downward change arrow.. Locator: p.3 — 'GOVERNMENT BONDS' view grid (Monthly Asset Allocation Outlook)."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Energy",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "Franklin Templeton sees long-term support for energy from AI-related demand beyond the immediate Middle East conflict. Evidence: Beyond conflict in the Middle East, increased demand from AI should offer long-term support to energy and industrial metals.. Locator: p.8 — 'High level allocation tier' Alternatives row."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Global Govt Bonds/SSAs",
+   "view": "N",
+   "review_flag": "none",
+   "commentary": "FTIS frames government-bond positioning as being neutralized, with demand destruction expected to matter more than inflation for policy. Evidence: Neutralizing government bonds — We expect demand destruction to play a greater role in monetary policy decisions than inflation.. Locator: p.2 — 'Neutralizing government bonds' portfolio positioning theme."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "US Duration",
+   "view": "U",
+   "review_flag": "none",
+   "commentary": "FTIS stays underweight US duration because resilient growth and sticky inflation make Fed easing less likely. Evidence: Resilient US growth and sticky inflation make Federal Reserve (Fed) easing less likely, in our view. As a result, we stay underweight US duration.. Locator: p.2 — 'Neutralizing government bonds' portfolio positioning theme."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Emerging Markets Equities",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "FTIS trimmed but retained an overweight in EM equities, with ongoing optimism tempered by energy-supply vulnerability. Evidence: We have trimmed our overweight allocations to EMs and Japan moving into April. ... However, several factors inform our ongoing optimism toward these regions, despite reduced exposure.. Locator: p.5. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "EM Debt - General",
+   "view": "N",
+   "review_flag": "review",
+   "commentary": "FTIS rates EM debt neutral after trimming exposure because Middle East conflict risk and Asia macro-stability concerns offset the long-term opportunity. Evidence: Emerging Market (EM) Debt row in the Fixed income sectors pendulum: blue shaded segment and marker centered on the outlook dial.. Locator: p.12 — 'Fixed income sectors' pendulum settings. Arbiter: Rule 1 (published level wins): the explicit dial/pendulum marker on p.12 is the stated call at Neutral; the prose about reducing EM debt exposure ahead of that describes the trimming journey, not the resulting stance, and per convention a trim that lands at a printed level takes that level, not the direction of travel."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "UK Duration",
+   "view": "O",
+   "review_flag": "review",
+   "commentary": "Franklin Templeton remains overweight UK duration because weaker economies may require policy support as growth slows. Evidence: As a result, we remain overweight duration8 in weaker economies that may require policy support, such as Canada and the United Kingdom.. Locator: p.7. Evidence check: cited page detected as scrambled two-column text; verbatim quote match degraded to key-token overlap (confidence capped, review required)."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Copper/Industrial",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "Franklin Templeton is constructive on industrial metals because AI-related demand should provide long-term support. Evidence: Beyond conflict in the Middle East, increased demand from AI should offer long-term support to energy and industrial metals.. Locator: p.8 — 'High level allocation tier' Alternatives row."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Alts - Private Markets General",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "Franklin Templeton sees structural attractions in private assets as naturally diversifying alternatives. Evidence: Elsewhere, we see structural attractions in naturally diversifying alternatives such as private assets.. Locator: p.8 — 'High level allocation tier' Alternatives row."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "US Equities",
+   "view": "O",
+   "review_flag": "none",
+   "commentary": "Franklin Templeton favors core US equities as a defensive allocation while macro risks dominate concerns about AI capex sustainability. Evidence: We remain concerned about the sustainability of AI capital investment, but more immediate macro concerns mean we favor core US equities as a defensive measure.. Locator: p.9 — 'Equity regions' Growth / United States row."
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Leveraged Loans",
+   "view": "N",
+   "review_flag": "none",
+   "commentary": "FTIS rates loans neutral alongside high yield as credit risk compensation is not compelling enough for an overweight stance. Evidence: High Yield and Loans row in the Fixed income sectors pendulum: blue shaded segment and marker centered on the outlook dial.. Locator: p.12 — 'Fixed income sectors' pendulum settings."
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Asia ex-Japan Equities",
+   "view": "U",
+   "review_flag": "none",
+   "commentary": "T. Rowe Price shows developed Asia/Pacific ex Japan equities as underweight. Evidence: Developed Asia/Pacific ex Japan row sits in the red Underweight box.. Locator: p.2 — 'Global asset allocation - as of March 2026' positioning grid (Monthly Asset Allocation Update - April 2026). Evidence check: snapshot text did not contain the table/visual tokens; checker verified the cited page image instead."
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "UK Duration",
+   "view": "N",
+   "review_flag": "none",
+   "commentary": "Wellington keeps UK rates neutral while noting fiscal, central-bank credibility, inflation, and political risks that leave gilts vulnerable. Evidence: UK row shows 'N' in the center cell with 'NC'.. Locator: p.3 — 'GOVERNMENT BONDS' view grid (Monthly Asset Allocation Outlook). Evidence check: snapshot text did not contain the table/visual tokens; checker verified the cited page image instead."
+  }
+ ],
+ "gt_only": [
+  {
+   "firm": "BlackRock",
+   "leaf": "Brazil Equities",
+   "view": "O",
+   "commentary": "European defence stocks have gained approximately 350% over three years driven by the Ukraine war and NATO spending commitments, yet BlackRock still sees value. When adjusting for expected earnings growth, European defence valuations on a PEG basis appear far cheaper than US peers, which sit at long-term highs. NATO-driven structural spending increases provide a multi-year tailwind.",
+   "near_leaf": [
+    {
+     "model_leaf": "Asia Equities",
+     "model_view": "O",
+     "similarity": 0.333
+    },
+    {
+     "model_leaf": "Global Equities",
+     "model_view": "O",
+     "similarity": 0.333
+    },
+    {
+     "model_leaf": "Mining Equities",
+     "model_view": "O",
+     "similarity": 0.333
+    },
+    {
+     "model_leaf": "Taiwan Equities",
+     "model_view": "O",
+     "similarity": 0.333
+    },
+    {
+     "model_leaf": "Emerging Markets Equities",
+     "model_view": "O",
+     "similarity": 0.25
+    },
+    {
+     "model_leaf": "South Korea Equities",
+     "model_view": "O",
+     "similarity": 0.25
+    }
+   ]
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Defence/Aerospace",
+   "view": "O",
+   "commentary": "UK small caps offer unique value relative to their 20-year history, with only Mexican stocks showing a bigger discount on the same basis. BlackRock believes potential Bank of England rate cuts could catalyse a re-rating of these domestically focused stocks, though higher-for-longer inflation poses a risk to the thesis.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "High Dividend/Dividends/Income",
+   "view": "O",
+   "commentary": "BII is neutral on short US Treasuries, noting that shorter-term bonds are relatively attractive as the market has woken up to persistent inflation and higher rates. The front end offers better risk-adjusted carry than the long end.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "IT/Tech/Telecomms (inc. AI)",
+   "view": "U",
+   "commentary": "BII is neutral on Chinese government bonds. China bonds offer stability and diversification, but developed market yields are now higher and investor sentiment is shifting towards equities, limiting upside for bonds.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "LatAm Equities",
+   "view": "O",
+   "commentary": "BII is underweight long-term IG credit, preferring short-term bonds that are less exposed to interest rate risk. With rising term premia and energy-driven inflation pressures, the duration exposure in long-term IG is unattractive.",
+   "near_leaf": [
+    {
+     "model_leaf": "Asia Equities",
+     "model_view": "O",
+     "similarity": 0.333
+    },
+    {
+     "model_leaf": "Global Equities",
+     "model_view": "O",
+     "similarity": 0.333
+    },
+    {
+     "model_leaf": "Mining Equities",
+     "model_view": "O",
+     "similarity": 0.333
+    },
+    {
+     "model_leaf": "Taiwan Equities",
+     "model_view": "O",
+     "similarity": 0.333
+    },
+    {
+     "model_leaf": "Emerging Markets Equities",
+     "model_view": "O",
+     "similarity": 0.25
+    },
+    {
+     "model_leaf": "South Korea Equities",
+     "model_view": "O",
+     "similarity": 0.25
+    }
+   ]
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Momentum",
+   "view": "N",
+   "commentary": "MyMap positions high yield bonds in the positive segment of their views dial, reflecting the attractive income and shorter duration characteristics of the asset class in the current environment.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "Quality",
+   "view": "N",
+   "commentary": "MyMap opened a new position in inflation-linked bonds to protect portfolios against rising inflation from the energy supply shock. The team identifies the energy price surge from the Middle East conflict as elevating the likelihood of an inflation uptick.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "UK Large Cap",
+   "view": "O",
+   "commentary": "MyMap positions Pacific ex-Japan equities in the negative segment of their views dial. The region's heavy dependence on energy imports via the Strait of Hormuz makes it particularly exposed to the ongoing supply shock.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "UK Small Cap",
+   "view": "O",
+   "commentary": "MyMap shows government bonds in the negative segment of their views dial. The team's 'mind the debt iceberg' theme highlights concern about deteriorating public finances, rising defence budgets, and elevated interest rates. They prefer shorter-dated bonds and are becoming increasingly selective about lending duration.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "US Equities Equal-Weighted",
+   "view": "O",
+   "commentary": "BII upgrades EM equities to overweight in the Global Outlook, staying selective with a preference for Asian countries manufacturing critical AI components (South Korea, Taiwan) and Latin American energy and commodity exporters. This is an upgrade from neutral in the Weekly Commentary. The MyMap multi-asset range also retains its existing EM tilt for the same reasons — cheap valuations and robust profits — adding multi-paper reinforcement to the OW stance.",
+   "near_leaf": [
+    {
+     "model_leaf": "Asia Equities",
+     "model_view": "O",
+     "similarity": 0.2
+    },
+    {
+     "model_leaf": "Global Equities",
+     "model_view": "O",
+     "similarity": 0.2
+    },
+    {
+     "model_leaf": "Mining Equities",
+     "model_view": "O",
+     "similarity": 0.2
+    },
+    {
+     "model_leaf": "Taiwan Equities",
+     "model_view": "O",
+     "similarity": 0.2
+    },
+    {
+     "model_leaf": "Emerging Markets Equities",
+     "model_view": "O",
+     "similarity": 0.167
+    },
+    {
+     "model_leaf": "South Korea Equities",
+     "model_view": "O",
+     "similarity": 0.167
+    }
+   ]
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "US Large Cap",
+   "view": "N",
+   "commentary": "BII downgrades Euro area government bonds from overweight to neutral in the Global Outlook. The market has repriced the ECB policy path more in line with BII's view, and increased German bond issuance to finance fiscal stimulus is already largely reflected in current 10-year yields.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "US Mega-Cap (Tech)",
+   "view": "U",
+   "commentary": "BII upgrades infrastructure equity to overweight in the 2026 Global Outlook Q2 Update, underpinned by mega forces including AI buildout, energy transition, and defence spending. Listed infrastructure trades near 2-standard-deviation discounts to global equity — among the cheapest thematic exposures available — and offers structural demand resilience. BlackRock has also acted on this view at the multi-asset level: the MyMap range added a new holding in listed infrastructure during the Q1 update (April), framing it as an undervalued real-economy asset well positioned to benefit from the ongoing expansion in real economic activity, complementing MyMap's value tilt.",
+   "near_leaf": []
+  },
+  {
+   "firm": "BlackRock",
+   "leaf": "US Value",
+   "view": "O",
+   "commentary": "BII still likes private credit strategically but sees dispersion ahead, stressing the importance of manager selection. Private credit is entering a normalized but increasingly uneven phase, with stress concentrated in areas with less margin for error. Direct lending is the preferred sub-sector.",
+   "near_leaf": []
+  },
+  {
+   "firm": "Goldman Sachs Asset Management",
+   "leaf": "Europe Fixed Income",
+   "view": "O",
+   "commentary": "Green bonds are positioned as the most scalable fixed-income instrument to capture Europe's energy-transition financing requirement of ~€660bn per year to 2030. The EU Green Bond Standard reduces greenwashing risk through taxonomy alignment, mandatory disclosure, and external verification. GSAM research shows diversification benefits with minimal impact on duration or yield, making green bonds a structural allocation rather than a satellite sleeve.",
+   "near_leaf": [
+    {
+     "model_leaf": "Fixed Income - General/Global",
+     "model_view": "O",
+     "similarity": 0.5
+    },
+    {
+     "model_leaf": "Europe Equities",
+     "model_view": "O",
+     "similarity": 0.25
+    },
+    {
+     "model_leaf": "High Dividend/Dividends/Income",
+     "model_view": "O",
+     "similarity": 0.167
+    }
+   ]
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "US IG Credit",
+   "view": "U",
+   "commentary": "US investment-grade aggregate is underweight as part of the short duration stance. Resilient growth amid sticky inflation places upward pressure on US rates. Credit fundamentals remain supportive, but spreads are expensive relative to history, limiting the risk-reward for taking duration exposure through IG bonds.",
+   "near_leaf": []
+  },
+  {
+   "firm": "T. Rowe Price",
+   "leaf": "Europe IG Credit",
+   "view": "U",
+   "commentary": "European investment-grade aggregate is underweight. The spike in energy prices is likely to be exacerbated by tight labour markets and German fiscal expansion. The committee expects the ECB to react in a hawkish manner, potentially hiking rates, which would pressure European IG bond prices.",
+   "near_leaf": [
+    {
+     "model_leaf": "Europe Fixed Income",
+     "model_view": "U",
+     "similarity": 0.2
+    }
+   ]
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "US Treasuries",
+   "view": "N",
+   "commentary": "Wellington holds a neutral view on US rates, having moved away from a modest underweight earlier in March. Markets repriced expectations to policy on hold following the US-Iran conflict escalation. With no clear directional catalyst, yields are expected to trade in a broad range through 2026, limiting the scope for high-conviction tactical positioning.",
+   "near_leaf": [
+    {
+     "model_leaf": "US Duration",
+     "model_view": "N",
+     "similarity": 0.333
+    }
+   ]
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "Euro Govt Bonds",
+   "view": "N",
+   "commentary": "Wellington maintains a neutral view on European rates after closing a brief intra-month modest overweight on German rates versus the US. The repricing has left eurozone yields at more attractive valuations, and the team believes markets have likely overreacted. However, they prefer to wait for a clearer path toward de-escalation before re-engaging with conviction.",
+   "near_leaf": []
+  },
+  {
+   "firm": "Wellington Management",
+   "leaf": "UK Gilts",
+   "view": "N",
+   "commentary": "Wellington maintains a neutral stance on UK rates. The Bank of England adopted a more hawkish position following the Middle East escalation, prioritising inflation containment even at the cost of weaker growth. The team is monitoring spillover effects from the conflict and seeking clearer signals on both the policy roadmap and conflict resolution timing.",
+   "near_leaf": [
+    {
+     "model_leaf": "UK Duration",
+     "model_view": "N",
+     "similarity": 0.333
+    }
+   ]
+  },
+  {
+   "firm": "Franklin Templeton",
+   "leaf": "Global HY",
+   "view": "N",
+   "commentary": "HY spreads have widened but remain tight and do not fully reflect risks from tightening financial conditions. Spreads have not widened in line with the equity sell-off — investors are not getting the usual cushion of falling rates. The balance of risk and reward favours neutrality.",
+   "near_leaf": [
+    {
+     "model_leaf": "Global Govt Bonds/SSAs",
+     "model_view": "N",
+     "similarity": 0.2
+    }
+   ]
+  }
+ ]
+}
