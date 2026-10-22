@@ -164,7 +164,8 @@ class OutputShapeTest(unittest.TestCase):
     def test_csv_has_header_and_one_row_per_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             csv_path, report_path = write_outputs(temp_dir, self._records())
-            with csv_path.open(newline="", encoding="utf-8") as handle:
+            self.assertTrue(csv_path.read_bytes().startswith(b"\xef\xbb\xbf"))  # BOM for Excel
+            with csv_path.open(newline="", encoding="utf-8-sig") as handle:
                 rows = list(csv.DictReader(handle))
 
             self.assertEqual(3, len(rows))
@@ -178,7 +179,7 @@ class OutputShapeTest(unittest.TestCase):
         report = render_report(self._records())
 
         self.assertIn("## FAILED links", report)
-        self.assertIn("Bad Firm — Dead Link", report)
+        self.assertIn("Bad Firm - Dead Link", report)
         self.assertIn("HTTPError: 404 Not Found", report)
         self.assertIn("## Suspect content", report)
         self.assertIn("professional-investor gate", report)

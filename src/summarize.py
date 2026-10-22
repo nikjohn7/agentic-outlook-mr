@@ -1,30 +1,30 @@
-"""Reader summaries — two LLM stages plus a deterministic binder.
+"""Reader summaries - two LLM stages plus a deterministic binder.
 
 The client compiles a reader-facing publication of one-page-per-FIRM outlook
 summaries. This module produces the raw Word document that feeds it, in three
 steps, because a firm's sources can straddle runs and batches:
 
-1. `digest`    — Stage 1, one LLM call per source (run-time). The ONLY stage
+1. `digest`    - Stage 1, one LLM call per source (run-time). The ONLY stage
                  that reads documents: it opens the native document, is grounded
                  by that source's kept calls + rolling memory, and emits a
                  structured per-source digest JSON.
-2. `firmpages` — Stage 2, one LLM call per firm (batch-combine time). Reads the
+2. `firmpages` - Stage 2, one LLM call per firm (batch-combine time). Reads the
                  firm's digests + its RECONCILED final calls (never the original
                  documents), writes a one-page markdown summary.
-3. `bind`      — deterministic `python-docx` merge of the firm pages into one
+3. `bind`      - deterministic `python-docx` merge of the firm pages into one
                  Word file (no LLM).
 
 Between stages 1 and 2 sits Task 2's deterministic reconcile: N run outputs +
 the cross-check verdicts over them -> one final call set per firm. It is the
 v1 stopgap for the v1.2 dual-confidence firm-reconcile stage; `needs_human`
-conflicts never block — they flow through as an in-page divergence note.
+conflicts never block - they flow through as an in-page divergence note.
 
     .venv/bin/python -m src.summarize digest --run runs/<name> --out-dir <dir>
     .venv/bin/python -m src.summarize firmpages --digests <dir> \\
         --outputs <output.csv> [...] --crosscheck <crosscheck.csv> --out-dir <dir>
     .venv/bin/python -m src.summarize bind --pages <dir> --out <file.docx>
 
-Nothing here ever writes under `runs/` — every command takes an explicit output
+Nothing here ever writes under `runs/` - every command takes an explicit output
 directory or file.
 """
 
@@ -50,7 +50,7 @@ FIRM_PAGE_PROMPT = PROJECT_ROOT / "prompts" / "summarize_firm_page.md"
 # Both reader-summary stages produce client-facing prose, so each is pinned to an
 # exact model id rather than the `sonnet` alias: the alias re-points over time and
 # the client's approved voice must not silently drift. Stage 1 (digest) reads
-# documents; stage 2 (firmpages) synthesizes prose — both at high effort.
+# documents; stage 2 (firmpages) synthesizes prose - both at high effort.
 # Overridable by flags on every command, like every pipeline step.
 PINNED_DIGEST_SONNET_ID = "claude-sonnet-5"
 PINNED_FIRMPAGE_SONNET_ID = "claude-sonnet-5"
@@ -59,9 +59,10 @@ FIRMPAGE_ENGINE, FIRMPAGE_MODEL, FIRMPAGE_EFFORT = "claude", PINNED_FIRMPAGE_SON
 
 Runner = Callable[[list[str], str], object]
 
-# The em-dash-delimited memory header written by run.py `_memory_header`:
-# ``# {firm} — {title}  ({source_id})``.
-_MEMORY_HEADER = re.compile(r"^#\s+(?P<firm>.+?)\s+—\s+(?P<title>.+?)\s+\((?P<sid>[^()]+)\)\s*$")
+# The memory header written by run.py `_memory_header`:
+# ``# {firm} - {title}  ({source_id})``. Runs frozen before 2026-10 used an em
+# dash as the delimiter, so both are accepted.
+_MEMORY_HEADER = re.compile(r"^#\s+(?P<firm>.+?)\s+[\u2014-]\s+(?P<title>.+?)\s+\((?P<sid>[^()]+)\)\s*$")
 
 _PIPE_SPLIT = re.compile(r"\s*\|\s*")
 
@@ -71,7 +72,7 @@ class SummarizeError(RuntimeError):
 
 
 # --------------------------------------------------------------------------- #
-# Task 1 plumbing — map a frozen run's artifacts back to per-source inputs
+# Task 1 plumbing - map a frozen run's artifacts back to per-source inputs
 # --------------------------------------------------------------------------- #
 
 
@@ -206,7 +207,7 @@ def _native_doc_path(source_dir: Path, chunks_path: Path) -> Path:
 
 
 # --------------------------------------------------------------------------- #
-# Task 1 — Stage 1 per-source digest
+# Task 1 - Stage 1 per-source digest
 # --------------------------------------------------------------------------- #
 
 _STANCE_WORDS = frozenset({"overweight", "neutral", "underweight", "uncertain", "mixed"})
@@ -262,7 +263,7 @@ def digest_source(
 ) -> dict:
     """One LLM call: read the native document (grounded by kept calls + memory),
     emit a structured digest. The native document reaches the model the same way
-    the checker's visual route attaches it — an absolute path in the inputs the
+    the checker's visual route attaches it - an absolute path in the inputs the
     prompt instructs the model to open."""
     inputs = {
         "source_id": source.source_id,
@@ -319,7 +320,7 @@ def run_digests(
 
 
 # --------------------------------------------------------------------------- #
-# Task 2 — deterministic reconcile (pure code, no LLM)
+# Task 2 - deterministic reconcile (pure code, no LLM)
 # --------------------------------------------------------------------------- #
 
 RES_SINGLE = "single"
@@ -418,7 +419,7 @@ def reconcile_firm_calls(
                                 row kept once;
       - conflicting + `needs_human`/failed/absent verdict -> BOTH views kept,
                                 flagged `unresolved` (never silently collapsed).
-    A conflicting key with no crosscheck entry is `unresolved` by construction —
+    A conflicting key with no crosscheck entry is `unresolved` by construction -
     we never pick a side without a verdict.
 
     The keep-rules are documented deterministic tie-breaks, NOT dual-confidence
@@ -505,7 +506,7 @@ def _resolved(
 
 
 # --------------------------------------------------------------------------- #
-# Task 3 — Stage 2 per-firm page
+# Task 3 - Stage 2 per-firm page
 # --------------------------------------------------------------------------- #
 
 
@@ -617,7 +618,7 @@ def run_firmpages(
     """Synthesize one markdown page per firm from its digests + reconciled calls.
 
     Fails loudly if a firm has multiple sources but no crosscheck file was given
-    — conflicting rows must never be synthesized without verdicts. With a single
+    - conflicting rows must never be synthesized without verdicts. With a single
     source per selected firm and no crosscheck, reconciliation is pass-through.
     `firms` filters to a subset (matched on normalized firm name)."""
     by_firm = _load_digests(digests_dir)
@@ -656,13 +657,14 @@ def run_firmpages(
             runner=runner,
         )
         path = out_dir / f"{slugify(firm)}.md"
-        path.write_text(page.rstrip() + "\n", encoding="utf-8")
+        # House style backstop: the prompt forbids em dashes, the writer enforces it.
+        path.write_text(page.replace("—", "-").rstrip() + "\n", encoding="utf-8")
         written.append(path)
     return written
 
 
 # --------------------------------------------------------------------------- #
-# Task 4 — deterministic python-docx binder (no LLM)
+# Task 4 - deterministic python-docx binder (no LLM)
 # --------------------------------------------------------------------------- #
 
 _MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]*)\)")
@@ -764,7 +766,7 @@ def bind_pages(pages_dir: Path, out_path: Path, *, title: str | None = None) -> 
 
 def _resolve_model(engine: str, model: str | None, default_model: str | None) -> str | None:
     """claude needs an explicit model, so fill the stage default when the flag is
-    omitted. codex passes the model through unchanged — None lets the adapter fill
+    omitted. codex passes the model through unchanged - None lets the adapter fill
     DEFAULT_CODEX_MODEL, a named codex model is validated downstream (never
     silently dropped)."""
     if engine == "codex":

@@ -3,7 +3,7 @@
 Both engines take a per-call model + reasoning effort. Codex is no longer pinned
 to one model: a codex call selects any model in ``CODEX_MODELS`` (default
 ``DEFAULT_CODEX_MODEL``), exactly as a claude call selects a claude model. The
-codex effort floor is ``low`` — ``minimal`` is never emitted (see ``CODEX_EFFORTS``).
+codex effort floor is ``low`` - ``minimal`` is never emitted (see ``CODEX_EFFORTS``).
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ CODEX_MODELS = ("gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
 DEFAULT_CODEX_MODEL = "gpt-5.5"
 
 # Reasoning efforts accepted for codex across every model. `minimal` is
-# deliberately excluded — the floor is `low` (project decision; minimal also
+# deliberately excluded - the floor is `low` (project decision; minimal also
 # cannot web-search: API 400). gpt-5.5 additionally supports minimal at the CLI,
 # but we never emit it.
 CODEX_EFFORTS = ("low", "medium", "high", "xhigh")
@@ -116,7 +116,7 @@ def call(
     """Call one engine with fresh subprocess context and parse candidate JSON.
 
     template_vars fill ``{{name}}`` placeholders in the prompt body before the
-    machine-readable inputs are appended — the seam for injecting large context
+    machine-readable inputs are appended - the seam for injecting large context
     (locked taxonomy, few-shot brain, rolling memory, the chunk itself) that
     should read as prose rather than escaped JSON. The API port fills the same
     placeholders in the same prompt file.

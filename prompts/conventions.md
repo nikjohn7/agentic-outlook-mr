@@ -1,18 +1,18 @@
-# House conventions — normative extraction rules
+# House conventions - normative extraction rules
 
 _Version: v1.3_
 
 These rules bind every reader of an outlook source: the extractor when making
 a call, and any second reader when judging one. A call that follows these
-conventions is correct *by convention* — never penalize it for the convention
+conventions is correct *by convention* - never penalize it for the convention
 itself. They never override the locked taxonomy or the source's own words.
 
 ## Translating the house's dialect into O / N / U
 
 - Map by **sign, not intensity**: "slightly bullish" is still `O`.
-- `O` — overweight; favor/prefer/like; bullish; constructive; Most/More
-  Favored; attractive entry point; upgraded to positive. `U` — underweight;
-  bearish; cautious; Less/Least Favored; avoid/reduce/trim/exited. `N` —
+- `O` - overweight; favor/prefer/like; bullish; constructive; Most/More
+  Favored; attractive entry point; upgraded to positive. `U` - underweight;
+  bearish; cautious; Less/Least Favored; avoid/reduce/trim/exited. `N` -
   neutral; marketweight; balanced; a "0" score; the middle tier of any ranked
   scale.
 - **The published level wins over prose tone.** A printed dial, score, grid
@@ -21,7 +21,7 @@ itself. They never override the locked taxonomy or the source's own words.
   upgrade that lands at neutral is `N`; "caution has increased" beside a
   printed Neutral dial is `N`.
 - **A clear dial/table/chart call stands regardless of surrounding commentary
-  tone — unless the commentary explicitly addresses the same leaf.** Commentary
+  tone - unless the commentary explicitly addresses the same leaf.** Commentary
   about a *narrower* sub-asset does not override a chart's call on the broader
   leaf: cautious prose about gold *mining* does not turn a chart's
   `Gold/Precious` overweight into a `U`. Only commentary on the *same* leaf the
@@ -60,7 +60,7 @@ itself. They never override the locked taxonomy or the source's own words.
   it requires one clear analyst step.
 - **A two-sided path nets to `N`**: when the source commits to both directions
   across its horizon (hikes then cuts; a currency weak near-term but
-  appreciating medium-term), the net call is `N` with both sides quoted —
+  appreciating medium-term), the net call is `N` with both sides quoted -
   the evidence for such an `N` legitimately shows both directions, not
   explicit "neutral" language.
 - **Mixed views inside one region** with no finer leaf → the region leaf at
@@ -70,14 +70,14 @@ itself. They never override the locked taxonomy or the source's own words.
 ## What is NOT a call
 
 - Reporting a market move with no forward expectation attached.
-- Absence of mention — never infer `U` from silence.
+- Absence of mention - never infer `U` from silence.
 - **Explicit non-conviction is `N`, not `UNCERTAIN`** ("no strong directional
   conviction" → `N`). `UNCERTAIN` is reserved for a source that contradicts
   itself or raises a stance it does not take.
 - **A hedged risk note with no position taken is `UNCERTAIN`, not `U`.**
-  Scenario/risk language the house flags without committing to a side — "there
+  Scenario/risk language the house flags without committing to a side - "there
   is a risk that X sells off if scenario Y plays out", stated as a caveat rather
-  than a stance — is `UNCERTAIN`, never a `U`. A flagged downside risk is not a
+  than a stance - is `UNCERTAIN`, never a `U`. A flagged downside risk is not a
   taken position; only map to `U` when the house actually adopts the cautious
   stance.
 - Backward performance attribution counts only when the exposure is retained
@@ -96,5 +96,5 @@ itself. They never override the locked taxonomy or the source's own words.
   (`semantic`); countries named *inside* a broader stance stay at the stated
   level (no fan-out).
 
-Different firms taking opposite views on the same leaf is normal — judge each
+Different firms taking opposite views on the same leaf is normal - judge each
 source only on its own words.

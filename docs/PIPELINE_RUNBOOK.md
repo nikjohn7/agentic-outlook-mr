@@ -52,7 +52,8 @@ deliberately deviate.
 | datefill primary → cascade | codex gpt-5.6-luna high → claude sonnet medium |
 | crosscheck (report only) | claude | sonnet | medium |
 | summarize digest | claude | claude-sonnet-5 (pinned) | high |
-| summarize firmpages | claude | claude-sonnet-4-6 (pinned) | high |
+| summarize firmpages | claude | claude-sonnet-5 (pinned) | high |
+| shared-evidence gate (in-run, and `src.sharedevidence` CLI) | claude | opus | medium |
 
 Everything that is a join, lookup, count, score, or merge rule is plain
 deterministic code — no model ever produces a number (confidence comes from
@@ -303,12 +304,60 @@ the reconciled file final.
 
 ### 3.4 Final deliverable files (in `<batch>/<batch>-combined/`)
 
-- `output.csv` — the reconciled master (the deliverable).
-- `failures-client.csv` — all dropped/merged rows with plain-language labels,
-  importance-sorted (labels explained in `output-guide.html`).
+- `output.csv` — the reconciled master (internal: every column).
+- **`output-client.csv` + `output-client.xlsx` — what the client receives.**
+  Written automatically next to every `output.csv` (run, reconcile) and on
+  demand by `python -m src.export --output <output.csv> --out-dir <dir>
+  [--failures <failures-client.csv>]`. Client feedback (2026-10) fixed here, so
+  it can never recur: `Full Commentary` is split into `Reasoning` /
+  `Verbatim Evidence` / `Locator` / `Reviewer Notes`; internal diagnostics
+  (`basis`, `checker_strength`, `call_language`, `quote_match`) are dropped;
+  HTML/transcript `char:` locators are blank; **one row per firm and asset**
+  (a same-firm, same-asset pair is resolved like reconcile does — same view
+  merged, conflicting views by recency → basis → confidence, the loser a
+  "Superseded" failure row, the kept row noting the other view; only a tie
+  keeps both, flagged); **`review_flag` means a judgment** (caps such as
+  inferred basis or a degraded quote match are carried by `band` only, so
+  the flagged set is the real analyst queue); files are BOM-prefixed UTF-8
+  with single-line cells (Excel on Windows rendered the old files as mojibake
+  and split rows on embedded newlines), plus a native `.xlsx` twin.
+- `failures-client.csv` (+ `.xlsx`) — all dropped/merged rows with
+  plain-language labels, importance-sorted (labels explained in
+  `output-guide.html`). Combine writes the `.csv` only and reconcile's
+  automatic export writes no failures file, so finish every batch with one
+  explicit export over the combined folder; it rewrites both client files
+  (BOM + `.xlsx`) and folds in any shared-key losers:
+
+  ```bash
+  .venv/bin/python -m src.export --output <combined>/output.csv --out-dir <combined> \
+      --failures <combined>/failures-client.csv
+  ```
 - `output.pre-reconcile.csv`, `output.dated.csv` — kept intermediates.
 - `manifest.md` — per-split counts + reconcile provenance.
 - internal: `failures.csv`, audit CSVs.
+
+**Shared-evidence gate.** Inside every run (`src.run`, on by default;
+`--no-evidence-gate` skips it) one passage cited for several sub-asset classes
+keeps only the call(s) it most compellingly supports — an LLM picks
+categorically, deterministic code applies, losers land in the failures file as
+"Evidence better supports a related asset", survivors that still share a
+passage are flagged. For an output produced BEFORE the gate existed (the July
+master), run it post-hoc — it writes new files, never edits in place:
+
+```bash
+.venv/bin/python -m src.sharedevidence --output <output.csv> --out-dir <dir> --dry-run   # counts only
+.venv/bin/python -m src.sharedevidence --output <output.csv> --out-dir <dir>             # ~20 groups per LLM call
+```
+
+The gated `<dir>/output.csv` gets an `output-client.csv/.xlsx` twin, but the
+gate's dropped rows stay in `<dir>/shared-evidence-failures-client.csv`. Fold
+them into the batch's `failures-client.csv` (label-block order), then re-run
+the export with that folded file:
+
+```bash
+.venv/bin/python -m src.export --output <dir>/output.csv --out-dir <dir> \
+    --failures <folded failures-client.csv>
+```
 
 ### 3.5 Optional reader deliverable — firm pages + Word binder
 

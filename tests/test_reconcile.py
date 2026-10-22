@@ -250,13 +250,58 @@ class PrecedenceLadderTests(unittest.TestCase):
 
 
 class ScopeOutcomeTests(unittest.TestCase):
-    def test_distinct_claims_pass_all_rows_through(self) -> None:
-        rows = [_row(view="O", source="Strategic"), _row(view="O", source="Tactical")]
+    def test_distinct_claims_resolve_by_the_ladder_to_one_row(self) -> None:
+        # Client decision 2026-10: one row per firm and asset. Distinct claims
+        # go through the same ladder; the loser is a superseded failure row and
+        # the kept row names it.
+        rows = [_row(view="O", source="Strategic", date="01/06/2026"), _row(view="U", source="Tactical", date="08/07/2026")]
+        result = _reconcile_rows(rows, verdict=VERDICT_DISTINCT)
+        self.assertEqual(1, len(result.output_rows))
+        kept = result.output_rows[0]
+        self.assertEqual(("U", "review"), (kept["View"], kept["review_flag"]))
+        self.assertIn("Also held by this firm: O in 'Strategic' (01/06/2026) on the same asset", kept["Reviewer Notes"])
+        self.assertIn("(read as distinct claims: test)", kept["Reviewer Notes"])
+        self.assertIn("kept by recency", kept["Reviewer Notes"])
+        self.assertEqual([REASON_SUPERSEDED], [f.reason_code for f in result.failures])
+        self.assertIn("read as distinct claims", result.failures[0].notes)
+        actions = sorted(a for d in result.decisions for a in d.per_row_action.values())
+        self.assertEqual([ACTION_SUPERSEDED, ACTION_WINNER], actions)
+
+    def test_distinct_claims_with_no_unique_winner_keep_both_flagged(self) -> None:
+        rows = [_row(view="O", source="Strategic"), _row(view="U", source="Tactical")]
         result = _reconcile_rows(rows, verdict=VERDICT_DISTINCT)
         self.assertEqual(2, len(result.output_rows))
         self.assertEqual([], result.failures)
         actions = {a for d in result.decisions for a in d.per_row_action.values()}
         self.assertEqual({ACTION_KEPT_DISTINCT}, actions)
+        first, second = result.output_rows
+        self.assertEqual({"review"}, {first["review_flag"], second["review_flag"]})
+        self.assertIn("Also held by this firm: U in 'Tactical' on the same asset", first["Reviewer Notes"])
+        self.assertIn("Also held by this firm: O in 'Strategic' on the same asset", second["Reviewer Notes"])
+        self.assertIn("no rule picks one; a human should decide", first["Reviewer Notes"])
+
+    def test_distinct_same_view_claims_merge_with_a_note(self) -> None:
+        rows = [_row(view="O", source="Strategic"), _row(view="O", source="Tactical", confidence=70)]
+        result = _reconcile_rows(rows, verdict=VERDICT_DISTINCT)
+        self.assertEqual(1, len(result.output_rows))
+        kept = result.output_rows[0]
+        self.assertIn("Also held by this firm: the same view in 'Tactical'", kept["Reviewer Notes"])
+        self.assertIn("merged to keep one row per asset", kept["Reviewer Notes"])
+        self.assertEqual([REASON_MERGED], [f.reason_code for f in result.failures])
+
+    def test_merged_rows_carry_structured_columns(self) -> None:
+        rows = [
+            _row(view="O", source="Doc A", commentary="Reason one. Evidence: Quote one. Locator: p.3."),
+            _row(view="O", source="Doc B", commentary="Reason two. Evidence: Quote two. Locator: p.11. Checker: not run."),
+        ]
+        result = _reconcile_rows(rows, verdict=VERDICT_SAME_CLAIM)
+        merged = result.output_rows[0]
+        self.assertEqual("Doc A: Quote one  ||||  Doc B: Quote two", merged["Verbatim Evidence"])
+        self.assertEqual("Doc A: p.3  ||||  Doc B: p.11", merged["Locator"])
+        self.assertEqual("Doc A: Reason one.  ||||  Doc B: Reason two.", merged["Reasoning"])
+        self.assertEqual("Checker: not run.", merged["Reviewer Notes"])
+        self.assertTrue(merged["Full Commentary"].startswith("Doc A (p.3): Reason one. Evidence: Quote one."))
+        self.assertEqual("exact", merged["quote_match"])  # winner's diagnostics carried, never blank
 
     def test_scope_needs_human_keeps_all_and_flags(self) -> None:
         rows = [_row(view="O", source="A"), _row(view="U", source="B")]
@@ -295,7 +340,7 @@ class WriteOutputsTests(unittest.TestCase):
         self.assertEqual(2, len(audit))  # both members audited
         self.assertEqual({"winner", "merged"}, {r["action"] for r in audit})
         self.assertEqual(1, len(client))  # one merged_by_reconcile client row
-        self.assertEqual("Merged — same view stated in several documents", client[0]["What happened"])
+        self.assertEqual("Merged - same view stated in several documents", client[0]["What happened"])
 
 
 # --------------------------------------------------------------------------- #
@@ -327,12 +372,12 @@ def _reconcile_rows(rows, *, verdict, use_llm=True):
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
 
 
 # =========================================================================== #
-# Phase 3 — near-leaf reconciliation
+# Phase 3 - near-leaf reconciliation
 # =========================================================================== #
 
 from src.reconcile import (  # noqa: E402

@@ -1,27 +1,27 @@
-# Per-source digest — reader-summary stage 1
+# Per-source digest - reader-summary stage 1
 
 _Version: v1_
 
 You are distilling ONE fund/asset-manager outlook document into a faithful,
 dense digest. This digest is an INTERNAL artifact: it becomes the raw material
 a later stage uses to write a one-page reader summary for the firm. Optimize it
-for faithful density, not prose style — capture the themes, the named
+for faithful density, not prose style - capture the themes, the named
 specifics, and the figures the document actually states, nothing more.
 
 You are given three things in the machine-readable inputs below:
 
-1. `native_source_path` — the path to the document itself (a PDF, or a captured
+1. `native_source_path` - the path to the document itself (a PDF, or a captured
    page). **You MUST open and read it** the same way a careful analyst would:
    view the rendered pages so you see the tables, positioning/view grids,
-   arrows, dial gauges, and charts as printed — not only the extracted text.
-2. `kept_calls` — the allocation calls the extraction pipeline already found in
+   arrows, dial gauges, and charts as printed - not only the extracted text.
+2. `kept_calls` - the allocation calls the extraction pipeline already found in
    this document and confirmed (each a sub-asset class, a view `O`/`N`/`U`/
    `UNCERTAIN`, and the supporting commentary). These are the SPINE of the
    digest: the stance summary you emit must agree with them.
-3. `{{memory}}` — the pipeline's rolling notes taken while reading the document,
+3. `{{memory}}` - the pipeline's rolling notes taken while reading the document,
    in reading order, as extra context on what each part said.
 
-## Grounding — the core requirement
+## Grounding - the core requirement
 
 A reader summary is the highest-hallucination-risk output in this system, and
 this digest is what it will be built from. Therefore:
@@ -42,13 +42,13 @@ this digest is what it will be built from. Therefore:
 
 ## What to capture
 
-- **Themes** — the handful of organizing ideas the document is built around
+- **Themes** - the handful of organizing ideas the document is built around
   (e.g. a macro backdrop, a rotation, a conviction call). For each: a short
   label, a one-to-three sentence faithful summary, and the named specifics and
   figures that belong to it (companies, countries, sectors, instruments,
   percentages, basis points, price/target levels, page references where the
   document numbers them).
-- **Stances** — a per-asset-class stance summary keyed to the kept calls: the
+- **Stances** - a per-asset-class stance summary keyed to the kept calls: the
   asset class or sub-asset, the stance word, and a short factual detail. Use
   `overweight` / `neutral` / `underweight` / `uncertain` for a resolved call;
   use `mixed` only when the document itself is explicitly two-sided on that
@@ -88,4 +88,4 @@ Rules:
   `points` list (may be empty); each stance needs `asset_class`, `stance`, and
   `detail`.
 - `stance` must be one of the five words above.
-- No confidence numbers anywhere — stances are categorical only.
+- No confidence numbers anywhere - stances are categorical only.

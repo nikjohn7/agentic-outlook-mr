@@ -1,7 +1,7 @@
 """Deterministic ground-truth comparison harness for a frozen run.
 
 `eval.py` is a standalone CLI, run ONLY after a run's `output.csv` is frozen. It
-is NOT part of the run pipeline and makes NO LLM calls anywhere — it does the
+is NOT part of the run pipeline and makes NO LLM calls anywhere - it does the
 bookkeeping (joins, counts, bucketing) so the judgment layer (is a miss
 defensible? is a model-only row an overreach?) stays with humans/agents
 downstream, fed by the `judgment-worksheet.csv` this tool emits.
@@ -17,7 +17,7 @@ Core logic:
    phase-1 vocabulary exactly: `exact_match` (split view-agree / view-disagree),
    `model_only`, `gt_only`.
 3. Near-leaf candidates: for each gt_only row, list same-firm model rows with an
-   agreeing view whose leaf differs, with a token-overlap similarity hint —
+   agreeing view whose leaf differs, with a token-overlap similarity hint -
    suggestions for the human judgment pass, never auto-matched.
 4. Metrics: raw leaf-match recall, view-agreement among matched, per-firm table,
    UNCERTAIN reported separately as abstain/coverage, the missed-call list, a
@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Iterable
 
 from src import confidence
+from src.csvio import write_csv
 from src.schemas import CandidateCall
 from src.taxonomy import Taxonomy, load_taxonomy
 
@@ -97,7 +98,7 @@ def _leaf_tokens(leaf: str) -> set[str]:
 def token_overlap(left: str, right: str) -> float:
     """Jaccard token overlap between two leaf labels (0.0–1.0).
 
-    A cheap similarity HINT for the human judgment pass — never a match
+    A cheap similarity HINT for the human judgment pass - never a match
     decision."""
     a = _leaf_tokens(left)
     b = _leaf_tokens(right)
@@ -178,7 +179,7 @@ class MatchedPair:
     model_view: str
     gt_view: str
     view_agree: bool
-    abstain: bool  # model view is UNCERTAIN — neither right nor wrong
+    abstain: bool  # model view is UNCERTAIN - neither right nor wrong
     model: Row
     gt: Row
 
@@ -186,7 +187,7 @@ class MatchedPair:
 @dataclass(frozen=True, slots=True)
 class NearLeaf:
     """A same-firm model row proposed as a near-leaf candidate for a gt_only
-    row. A SUGGESTION for the human pass — never auto-matched."""
+    row. A SUGGESTION for the human pass - never auto-matched."""
 
     model_leaf: str
     model_view: str
@@ -259,7 +260,7 @@ def _near_leaf_candidates(
                 continue  # only agreeing-view candidates help a missed call
             similarity = token_overlap(gt.leaf, model.leaf)
             if similarity <= 0:
-                # No shared content token — an agreeing view alone is too weak to
+                # No shared content token - an agreeing view alone is too weak to
                 # suggest as a near-leaf. (Deterministic-token limitation: a
                 # purely semantic pair like Oil/Energy is not surfaced; that is
                 # left to the human judgment pass.)
@@ -376,7 +377,7 @@ def column_distribution(rows: list[Row], column: str) -> dict[str, int] | None:
 def review_flag_analysis(result: EvalResult) -> dict:
     """How many disagreements / model_only rows sit on review-flagged rows.
 
-    Misses (gt_only) have no model row, so no review flag — but a near-leaf
+    Misses (gt_only) have no model row, so no review flag - but a near-leaf
     candidate might, so we report how many missed calls have a flagged near-leaf
     suggestion."""
     has_flag = bool(result.model_rows) and "review_flag" in result.model_rows[0].raw
@@ -420,7 +421,7 @@ _EVIDENCE_RE = re.compile(
     r"Evidence:\s*(?P<quote>.*?)\.\s*Locator:\s*(?P<locator>.*?)\.(?:\s|$)",
     re.DOTALL,
 )
-# Dial-grid cues in the EVIDENCE text — the model reads these off a colored
+# Dial-grid cues in the EVIDENCE text - the model reads these off a colored
 # dial, so the strict verbatim prose path does not apply. Only grid-read markers
 # count; a prose sentence that merely CITES "(Chart 3)" is still prose, so
 # generic "chart" is deliberately excluded here.
@@ -430,11 +431,11 @@ _EVIDENCE_VISUAL_CUES = re.compile(
     re.IGNORECASE,
 )
 # A table/figure LOCATOR (per the plan, table/visual locators must name the
-# specific artifact — "p.5 — 'China' forecast table"). A bare "p.N" locator is
+# specific artifact - "p.5 - 'China' forecast table"). A bare "p.N" locator is
 # prose. The source-title parenthetical is stripped before this test, so these
 # words only appear when the locator genuinely names a grid/table/figure.
 _LOCATOR_TABLE_CUES = re.compile(
-    r"(—|-\s'|table|grid|figure|forecast|dashboard|view list|chart)",
+    r"(\s[\u2014-]\s|-\s'|table|grid|figure|forecast|dashboard|view list|chart)",
     re.IGNORECASE,
 )
 
@@ -719,7 +720,7 @@ def render_report(result: EvalResult) -> str:
     flags = review_flag_analysis(result)
 
     lines: list[str] = []
-    lines.append(f"# Evaluation — {result.run_dir.name} vs ground truth")
+    lines.append(f"# Evaluation - {result.run_dir.name} vs ground truth")
     lines.append("")
     lines.append(
         "Deterministic ground-truth comparison (no LLM calls). Buckets use the "
@@ -778,7 +779,7 @@ def render_report(result: EvalResult) -> str:
     lines.append("")
     abstain = head["abstain_uncertain"]
     lines.append(
-        f"{abstain} matched model rows are `UNCERTAIN` — scored as abstain, "
+        f"{abstain} matched model rows are `UNCERTAIN` - scored as abstain, "
         "neither right nor wrong (ground truth carries no UNCERTAIN). They are "
         "excluded from the view-agreement denominator above."
     )
@@ -823,7 +824,7 @@ def render_report(result: EvalResult) -> str:
             hint = "; ".join(
                 f"{c.model_leaf} ({c.model_view}, {c.similarity})" for c in candidates[:3]
             )
-            miss_rows.append([miss.firm, miss.leaf, miss.view, hint or "—"])
+            miss_rows.append([miss.firm, miss.leaf, miss.view, hint or "-"])
         lines.append(_md_table(["Firm", "Leaf", "GT view", "Near-leaf hint"], miss_rows))
     else:
         lines.append("_None._")
@@ -863,7 +864,7 @@ def render_report(result: EvalResult) -> str:
     lines.append("")
     spot = result.spot_check
     if not spot.get("ran"):
-        lines.append(f"_Skipped — {spot.get('note', 'no snapshots')}._")
+        lines.append(f"_Skipped - {spot.get('note', 'no snapshots')}._")
     else:
         counts = spot["counts"]
         lines.append(f"_{spot['note']}._")
@@ -905,7 +906,7 @@ def run_eval(
     *,
     taxonomy: Taxonomy | None = None,
 ) -> EvalResult:
-    """Load inputs, build buckets, run the spot check. Pure — writes nothing."""
+    """Load inputs, build buckets, run the spot check. Pure - writes nothing."""
     output_csv = run_dir / "output.csv"
     if not output_csv.is_file():
         raise EvalError(f"run output not found: {output_csv}")
@@ -933,11 +934,9 @@ def write_eval_outputs(result: EvalResult, out_dir: Path) -> dict[str, Path]:
         encoding="utf-8",
     )
 
-    worksheet_path = out_dir / "judgment-worksheet.csv"
-    with worksheet_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=WORKSHEET_COLUMNS)
-        writer.writeheader()
-        writer.writerows(_worksheet_rows(result))
+    worksheet_path = write_csv(
+        out_dir / "judgment-worksheet.csv", WORKSHEET_COLUMNS, list(_worksheet_rows(result))
+    )
 
     return {
         "report": report_path,

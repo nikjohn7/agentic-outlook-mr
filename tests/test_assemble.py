@@ -49,6 +49,10 @@ class AssembleTest(unittest.TestCase):
                 "Asset Class",
                 "View",
                 "Full Commentary",
+                "Reasoning",
+                "Verbatim Evidence",
+                "Locator",
+                "Reviewer Notes",
                 "confidence",
                 "band",
                 "review_flag",
@@ -195,7 +199,7 @@ class ClientFailuresFileTest(unittest.TestCase):
         # ALL_REASON_CODES and given a client label, or this fails.
         unmapped = ALL_REASON_CODES - set(CLIENT_FAILURE_LABELS)
         self.assertEqual(set(), unmapped, f"reason codes with no client label: {unmapped}")
-        # No stray labels either — the mapping and the registry match exactly.
+        # No stray labels either - the mapping and the registry match exactly.
         self.assertEqual(set(), set(CLIENT_FAILURE_LABELS) - ALL_REASON_CODES)
 
     def test_source_from_candidate_reason_literals_are_registered(self) -> None:
@@ -211,7 +215,7 @@ class ClientFailuresFileTest(unittest.TestCase):
         found: set[str] = set()
         for name in ("assemble.py", "run.py"):
             found |= set(pattern.findall((root / name).read_text(encoding="utf-8")))
-        self.assertTrue(found, "scan found no literal reason codes — pattern drifted")
+        self.assertTrue(found, "scan found no literal reason codes - pattern drifted")
         self.assertEqual(set(), found - ALL_REASON_CODES, f"unregistered: {found - ALL_REASON_CODES}")
 
     def test_unmapped_code_falls_back_gracefully(self) -> None:
@@ -249,7 +253,7 @@ class ClientFailuresFileTest(unittest.TestCase):
             "Emerging Markets Q2 2026 Outlook: Shifting Sands", tax_row["Source"]
         )
         self.assertEqual("O", tax_row["View (proposed)"])
-        self.assertEqual("Skipped — asset not on the list", tax_row["What happened"])
+        self.assertEqual("Skipped - asset not on the list", tax_row["What happened"])
         self.assertTrue(tax_row["Explanation"])
         # No internal jargon leaks into the reader columns.
         self.assertNotIn("taxonomy_no_match", tax_row["What happened"])
@@ -290,14 +294,14 @@ class ClientFailuresFileTest(unittest.TestCase):
         self.assertEqual(
             [
                 "Document could not be ingested",
-                "Conflicting views — none kept",
+                "Conflicting views - none kept",
                 "Evidence could not be verified",
-                "Skipped — asset not on the list",
+                "Skipped - asset not on the list",
             ],
             [row["What happened"] for row in client],
         )
         self.assertNotIn(
-            "Duplicate — already covered", [row["What happened"] for row in client]
+            "Duplicate - already covered", [row["What happened"] for row in client]
         )
 
     def test_unmapped_code_sorts_to_the_top(self) -> None:
@@ -335,7 +339,7 @@ class VisualQuoteFallbackTest(unittest.TestCase):
             )
         }
 
-    def test_present_verbatim_keeps_with_visual_cap_and_review(self) -> None:
+    def test_present_verbatim_keeps_with_visual_cap_no_review_flag(self) -> None:
         calls: list[str] = []
 
         def verifier(candidate: CandidateCall, source: SourceInfo, native_path: Path | None) -> str:
@@ -356,7 +360,7 @@ class VisualQuoteFallbackTest(unittest.TestCase):
         row = result.output_rows[0]
         self.assertEqual("74", row["confidence"])
         self.assertEqual("Medium", row["band"])
-        self.assertEqual("review", row["review_flag"])
+        self.assertEqual("none", row["review_flag"])
         self.assertEqual("visual", row["quote_match"])
         self.assertEqual([], result.failures)
 
@@ -531,7 +535,7 @@ class CheckerAndArbiterAssemblyTest(unittest.TestCase):
     def test_inferred_candidate_rejected_by_checker_is_auditable(self) -> None:
         # An inferred call the checker rejects lands in failures.csv with its
         # basis, the inference reasoning (what was inferred), and the checker's
-        # note (why it failed) — so the rejected inference is never glazed over.
+        # note (why it failed) - so the rejected inference is never glazed over.
         candidate = _candidate(
             basis="inferred",
             view="U",
@@ -977,7 +981,7 @@ class BasisOutputTest(unittest.TestCase):
         row = result.output_rows[0]
         self.assertEqual("forecast_delta", row["basis"])
         self.assertEqual("74", row["confidence"])
-        self.assertEqual("review", row["review_flag"])
+        self.assertEqual("none", row["review_flag"])
         self.assertIn("Basis: forecast_delta", row["Full Commentary"])
 
     def test_inferred_row_exposes_basis_and_cap_reason(self) -> None:
@@ -986,7 +990,7 @@ class BasisOutputTest(unittest.TestCase):
 
         row = result.output_rows[0]
         self.assertEqual("inferred", row["basis"])
-        self.assertEqual("review", row["review_flag"])
+        self.assertEqual("none", row["review_flag"])
         self.assertIn("Basis: inferred", row["Full Commentary"])
 
     def test_stated_row_defaults_basis_column(self) -> None:
@@ -1084,7 +1088,7 @@ class CallLanguageOutputTest(unittest.TestCase):
 class StatedBeatsImpliedTest(unittest.TestCase):
     """Deterministic stated-beats-implied resolution (client decision 5): a
     same-leaf conflict between a stated call and an implied one is resolved
-    without the arbiter — stated wins, the implied side is logged as a flagged
+    without the arbiter - stated wins, the implied side is logged as a flagged
     recommendation."""
 
     @classmethod
@@ -1223,6 +1227,137 @@ def _long_snapshot(text: str) -> str:
     return text + " " + ("Broader market context. " * 80)
 
 
+class StructuredCommentaryTest(unittest.TestCase):
+    """Client feedback 2026-10: structured columns, no HTML offsets, client twin."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1", firm="Firm", date="", source="Web Outlook", url="https://example.test/w"
+            )
+        }
+
+    def test_row_carries_the_four_structured_columns(self) -> None:
+        result = assemble_candidates(
+            [_candidate()],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): "EM equities are favored in the outlook. " + "Context. " * 30},
+            page_counts={"source-1": 1},
+        )
+        row = result.output_rows[0]
+        self.assertEqual("The manager favors the asset class.", row["Reasoning"])
+        self.assertEqual("EM equities are favored in the outlook.", row["Verbatim Evidence"])
+        self.assertEqual("p.3", row["Locator"])
+        self.assertEqual("", row["Reviewer Notes"])
+        self.assertEqual(
+            "The manager favors the asset class. Evidence: EM equities are favored in the outlook.. Locator: p.3.",
+            row["Full Commentary"],
+        )
+
+    def test_html_char_locator_is_blank_for_the_reader(self) -> None:
+        snapshot = "EM equities are favored in the outlook. " * 40
+        result = assemble_candidates(
+            [_candidate(chunk_id="char:0-8000", locator="char:0-8000")],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "char:0-8000"): snapshot},
+        )
+        row = result.output_rows[0]
+        self.assertEqual("", row["Locator"])
+        self.assertNotIn("Locator:", row["Full Commentary"])
+        self.assertNotIn("char:", row["Full Commentary"])
+
+    def test_shared_evidence_gate_drops_the_weaker_fit_and_notes_the_survivor(self) -> None:
+        from src.sharedevidence import GroupVerdict
+
+        # Both leaves are "named" by the evidence tokens ("tech"), so the
+        # deterministic cross-leaf dedup keeps both; the gate is what decides.
+        evidence = "We stick with US large-cap technology, with a selective tilt toward Asian technology."
+        snapshot = evidence + " " + "Context. " * 40
+        candidates = [
+            _candidate(sub_asset_class="US Mega-Cap (Tech)", sub_asset_raw="US large-cap tech", evidence_quote=evidence),
+            _candidate(sub_asset_class="IT/Tech/Telecomms (inc. AI)", sub_asset_raw="technology", evidence_quote=evidence,
+                       reasoning="A technology preference implies the sector."),
+        ]
+        seen: list[list[str]] = []
+
+        def judge(groups):
+            seen.append([m.leaf for m in groups[0].members])
+            keep = next(m.row_id for m in groups[0].members if m.leaf == "US Mega-Cap (Tech)")
+            return {groups[0].group_id: GroupVerdict((keep,), "names US large-cap technology")}
+
+        result = assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): snapshot},
+            page_counts={"source-1": 1},
+            shared_evidence_judge=judge,
+        )
+        self.assertEqual([["US Mega-Cap (Tech)", "IT/Tech/Telecomms (inc. AI)"]], seen)
+        self.assertEqual(["US Mega-Cap (Tech)"], [r["Sub-Asset Class"] for r in result.output_rows])
+        kept = result.output_rows[0]
+        self.assertIn("also read as 'IT/Tech/Telecomms (inc. AI)'", kept["Reviewer Notes"])
+        self.assertEqual("none", kept["review_flag"])  # a clean single keep is not a review item
+        self.assertEqual(["shared_evidence_weaker_fit"], [f.reason_code for f in result.failures])
+        self.assertIn("'US Mega-Cap (Tech)'", result.failures[0].message)
+        self.assertEqual(
+            "Evidence better supports a related asset", client_failure_label("shared_evidence_weaker_fit")[0]
+        )
+
+    def test_shared_evidence_gate_fails_closed_to_keep_all_and_review(self) -> None:
+        evidence = "South Korea and Taiwan stand out as the only real exception in the region this year."
+        candidates = [
+            _candidate(sub_asset_class="South Korea Equities", evidence_quote=evidence),
+            _candidate(sub_asset_class="Taiwan Equities", evidence_quote=evidence),
+        ]
+        result = assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): evidence + " " + "Context. " * 40},
+            page_counts={"source-1": 1},
+            shared_evidence_judge=lambda groups: {},
+        )
+        self.assertEqual(2, len(result.output_rows))
+        self.assertEqual({"review"}, {r["review_flag"] for r in result.output_rows})
+        self.assertTrue(all("could not be ranked" in r["Reviewer Notes"] for r in result.output_rows))
+
+    def test_no_judge_means_no_gate(self) -> None:
+        evidence = "South Korea and Taiwan stand out as the only real exception in the region this year."
+        result = assemble_candidates(
+            [_candidate(sub_asset_class="South Korea Equities", evidence_quote=evidence),
+             _candidate(sub_asset_class="Taiwan Equities", evidence_quote=evidence)],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): evidence + " " + "Context. " * 40},
+            page_counts={"source-1": 1},
+        )
+        self.assertEqual(2, len(result.output_rows))
+        self.assertEqual({"none"}, {r["review_flag"] for r in result.output_rows})
+
+    def test_run_outputs_include_the_client_twin(self) -> None:
+        result = assemble_candidates(
+            [_candidate()],
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={("source-1", "p1-5"): "EM equities are favored in the outlook. " + "Context. " * 30},
+            page_counts={"source-1": 1},
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir, sources=self.sources)
+            for name in ("output.csv", "output-client.csv", "output-client.xlsx", "failures-client.csv", "failures-client.xlsx"):
+                self.assertTrue((Path(temp_dir) / name).is_file(), name)
+            self.assertTrue((Path(temp_dir) / "output.csv").read_bytes().startswith(b"\xef\xbb\xbf"))
+            client = _read_csv(Path(temp_dir) / "output-client.csv")
+            self.assertNotIn("Full Commentary", client[0])
+            self.assertNotIn("checker_strength", client[0])
+            self.assertEqual("EM equities are favored in the outlook.", client[0]["Verbatim Evidence"])
+
+
 def _candidate(**overrides: object) -> CandidateCall:
     values = {
         "source_id": "source-1",
@@ -1243,7 +1378,7 @@ def _candidate(**overrides: object) -> CandidateCall:
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
         return list(csv.DictReader(handle))
 
 

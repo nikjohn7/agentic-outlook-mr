@@ -3,7 +3,7 @@
 `reconcile.py` consumes one or more frozen run `output.csv` files (in practice
 the single combined 98-batch output) and writes a RECONCILED master plus a
 dual-confidence audit trail. It SUPERSEDES `src/crosscheck.py` as the acting
-stage — crosscheck stays untouched as a bare report tool. The join normalization
+stage - crosscheck stays untouched as a bare report tool. The join normalization
 is imported from `src.eval` (never reimplemented), exactly as crosscheck does, so
 "same firm + same leaf" means one thing everywhere.
 
@@ -12,7 +12,7 @@ is imported from `src.eval` (never reimplemented), exactly as crosscheck does, s
         [--engine claude --model opus --effort medium]
 
 Pipeline (all merge/selection decisions are DETERMINISTIC code over categorical
-inputs — the LLM only classifies scope; it never invents a number or picks a
+inputs - the LLM only classifies scope; it never invents a number or picks a
 winner):
 
 1. Group every row on `src.eval`-normalized (firm, sub-asset leaf). Single-row
@@ -54,8 +54,9 @@ from src.assemble import (
     FAILURE_COLUMNS,
     OUTPUT_COLUMNS,
     client_failure_label,
-    merge_commentaries,
 )
+from src.commentary import append_note, commentary_from_row, merge_commentaries, row_columns
+from src.csvio import write_csv
 # Reuse the ground-truth join normalization (imported, never reimplemented) so a
 # reconcile key is identical to the eval harness's and to crosscheck's. The
 # leaf-token helpers back the deterministic near-leaf candidate lanes (Phase 3).
@@ -120,7 +121,7 @@ class ReconcileError(RuntimeError):
 
 
 # --------------------------------------------------------------------------- #
-# Row loading (full output rows — reconcile rewrites whole rows, not a subset)
+# Row loading (full output rows - reconcile rewrites whole rows, not a subset)
 # --------------------------------------------------------------------------- #
 
 
@@ -219,7 +220,7 @@ def group_rows(rows: list[Row]) -> dict[tuple[str, str], list[Row]]:
 
 
 def multi_row_keys(groups: dict[tuple[str, str], list[Row]]) -> list[tuple[str, str]]:
-    """Multi-row keys in deterministic (firm_key, leaf) order — the scope-gate
+    """Multi-row keys in deterministic (firm_key, leaf) order - the scope-gate
     batch order, so a group's position (its group_id) is stable across runs."""
     return sorted(k for k, members in groups.items() if len(members) >= 2)
 
@@ -279,7 +280,7 @@ def scope_verdicts(
     """One batched scope-gate pass over the multi-row groups.
 
     Returns {index-into-groups: Verdict}. With `use_llm=False`, or when the batched
-    call fails for any reason, every group degrades to `needs_human` — never a
+    call fails for any reason, every group degrades to `needs_human` - never a
     crash. A verdict missing for any group also degrades to `needs_human`, so
     every group is always accounted for."""
     if not groups:
@@ -316,7 +317,7 @@ def scope_verdicts(
             runner=runner,
             parser=parse_reconcile_scope,
         )
-    except Exception:  # noqa: BLE001 — any failure degrades to needs_human, never a crash
+    except Exception:  # noqa: BLE001 - any failure degrades to needs_human, never a crash
         return {i: Verdict(VERDICT_NEEDS_HUMAN, _SCOPE_FAILED_REASON) for i in range(len(groups))}
 
     payload: dict[int, Verdict] = result.payload
@@ -357,16 +358,12 @@ def _or_review_flags(flags: list[str]) -> str:
     return "none"
 
 
-def _locator_from_commentary(commentary: str) -> str:
-    """Best-effort locator for a merged reconcile segment: the first `Locator: X.`
-    the member commentary carries (assemble writes it), minus any trailing source
-    parenthetical. Empty when the commentary has no such marker."""
-    match = re.search(r"Locator:\s*(.+?)\.(?:\s|$)", commentary or "")
-    if not match:
-        return ""
-    locator = match.group(1).strip()
-    locator = re.split(r"\s*\(", locator, maxsplit=1)[0].strip() or locator
-    return locator
+def _merged_commentary_columns(ordered: list[Row]) -> dict[str, str]:
+    """The structured commentary columns (+ rendered Full Commentary) for a
+    merged row: every member's segments, primary first, each labeled by its
+    source title; reviewer notes joined. Members' structured columns are used
+    when present and parsed from Full Commentary for legacy rows."""
+    return row_columns(merge_commentaries([commentary_from_row(r.raw) for r in ordered]))
 
 
 def merge_same_view(members: list[Row]) -> tuple[dict[str, str], Row, list[Row]]:
@@ -375,16 +372,15 @@ def merge_same_view(members: list[Row]) -> tuple[dict[str, str], Row, list[Row]]
     Returns (merged_row, winner, losers). The winner (max confidence, input order
     breaks ties) supplies the deterministic per-member columns (basis,
     checker_strength, call_language, quote_match, band); Source/URL/Date are
-    pipe-joined across all members; commentary is labeled and `||||`-merged;
-    confidence is the max; review_flag is the OR."""
+    pipe-joined across all members; commentary is labeled and `||||`-merged in
+    every structured column, winner first; confidence is the max; review_flag is
+    the OR."""
     winner = max(members, key=lambda r: (r.confidence or 0))
     merged = dict(winner.raw)
     merged["Source"] = _pipe_join_dedupe([r.source_title for r in members])
     merged["URL"] = _pipe_join_dedupe([r.url for r in members])
     merged["Date"] = _pipe_join_dedupe([r.date for r in members])
-    merged["Full Commentary"] = merge_commentaries(
-        [(r.source_title, _locator_from_commentary(r.commentary), r.commentary) for r in members]
-    )
+    merged.update(_merged_commentary_columns([winner, *[r for r in members if r is not winner]]))
     merged["confidence"] = str(max((r.confidence or 0) for r in members))
     merged["band"] = winner.band
     merged["review_flag"] = _or_review_flags([r.review_flag for r in members])
@@ -414,7 +410,7 @@ def resolve_conflict(members: list[Row]) -> tuple[Row | None, str, str]:
     that yields a UNIQUE winner ends it. Returns (winner|None, rule, detail);
     None winner means rule 4 (needs_human): keep every row.
     """
-    # Rule 1 — recency (only when EVERY row is dated and one date is strictly newest).
+    # Rule 1 - recency (only when EVERY row is dated and one date is strictly newest).
     dated = [(row, _row_date(row.date)) for row in members]
     if all(parts is not None for _, parts in dated):
         newest = max(parts for _, parts in dated)  # type: ignore[type-var]
@@ -422,7 +418,7 @@ def resolve_conflict(members: list[Row]) -> tuple[Row | None, str, str]:
         if len(winners) == 1:
             return winners[0], "recency", f"newest date {_fmt_date(newest)}"
 
-    # Rule 2 — basis (stated > forecast_delta > inferred).
+    # Rule 2 - basis (stated > forecast_delta > inferred).
     ranked = [(row, _BASIS_RANK.get(row.basis, -1)) for row in members]
     top_basis = max(rank for _, rank in ranked)
     basis_winners = [row for row, rank in ranked if rank == top_basis]
@@ -430,7 +426,7 @@ def resolve_conflict(members: list[Row]) -> tuple[Row | None, str, str]:
         winner = basis_winners[0]
         return winner, "basis", f"basis '{winner.basis}' beats the other rows"
 
-    # Rule 3 — confidence band, then numeric confidence.
+    # Rule 3 - confidence band, then numeric confidence.
     def band_conf(row: Row) -> tuple[int, int]:
         return (_BAND_RANK.get(row.band, -1), row.confidence or 0)
 
@@ -438,9 +434,9 @@ def resolve_conflict(members: list[Row]) -> tuple[Row | None, str, str]:
     conf_winners = [row for row in members if band_conf(row) == best]
     if len(conf_winners) == 1:
         winner = conf_winners[0]
-        return winner, "confidence", f"band {winner.band or '—'} / confidence {winner.confidence}"
+        return winner, "confidence", f"band {winner.band or '-'} / confidence {winner.confidence}"
 
-    # Rule 4 — no unique winner: escalate the whole group to a human.
+    # Rule 4 - no unique winner: escalate the whole group to a human.
     return None, "needs_human", "no deterministic rule produced a unique winner"
 
 
@@ -537,12 +533,25 @@ def _decide_key(firm: str, leaf: str, members: list[Row], scope: Verdict) -> Key
     failures: list[ReconcileFailure] = []
 
     def keep_all(action: str) -> KeyDecision:
-        """needs_human / distinct: every row survives. needs_human forces review."""
-        force_review = action == ACTION_NEEDS_HUMAN
+        """needs_human / distinct: every row survives, flagged for review, each
+        noting the other surviving view(s) on the same asset. Client feedback
+        (2026-10): a same-firm, same-asset contradiction must never read as a
+        clean call - the reader sees both rows and why both stand."""
         for row in members:
             out = dict(row.raw)
-            if force_review and (out.get("review_flag") or "none") == "none":
+            if (out.get("review_flag") or "none") == "none":
                 out["review_flag"] = "review"
+            others = "; ".join(
+                f"{m.view} in '{m.source_title}'" + (f" ({m.date})" if m.date else "")
+                for m in members
+                if m is not row
+            )
+            why = (
+                f"read as distinct claims ({scope.reason}) and no rule picks one; a human should decide"
+                if action == ACTION_KEPT_DISTINCT and scope.reason
+                else "could not be reconciled automatically; a human should decide"
+            )
+            append_note(out, f"Also held by this firm: {others} on the same asset; {why}.")
             emit[id(row)] = out
             per_row_action[id(row)] = action
         bucket = "needs_human" if action == ACTION_NEEDS_HUMAN else "distinct"
@@ -552,16 +561,28 @@ def _decide_key(firm: str, leaf: str, members: list[Row], scope: Verdict) -> Key
             "(all rows kept)", tuple(failures),
         )
 
-    # Scope-gate degraded, or genuinely distinct claims.
+    # Scope-gate degraded: every row survives for a human.
     if scope.verdict == VERDICT_NEEDS_HUMAN:
         return keep_all(ACTION_NEEDS_HUMAN)
-    if scope.verdict == VERDICT_DISTINCT:
-        return keep_all(ACTION_KEPT_DISTINCT)
 
-    # scope.verdict == same_claim.
+    # Distinct claims (client decision 2026-10): the deliverable is ONE row per
+    # firm and asset, so distinct claims go through the same merge / precedence
+    # ladder as a same claim; the surviving row records that the other claim
+    # existed and why it was read as distinct, and the losing row is visible in
+    # the failures file. Only a ladder with no unique winner keeps both rows.
+    distinct = scope.verdict == VERDICT_DISTINCT
+    distinct_tag = f" (read as distinct claims: {scope.reason})" if distinct and scope.reason else ""
+
     views = {row.view for row in members}
     if len(views) == 1:
         merged, winner, losers = merge_same_view(members)
+        if distinct:
+            append_note(
+                merged,
+                "Also held by this firm: the same view in "
+                + "; ".join(f"'{r.source_title}'" + (f" ({r.date})" if r.date else "") for r in losers)
+                + f"{distinct_tag}; merged to keep one row per asset.",
+            )
         emit[id(winner)] = merged
         per_row_action[id(winner)] = ACTION_WINNER
         for loser in losers:
@@ -571,7 +592,8 @@ def _decide_key(firm: str, leaf: str, members: list[Row], scope: Verdict) -> Key
                 ReconcileFailure(
                     REASON_MERGED, firm, loser.source_title, leaf, loser.view,
                     f"same {loser.view} view on '{leaf}' merged into the kept row "
-                    f"from {winner.source_title}; wording preserved in the merged commentary",
+                    f"from {winner.source_title}; wording preserved in the merged commentary"
+                    + distinct_tag,
                 )
             )
         return KeyDecision(
@@ -579,23 +601,32 @@ def _decide_key(firm: str, leaf: str, members: list[Row], scope: Verdict) -> Key
             emit, per_row_action, merged.get("Source", ""), tuple(failures),
         )
 
-    # same_claim, conflicting views → precedence ladder.
+    # Conflicting views → precedence ladder (recency → basis → confidence).
     winner, rule, detail = resolve_conflict(members)
     if winner is None:
-        return keep_all(ACTION_NEEDS_HUMAN)
+        return keep_all(ACTION_KEPT_DISTINCT if distinct else ACTION_NEEDS_HUMAN)
 
-    emit[id(winner)] = dict(winner.raw)
+    out = dict(winner.raw)
+    losers = [m for m in members if m is not winner]
+    append_note(
+        out,
+        "Also held by this firm: "
+        + "; ".join(f"{m.view} in '{m.source_title}'" + (f" ({m.date})" if m.date else "") for m in losers)
+        + f" on the same asset{distinct_tag}; this row kept by {rule} ({detail}), "
+        "the other view is listed in the failures file.",
+    )
+    if (out.get("review_flag") or "none") == "none":
+        out["review_flag"] = "review"
+    emit[id(winner)] = out
     per_row_action[id(winner)] = ACTION_WINNER
-    for loser in members:
-        if loser is winner:
-            continue
+    for loser in losers:
         emit[id(loser)] = None
         per_row_action[id(loser)] = ACTION_SUPERSEDED
         failures.append(
             ReconcileFailure(
                 REASON_SUPERSEDED, firm, loser.source_title, leaf, loser.view,
                 f"{loser.view} superseded by {winner.source_title}'s {winner.view} "
-                f"({rule}: {detail})",
+                f"({rule}: {detail}){distinct_tag}",
             )
         )
     return KeyDecision(
@@ -661,7 +692,7 @@ def run_reconcile(
 ) -> ReconcileResult:
     """Load → group → scope gate → merge/precedence (the exact-leaf pass). When
     `near_leaf` is set, a second Phase 3 pass runs over the exact-reconciled rows
-    (same LLM engine/model/effort — no independent default). Writes nothing."""
+    (same LLM engine/model/effort - no independent default). Writes nothing."""
     rows = load_rows(paths)
     groups = group_rows(rows)
     multi_keys = multi_row_keys(groups)
@@ -725,7 +756,7 @@ def run_reconcile(
 
 
 # =========================================================================== #
-# Phase 3 — near-leaf reconciliation (opt-in)
+# Phase 3 - near-leaf reconciliation (opt-in)
 #
 # Runs AFTER the exact-leaf pass above, over its reconciled rows, so the 61-key
 # exact baseline is preserved and never touched when --near-leaf is off. Two
@@ -789,7 +820,7 @@ def _classify_pair(a: LeafMeta, b: LeafMeta) -> str | None:
     if overlap >= STRUCTURAL_MIN_OVERLAP and (subset or a.category == b.category):
         return LANE_STRUCTURAL
     # Short-label containment lane: one leaf is <=2 meaningful tokens and all of
-    # them appear in the other — the low-Jaccard normalization case (e.g. AI ↔
+    # them appear in the other - the low-Jaccard normalization case (e.g. AI ↔
     # IT/Tech/Telecomms (inc. AI)) the structural lane misses.
     short = (
         (0 < len(a.tokens) <= SHORT_LABEL_MAX_TOKENS and a.tokens <= b.tokens)
@@ -1001,7 +1032,7 @@ def _parse_nearleaf_group(group: object) -> NearLeafGroup:
     if canonical is not None and not isinstance(canonical, str):
         raise ValueError("canonical_leaf must be a string or null")
     canonical = canonical.strip() if isinstance(canonical, str) else None
-    # A 2+ row group is a merge — it must name a canonical leaf up front so the
+    # A 2+ row group is a merge - it must name a canonical leaf up front so the
     # model gets a repair prompt rather than silently failing closed later.
     if len(ids) >= 2 and (relationship != NL_SAME_CLAIM or not canonical):
         raise ValueError("a multi-row group must be same_claim and name a canonical_leaf")
@@ -1082,7 +1113,7 @@ def nearleaf_verdicts(
     """Near-leaf judge pass over the clusters, in bounded batches. Returns
     {global cluster index: Verdict}. Any engine failure on a batch, or a cluster
     missing from the batch's response, degrades THOSE clusters to a fail-closed
-    needs_human verdict — never a crash."""
+    needs_human verdict - never a crash."""
     if not clusters:
         return {}
     if not use_llm:
@@ -1110,7 +1141,7 @@ def nearleaf_verdicts(
                 parser=parse_nearleaf,
             )
             payload: dict[int, NearLeafVerdict] = result.payload
-        except Exception:  # noqa: BLE001 — a failed batch degrades its clusters, never crashes
+        except Exception:  # noqa: BLE001 - a failed batch degrades its clusters, never crashes
             payload = {}
         for local_id, global_i in enumerate(batch):
             out[global_i] = payload.get(
@@ -1158,12 +1189,12 @@ class NearLeafClusterDecision:
     audits: tuple[NearLeafRowAudit, ...]
     action_bucket: str  # merged | mixed | kept | needs_human
     # Distinct original leaves in each merged group (for the coverage advisory's
-    # near_leaf_action flag — a pair is "acted" when both its leaves sit in one set).
+    # near_leaf_action flag - a pair is "acted" when both its leaves sit in one set).
     merged_leaf_sets: tuple[frozenset[str], ...] = ()
 
 
 def _cluster_rule(cluster: NearLeafCluster) -> tuple[str, str]:
-    """(candidate_generation_rule, token_overlap) summary for a cluster's audit —
+    """(candidate_generation_rule, token_overlap) summary for a cluster's audit -
     the lanes and the max overlap across its edges."""
     lanes = sorted({c.lane for c in cluster.candidates})
     overlap = max((c.overlap for c in cluster.candidates), default=0.0)
@@ -1210,12 +1241,19 @@ def _nearleaf_merge(
     merged["Source"] = _pipe_join_dedupe([m.source_title for m in members])
     merged["URL"] = _pipe_join_dedupe([m.url for m in members])
     merged["Date"] = _pipe_join_dedupe([m.date for m in members])
-    merged["Full Commentary"] = merge_commentaries(
-        [(m.source_title, _locator_from_commentary(m.commentary), m.commentary) for m in ordered]
-    )
+    merged.update(_merged_commentary_columns(ordered))
     merged["confidence"] = str(max((m.confidence or 0) for m in members))
     merged["band"] = primary.band
-    # Every near-leaf survivor is flagged for review in this opt-in first run.
+    # A near-leaf merge is a judgment (related leaves read as one call): the
+    # survivor is flagged and says which assets were folded in, so the flag is
+    # explained on the row itself (and recomputable from the notes later).
+    others = [m.leaf for m in members if m is not primary]
+    append_note(
+        merged,
+        "Merged from related assets: "
+        + ", ".join(f"'{leaf}'" for leaf in others)
+        + f" (read as one call on '{canonical_leaf}'; review recommended).",
+    )
     merged["review_flag"] = "review"
     return merged
 
@@ -1356,7 +1394,7 @@ def coverage_advisory(
     """Deterministic cross-firm broad↔specific coverage table. For every pair of
     locked leaves (any firm) where one leaf's meaningful tokens are a strict subset
     of the other's under the same asset class, report volume on each side. Volume
-    is CONTEXT ONLY — it never chooses a canonical leaf. `merged_leaf_sets` marks
+    is CONTEXT ONLY - it never chooses a canonical leaf. `merged_leaf_sets` marks
     which broad/specific pairs the near-leaf pass actually merged for some firm (a
     pair is flagged when both its leaves fall inside one merged set)."""
     merged_leaf_sets = merged_leaf_sets or []
@@ -1386,7 +1424,7 @@ def coverage_advisory(
             pair = {broad.label, specific.label}
             acted = any(pair <= s for s in merged_leaf_sets)
             advisory = (
-                "same firm(s) carry both — candidate for near-leaf review"
+                "same firm(s) carry both - candidate for near-leaf review"
                 if both
                 else "cross-firm coverage split across the broad and specific leaf"
             )
@@ -1538,7 +1576,7 @@ def render_summary(result: ReconcileResult, paths: list[Path]) -> str:
     lines.append("# Firm-reconcile summary")
     lines.append("")
     lines.append(
-        "Post-run firm-reconcile stage (v1.2 item 1 — the client's dual-confidence "
+        "Post-run firm-reconcile stage (v1.2 item 1 - the client's dual-confidence "
         "two-pass design). Deterministic join on `src.eval`-normalized firm + "
         "sub-asset leaf; an LLM scope gate classifies each multi-row key as the "
         "same claim or distinct claims, then all merge/precedence decisions are "
@@ -1581,7 +1619,7 @@ def render_summary(result: ReconcileResult, paths: list[Path]) -> str:
             views = " | ".join(row.view for row in decision.members)
             reason = decision.scope.reason or decision.precedence_rule
             lines.append(
-                f"- **{decision.firm} / {decision.leaf}** (views: {views}) — {reason}"
+                f"- **{decision.firm} / {decision.leaf}** (views: {views}) - {reason}"
             )
     else:
         lines.append("_None._")
@@ -1608,7 +1646,7 @@ def render_summary(result: ReconcileResult, paths: list[Path]) -> str:
         lines.append(f"- broad/specific coverage advisory rows: {len(nl.coverage_rows)}")
         lines.append("")
 
-    lines.append("## Scope — what this stage does NOT do")
+    lines.append("## Scope - what this stage does NOT do")
     lines.append("")
     if nl is None:
         lines.append(
@@ -1637,26 +1675,23 @@ def write_outputs(result: ReconcileResult, out_dir: Path, paths: list[Path]) -> 
     reconcile failure rows (client-shaped, for inspection / combine)."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    output_path = out_dir / "output.csv"
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(result.output_rows)
-
-    audit_path = out_dir / "reconcile-audit.csv"
-    with audit_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=AUDIT_COLUMNS)
-        writer.writeheader()
-        writer.writerows(result.audit_rows)
+    output_path = write_csv(out_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
+    audit_path = write_csv(out_dir / "reconcile-audit.csv", AUDIT_COLUMNS, result.audit_rows)
 
     summary_path = out_dir / "reconcile-summary.md"
     summary_path.write_text(render_summary(result, paths), encoding="utf-8")
 
-    failures_path = out_dir / "reconcile-failures-client.csv"
-    with failures_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CLIENT_FAILURE_COLUMNS)
-        writer.writeheader()
-        writer.writerows(failure.client_row() for failure in result.failures)
+    failures_path = write_csv(
+        out_dir / "reconcile-failures-client.csv",
+        CLIENT_FAILURE_COLUMNS,
+        [failure.client_row() for failure in result.failures],
+    )
+
+    # The client-facing twin (structured commentary, no diagnostics, BOM + xlsx).
+    # Late import: export reads the column constants above.
+    from src.export import write_client_files
+
+    write_client_files(out_dir, result.output_rows)
 
     written = {
         "output": output_path,
@@ -1667,19 +1702,12 @@ def write_outputs(result: ReconcileResult, out_dir: Path, paths: list[Path]) -> 
 
     # Phase 3 artifacts, written only when the near-leaf pass ran.
     if result.near_leaf is not None:
-        nl_audit_path = out_dir / "reconcile-nearleaf-audit.csv"
-        with nl_audit_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=NEARLEAF_AUDIT_COLUMNS)
-            writer.writeheader()
-            writer.writerows(result.near_leaf.audit_rows)
-        written["nearleaf_audit"] = nl_audit_path
-
-        coverage_path = out_dir / "taxonomy-coverage-review.csv"
-        with coverage_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=COVERAGE_COLUMNS)
-            writer.writeheader()
-            writer.writerows(result.near_leaf.coverage_rows)
-        written["coverage"] = coverage_path
+        written["nearleaf_audit"] = write_csv(
+            out_dir / "reconcile-nearleaf-audit.csv", NEARLEAF_AUDIT_COLUMNS, result.near_leaf.audit_rows
+        )
+        written["coverage"] = write_csv(
+            out_dir / "taxonomy-coverage-review.csv", COVERAGE_COLUMNS, result.near_leaf.coverage_rows
+        )
 
     return written
 
@@ -1691,7 +1719,7 @@ def write_outputs(result: ReconcileResult, out_dir: Path, paths: list[Path]) -> 
 
 def _resolve_model(engine: str, model: str | None) -> str | None:
     """claude requires an explicit model; supply the opus default when omitted.
-    codex passes the model through unchanged — None → the adapter's default codex
+    codex passes the model through unchanged - None → the adapter's default codex
     model, a named codex model validated downstream (never silently dropped)."""
     if engine == "claude" and model is None:
         return "opus"

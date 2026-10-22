@@ -31,6 +31,7 @@ from src.llm import (
     parse_verdicts,
     resolve_codex_model,
 )
+from src import sharedevidence
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import load_taxonomy
 
@@ -72,6 +73,10 @@ def run_pipeline(
     quote_visual_engine: str = "codex",
     quote_visual_model: str | None = "gpt-5.6-luna",
     quote_visual_effort: str = "high",
+    evidence_gate: bool = True,
+    evidence_engine: str = sharedevidence.DEFAULT_ENGINE,
+    evidence_model: str | None = sharedevidence.DEFAULT_MODEL,
+    evidence_effort: str = sharedevidence.DEFAULT_EFFORT,
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
     brain_text: str | None = None,
@@ -83,7 +88,7 @@ def run_pipeline(
     Up to four LLM steps, each with its own engine/model/effort: analyze (the
     extraction workhorse), checker (second-reader verdicts per source batch),
     arbiter (conflict resolution, only called when views collide), and the
-    group resolver (only when analyst group notes are supplied — translates
+    group resolver (only when analyst group notes are supplied - translates
     free-text pairing notes into an explicit, saved grouping plan once, before
     any analysis).
     """
@@ -99,12 +104,14 @@ def run_pipeline(
         grouper_model = DEFAULT_CODEX_MODEL
     if quote_visual_engine == "codex" and quote_visual_model is None:
         quote_visual_model = DEFAULT_CODEX_MODEL
+    if evidence_engine == "codex" and evidence_model is None:
+        evidence_model = DEFAULT_CODEX_MODEL
     taxonomy = load_taxonomy()
     taxonomy_block = taxonomy.grouped_block()
     brain = brain_text if brain_text is not None else _brain_text()
     conventions = conventions_text if conventions_text is not None else _conventions_text()
     # Default paths (out_root absent) are exactly today's: work/<id> and runs/<id>.
-    # An out_root reroots both under it: <out_root>/work/<id> and <out_root>/<id> —
+    # An out_root reroots both under it: <out_root>/work/<id> and <out_root>/<id> -
     # so a production batch keeps all its artifacts out of the test/pilot trees.
     if out_root is not None:
         base = Path(out_root)
@@ -227,7 +234,7 @@ def run_pipeline(
         if group_id:
             group_ledgers[group_id] = (
                 "\n## Companion document already analyzed in this grouped source set\n"
-                "Report this document's own stances normally — corroboration and\n"
+                "Report this document's own stances normally - corroboration and\n"
                 "conflicts across the set are resolved downstream; mark `conflict:\n"
                 "true` where this document disagrees with the companion.\n\n"
                 f"{source_memory}\n"
@@ -298,6 +305,15 @@ def run_pipeline(
         runner=runner,
         stats=quote_visual_stats,
     )
+    # Shared-evidence gate (src/sharedevidence.py): one passage cited for
+    # several leaves keeps only the most compelling call(s). Judgment-tier model.
+    shared_evidence_judge = (
+        sharedevidence.make_judge(
+            engine=evidence_engine, model=evidence_model, effort=evidence_effort, runner=runner
+        )
+        if evidence_gate
+        else None
+    )
     result = assemble_candidates(
         all_candidates,
         sources=source_infos,
@@ -312,6 +328,7 @@ def run_pipeline(
         group_map=group_map or None,
         quote_visual_verifier=quote_visual_verifier,
         native_source_paths=native_source_paths,
+        shared_evidence_judge=shared_evidence_judge,
     )
     run_config = {
         "engine": engine,
@@ -322,6 +339,9 @@ def run_pipeline(
         "arbiter": f"{arbiter_engine}/{arbiter_model}/{arbiter_effort}",
         "quote visual verifier": (
             f"{quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
+        ),
+        "shared-evidence gate": (
+            f"{evidence_engine}/{evidence_model}/{evidence_effort}" if evidence_gate else "off"
         ),
     }
     if group_notes_text:
@@ -361,7 +381,7 @@ def analyze_source(
 ) -> tuple[list[CandidateCall], list[FailureRecord]]:
     """Analyze every chunk of one source with rolling memory between chunks.
 
-    initial_memory seeds the rolling memory before the first chunk — used to
+    initial_memory seeds the rolling memory before the first chunk - used to
     carry a grouped companion document's ledger into this document's read.
     """
     source = ingested.source
@@ -423,12 +443,12 @@ def _check_candidates(
     """One second-reader call for all of a source's candidates.
 
     Returns {local candidate index: verdict}. A failed checker call returns no
-    verdicts plus a failure record — candidates then proceed capped and
+    verdicts plus a failure record - candidates then proceed capped and
     flagged for review, never silently promoted.
 
     memory_text is the source's complete rolling memory (the same ledger built
     during analyze). It is injected as whole-file context so the checker can see
-    whether a candidate is corroborated or contradicted elsewhere in the file —
+    whether a candidate is corroborated or contradicted elsewhere in the file -
     but it never relaxes the per-candidate evidence bar (the prompt says so).
 
     When checker_context is on, each candidate is deterministically routed
@@ -531,7 +551,7 @@ def _context_fields(
 
     Empty (no fields) unless --checker-context is on. A CLEAN route adds
     `evidence_context` (the text window); a DEGRADED route adds
-    `context_unreliable: true` — but only when there is a PDF page image to open
+    `context_unreliable: true` - but only when there is a PDF page image to open
     (native PDF present and a cited page), otherwise nothing is attached and the
     candidate is judged exactly as today. Never raises."""
     if not enabled:
@@ -738,7 +758,7 @@ def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
             f"This chunk is pages {pages} of the PDF file at:\n"
             f"`{chunk.source_path}`\n\n"
             f"{capture_note}"
-            "Open and read those pages as rendered pages — view them so you see "
+            "Open and read those pages as rendered pages - view them so you see "
             "tables, positioning/view grids, arrows, and dial gauges as printed, not "
             "only the extracted text. Cite what you actually see on the page."
         )
@@ -763,7 +783,7 @@ def _html_chunk_text(chunk: Chunk) -> str:
 
 
 def _memory_header(source: SourceRecord) -> str:
-    return f"# {source.firm} — {source.source}  ({source.source_id})\n"
+    return f"# {source.firm} - {source.source}  ({source.source_id})\n"
 
 
 def _append_memory(
@@ -799,8 +819,8 @@ def load_sources(spec: str) -> list[SourceRecord]:
 
     ``pilot`` and ``target`` load the built-in CSVs; any other value is a path
     to a source CSV in the pilot column family (canonical firm/date/source/url +
-    optional local_file, header aliases accepted — see ``ingest._COLUMN_ALIASES``)
-    — so adding a second test set needs no code change. The <=20 source limit is
+    optional local_file, header aliases accepted - see ``ingest._COLUMN_ALIASES``)
+    - so adding a second test set needs no code change. The <=20 source limit is
     enforced by the caller for every case.
     """
     if spec == "pilot":
@@ -817,7 +837,7 @@ def resolve_engine_settings(engine: str, model: str | None, effort: str | None) 
     full name) so a run never silently inherits the CLI's settings default.
     codex: model defaults to ``DEFAULT_CODEX_MODEL`` when omitted and must be a
     member of the codex allowlist otherwise. effort is required for both engines
-    and must be a level the engine accepts (the codex floor is ``low`` — no
+    and must be a level the engine accepts (the codex floor is ``low`` - no
     ``minimal``).
     """
     if engine == "codex":
@@ -939,6 +959,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="reasoning effort for tier-3 visual quote verification (default high)",
     )
     parser.add_argument(
+        "--evidence-engine",
+        choices=("claude", "codex"),
+        default=sharedevidence.DEFAULT_ENGINE,
+        help=f"engine for the shared-evidence gate (default {sharedevidence.DEFAULT_ENGINE})",
+    )
+    parser.add_argument(
+        "--evidence-model",
+        default=sharedevidence.DEFAULT_MODEL,
+        help=f"model for the shared-evidence gate (default {sharedevidence.DEFAULT_MODEL})",
+    )
+    parser.add_argument(
+        "--evidence-effort",
+        default=sharedevidence.DEFAULT_EFFORT,
+        help=f"reasoning effort for the shared-evidence gate (default {sharedevidence.DEFAULT_EFFORT})",
+    )
+    parser.add_argument(
+        "--no-evidence-gate",
+        action="store_true",
+        help="skip the shared-evidence gate (one passage cited for several assets "
+        "then keeps every call, as before 2026-10)",
+    )
+    parser.add_argument(
         "--out-root",
         help="optional root for this run's artifacts: writes to <out-root>/<run-id>/ "
         "and <out-root>/work/<run-id>/ instead of runs/<run-id> and work/<run-id> "
@@ -984,6 +1026,9 @@ def main() -> int:
         quote_visual_model, quote_visual_effort = resolve_engine_settings(
             args.quote_visual_engine, args.quote_visual_model, args.quote_visual_effort
         )
+        evidence_model, evidence_effort = resolve_engine_settings(
+            args.evidence_engine, args.evidence_model, args.evidence_effort
+        )
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
 
@@ -997,7 +1042,8 @@ def main() -> int:
         f"checker={args.checker_engine}/{checker_model}/{checker_effort}"
         f"{'+context' if args.checker_context else ''} | "
         f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort} | "
-        f"quote_visual={args.quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
+        f"quote_visual={args.quote_visual_engine}/{quote_visual_model}/{quote_visual_effort} | "
+        f"evidence_gate={'off' if args.no_evidence_gate else f'{args.evidence_engine}/{evidence_model}/{evidence_effort}'}"
         f"{grouper_line}"
     )
     result, chunk_failures, run_dir = run_pipeline(
@@ -1021,6 +1067,10 @@ def main() -> int:
         quote_visual_engine=args.quote_visual_engine,
         quote_visual_model=quote_visual_model,
         quote_visual_effort=quote_visual_effort,
+        evidence_gate=not args.no_evidence_gate,
+        evidence_engine=args.evidence_engine,
+        evidence_model=evidence_model,
+        evidence_effort=evidence_effort,
         out_root=args.out_root,
     )
     kept = len(result.output_rows)

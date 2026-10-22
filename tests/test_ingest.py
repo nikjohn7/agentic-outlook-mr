@@ -255,7 +255,7 @@ def _load_word_fixture(name: str) -> tuple[list[dict[str, object]], float, float
 
 
 def _single_column_words() -> list[dict[str, object]]:
-    # 30 lines that each span the page center — no interior gutter.
+    # 30 lines that each span the page center - no interior gutter.
     return [
         {"x0": 50.0, "x1": 500.0, "top": 40.0 + row * 15, "bottom": 52.0 + row * 15}
         for row in range(30)
@@ -275,13 +275,13 @@ def _two_column_words() -> list[dict[str, object]]:
 class ScrambleDetectorTest(unittest.TestCase):
     def test_flags_column_interleaved_jpm_page(self) -> None:
         # Real word boxes extracted from JPM pilot-04 p.2 (two-column layout that
-        # pdfplumber interleaves line-by-line — the quote_not_found failure).
+        # pdfplumber interleaves line-by-line - the quote_not_found failure).
         words, width, height = _load_word_fixture("jpm_scrambled_p2_words.json")
 
         self.assertTrue(detect_scrambled_page(words, width, height))
 
     def test_does_not_flag_clean_single_column_ab_page(self) -> None:
-        # Real word boxes from AB pilot-04 p.7 — clean single-column prose (its
+        # Real word boxes from AB pilot-04 p.7 - clean single-column prose (its
         # own failure was a stitched quote, which must stay a failure).
         words, width, height = _load_word_fixture("ab_clean_p7_words.json")
 

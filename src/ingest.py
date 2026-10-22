@@ -68,9 +68,9 @@ VISUAL_HEAVY_IMAGE_THRESHOLD = 5
 # 2026-07-07) and is never used for the run's outputs. The Date on every output
 # row comes only from the document itself, as strict DD/MM/YYYY, or stays blank.
 # For HTML the fetched markup goes through htmldate (meta tags, JSON-LD, visible
-# text — publication date, not update date), which already normalizes to
-# DD/MM/YYYY. For PDFs only the top of the first page's text is scanned —
-# cover/masthead territory — and only a full worded date (day + month + year)
+# text - publication date, not update date), which already normalizes to
+# DD/MM/YYYY. For PDFs only the top of the first page's text is scanned -
+# cover/masthead territory - and only a full worded date (day + month + year)
 # is accepted: numeric forms (15/06/2026) are skipped as DD/MM-vs-MM/DD
 # ambiguous, a bare month-year ("June 2026") yields blank rather than
 # fabricating a day, and PDF metadata (CreationDate) is never used because a
@@ -112,7 +112,7 @@ MAX_CONSENT_DIALOGS = 3
 # even though the model (which reads the rendered page) quoted it correctly.
 # We flag such pages deterministically by their defining physical property: a
 # persistent, near-empty vertical gutter that runs the full body height with
-# substantial text on both sides. Line length alone does NOT work — a wide
+# substantial text on both sides. Line length alone does NOT work - a wide
 # single-column page has long lines too (AB pilot pages run longer than the JPM
 # two-column page), so only the gutter distinguishes them.
 SCRAMBLE_BODY_TOP_FRAC = 0.10  # ignore header band when measuring the gutter
@@ -175,14 +175,14 @@ class HtmlFetchResult:
 def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
     """Load a source CSV in the pilot column family.
 
-    Canonical fields — firm, date, source (title), url, and optional local_file —
+    Canonical fields - firm, date, source (title), url, and optional local_file -
     each accept a few header aliases (see `_COLUMN_ALIASES`), so an export CSV
     using `Entity Name` / `Title` / `External link` loads with no editing.
     A row's `source_type` is `pdf` when it resolves to a local PDF (`local_file`)
     or its URL points at a `.pdf` (fetched remotely); `txt` when local_file is a
     plain-text transcript (video sources ship as transcripts); otherwise `html`.
     See `_resolve_local_file` for the local_file contract. Any second test set is
-    a CSV of this family — pointing `--sources <path>` at it needs no code change.
+    a CSV of this family - pointing `--sources <path>` at it needs no code change.
     """
     rows = _read_csv(path)
     header = _map_source_headers(rows, path)
@@ -248,7 +248,7 @@ def _match_header_alias(header: str | None) -> str | None:
 def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRecord]:
     """Load the target-batch CSV (`Id`, `Firm`, `Title`, `Published At`,
     `Source Link`). It carries no `local_file` column, which resolves as empty
-    for every row (all URLs fetched) — loading is unchanged; the optional column
+    for every row (all URLs fetched) - loading is unchanged; the optional column
     is honoured if a future target CSV adds it."""
     rows = _read_csv(path)
     sources: list[SourceRecord] = []
@@ -583,7 +583,7 @@ def _resolve_local_file(
       - present and the file exists  -> ingest that local file; the row's URL is
         kept only as metadata (the mapped-local-file behavior);
       - present but missing on disk  -> hard error naming the row (never a silent
-        fall back to the URL — a typo would otherwise fetch the wrong thing);
+        fall back to the URL - a typo would otherwise fetch the wrong thing);
       - absent or empty              -> None; fetch the URL (a `.pdf` URL is
         downloaded and read as a PDF, anything else takes the HTML path).
     A CSV without the column at all behaves as empty for every row (no local
@@ -595,12 +595,12 @@ def _resolve_local_file(
     path = PROJECT_ROOT / raw
     if not path.exists():
         raise FileNotFoundError(
-            f"local_file '{raw}' for source '{firm} — {title}' does not exist "
+            f"local_file '{raw}' for source '{firm} - {title}' does not exist "
             f"(resolved to {path}); fix the path or clear the column to fetch the URL"
         )
     if path.suffix.lower() not in {".pdf", ".txt"}:
         raise ValueError(
-            f"local_file '{raw}' for source '{firm} — {title}' must be a .pdf "
+            f"local_file '{raw}' for source '{firm} - {title}' must be a .pdf "
             f"or a .txt transcript; got '{path.suffix}'"
         )
     return path
@@ -745,7 +745,7 @@ def detect_scrambled_page(
     list (each a mapping with ``x0``/``x1``/``top``/``bottom``). We look only
     for the physical signature of a multi-column page: a near-empty vertical
     band in the page interior that separates two well-populated columns across
-    the full body height. A single-column page — however wide its lines — has
+    the full body height. A single-column page - however wide its lines - has
     text crossing every interior x, so it never trips this.
     """
     body = [

@@ -13,7 +13,7 @@ across runs by the 20-items-per-run cap). It NEVER modifies any run output.
 What it does:
 
 1. Load every row from every given `output.csv`, tagging each with its source
-   file. The join key is `src.eval`'s normalized firm + normalized leaf — the
+   file. The join key is `src.eval`'s normalized firm + normalized leaf - the
    SAME normalization the ground-truth harness and `runs/test2-01-rescored`
    use, imported (never reimplemented) so "same call" means one thing
    everywhere.
@@ -22,12 +22,12 @@ What it does:
    or-more rows with differing `View`s are `conflicting_views`.
 3. `conflicting_views` groups get ONE batched categorical review pass (default a
    light Claude tier). Same-view duplicates never touch the LLM. A failed review
-   pass degrades gracefully — every conflict group falls back to `needs_human`.
+   pass degrades gracefully - every conflict group falls back to `needs_human`.
 4. Write `crosscheck.csv` (one row per reported key, full provenance) and
    `crosscheck-summary.md` (counts + needs-human list + scope disclaimer).
 
 Exact firm+leaf matches only. Near-leaf / fuzzy matching and the full
-dual-confidence firm-reconcile stage are deliberately out of scope — v1.2
+dual-confidence firm-reconcile stage are deliberately out of scope - v1.2
 backlog items 6 and 1 in `ROADMAP.md`.
 """
 
@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Callable
 
 from src import llm
+from src.csvio import write_csv
 # Import the join normalization from src.eval rather than reimplementing it, so
 # a "duplicate key" here means exactly what it means to src.eval and to the
 # runs/test2-01-rescored frozen-wins dedupe (precedent: rescore.py). Do not
@@ -193,7 +194,7 @@ def _row_sort_key(row: Row) -> tuple[str, int]:
 
 
 # --------------------------------------------------------------------------- #
-# Task 2 — one batched categorical review pass over conflicting groups
+# Task 2 - one batched categorical review pass over conflicting groups
 # --------------------------------------------------------------------------- #
 
 
@@ -250,7 +251,7 @@ def conflict_verdicts(
 
     Returns {index-into-conflicts: Verdict}. With `use_llm=False`, or when the
     single batched call fails for any reason, every conflict group degrades to a
-    `needs_human` verdict — never a crash. The group_id sent to the model is the
+    `needs_human` verdict - never a crash. The group_id sent to the model is the
     conflict's position in this list, so the mapping back is exact."""
     if not conflicts:
         return {}
@@ -286,7 +287,7 @@ def conflict_verdicts(
             runner=runner,
             parser=parse_crosscheck,
         )
-    except Exception:  # noqa: BLE001 — any failure degrades to needs_human, never a crash
+    except Exception:  # noqa: BLE001 - any failure degrades to needs_human, never a crash
         return {i: Verdict(VERDICT_NEEDS_HUMAN, _REVIEW_FAILED_NOTE) for i in range(len(conflicts))}
 
     payload: dict[int, Verdict] = result.payload
@@ -299,7 +300,7 @@ def conflict_verdicts(
 
 
 # --------------------------------------------------------------------------- #
-# Task 3 — reported records + output rendering
+# Task 3 - reported records + output rendering
 # --------------------------------------------------------------------------- #
 
 
@@ -385,7 +386,7 @@ def _crosscheck_row(key: ReportedKey) -> dict[str, str]:
         "source_titles": _pipe([row.source_title for row in key.rows]),
         "dates": _pipe([row.date for row in key.rows]),
         "confidence_bands": _pipe(
-            [f"{row.confidence or '—'}/{row.band or '—'}" for row in key.rows]
+            [f"{row.confidence or '-'}/{row.band or '-'}" for row in key.rows]
         ),
         "bucket": key.bucket,
         "agent_verdict": key.verdict,
@@ -427,18 +428,18 @@ def render_summary(reported: list[ReportedKey], paths: list[Path]) -> str:
         for firm in sorted(firm_counts):
             lines.append(f"- {firm}: {firm_counts[firm]}")
     else:
-        lines.append("_None — no same-firm same-leaf overlap found._")
+        lines.append("_None - no same-firm same-leaf overlap found._")
     lines.append("")
     lines.append("## Needs-human groups")
     lines.append("")
     if needs_human:
         for key in needs_human:
-            note = f" — {key.note}" if key.note else ""
+            note = f" - {key.note}" if key.note else ""
             lines.append(f"- {key.firm} / {key.leaf} (views: {_pipe([r.view for r in key.rows])}){note}")
     else:
         lines.append("_None._")
     lines.append("")
-    lines.append("## Scope — what this tool does NOT do")
+    lines.append("## Scope - what this tool does NOT do")
     lines.append("")
     lines.append(
         "- **No fuzzy / near-leaf matching.** Joins on the exact normalized "
@@ -460,11 +461,9 @@ def render_summary(reported: list[ReportedKey], paths: list[Path]) -> str:
 
 def write_outputs(reported: list[ReportedKey], out_dir: Path, paths: list[Path]) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = out_dir / "crosscheck.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CROSSCHECK_COLUMNS)
-        writer.writeheader()
-        writer.writerows(_crosscheck_row(key) for key in reported)
+    csv_path = write_csv(
+        out_dir / "crosscheck.csv", CROSSCHECK_COLUMNS, [_crosscheck_row(key) for key in reported]
+    )
 
     summary_path = out_dir / "crosscheck-summary.md"
     summary_path.write_text(render_summary(reported, paths), encoding="utf-8")
@@ -509,7 +508,7 @@ def run_crosscheck(
 
 def _resolve_model(engine: str, model: str | None) -> str | None:
     """claude requires an explicit model; supply the default when omitted.
-    codex passes the model through unchanged — None → the adapter's default codex
+    codex passes the model through unchanged - None → the adapter's default codex
     model, a named codex model validated downstream (never silently dropped)."""
     if engine == "claude" and model is None:
         return "sonnet"

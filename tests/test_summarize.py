@@ -89,7 +89,7 @@ class LoadRunSourcesTests(unittest.TestCase):
             sdir = work_dir / spec["sid"]
             sdir.mkdir(parents=True)
             (sdir / "memory.md").write_text(
-                f"# {spec['firm']} — {spec['title']}  ({spec['sid']})\n\n## Chunk\nSummary: s\n",
+                f"# {spec['firm']} - {spec['title']}  ({spec['sid']})\n\n## Chunk\nSummary: s\n",
                 encoding="utf-8",
             )
             native = sdir / spec["native"]
@@ -165,7 +165,7 @@ class LoadRunSourcesTests(unittest.TestCase):
             sdir = work_dir / "acme-outlook"
             sdir.mkdir(parents=True)
             (sdir / "memory.md").write_text(
-                "# Acme — Acme Outlook 2026  (acme-outlook)\n\n## Chunk\nSummary: s\n",
+                "# Acme - Acme Outlook 2026  (acme-outlook)\n\n## Chunk\nSummary: s\n",
                 encoding="utf-8",
             )
             (sdir / "acme.pdf").write_bytes(b"%PDF-1.4 stub")

@@ -4,7 +4,7 @@ Metadata only. The scout reads a source CSV's firm / title / date via the
 existing ingest loader (`ingest.load_pilot_sources`, header aliases accepted)
 and asks one light LLM whether any same-firm sources are clear companions that
 should be read as one combined source. It never fetches a URL or reads a
-document — document-level linking is a later (v1.2) concern.
+document - document-level linking is a later (v1.2) concern.
 
 Its `--out` file is a `--group-notes`-compatible notes file: one analyst-style
 line per accepted group, phrased the way `prompts/resolve_groups.md` expects,
@@ -204,8 +204,8 @@ def _apply_guards(
     known_ids: set[str],
     firm_by_id: dict[str, str],
 ) -> tuple[list[dict], list[str]]:
-    """Drop unknown ids, overlaps, cross-firm merges, and sub-pairs — with a
-    warning for each — mirroring ``run._resolve_groups``."""
+    """Drop unknown ids, overlaps, cross-firm merges, and sub-pairs - with a
+    warning for each - mirroring ``run._resolve_groups``."""
     warnings: list[str] = []
     accepted: list[dict] = []
     grouped: set[str] = set()
@@ -253,11 +253,11 @@ def _note_line(firm: str, records: list[SourceRecord]) -> str:
     if len(records) == 2:
         return (
             f"Read the {firm} {quoted[0]} along with the {firm} {quoted[1]} "
-            "report when making calls — treat the two as one combined source."
+            "report when making calls - treat the two as one combined source."
         )
     joined = ", ".join(quoted[:-1]) + f", and {quoted[-1]}"
     return (
-        f"Read the {firm} reports {joined} together when making calls — "
+        f"Read the {firm} reports {joined} together when making calls - "
         "treat them as one combined source."
     )
 
@@ -268,7 +268,7 @@ def _quote_title(record: SourceRecord) -> str:
 
 
 def _empty_notes(reason: str) -> str:
-    return f"<!-- scout: no groups — {reason} -->\n"
+    return f"<!-- scout: no groups - {reason} -->\n"
 
 
 def _render_report(
@@ -294,7 +294,7 @@ def _render_report(
         lines.append("## Grouped")
         lines.append("")
         for index, group in enumerate(accepted, start=1):
-            lines.append(f"### {group['firm']} — group-{index}")
+            lines.append(f"### {group['firm']} - group-{index}")
             for record in group["records"]:
                 date = record.date.strip() or "no date"
                 lines.append(f"- \"{record.source}\" ({date}) [{record.source_id}]")
@@ -319,7 +319,7 @@ def _render_report(
             lines.append(f"- \"{record.source}\" ({date}) [{record.source_id}]")
         lines.append("")
     if not any_independent:
-        lines.append("(none — every multi-source firm was fully grouped)")
+        lines.append("(none - every multi-source firm was fully grouped)")
         lines.append("")
 
     lines.append("## Guard warnings")

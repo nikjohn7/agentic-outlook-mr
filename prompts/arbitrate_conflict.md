@@ -1,8 +1,8 @@
 # Arbitrate a conflicting allocation call
 
-Two or more validated candidates from the same source — or the same
+Two or more validated candidates from the same source - or the same
 analyst-grouped source set (e.g. a firm's review document paired with its
-outlook document) — assign different views to the SAME sub-asset class. Decide which single candidate states the source's
+outlook document) - assign different views to the SAME sub-asset class. Decide which single candidate states the source's
 actual current stance. You are applying the house's own publication
 conventions, not your market opinion. A deterministic layer downstream keeps
 the winner (always flagged for analyst review), records the losers with your
@@ -19,7 +19,7 @@ Decision rules, in order:
    scenario, hedge, or "if X then Y" commentary. Within a grouped source set,
    the forward-looking outlook document beats the retrospective review
    document.
-4. **Same-direction duplicates are not conflicts** — if the difference is
+4. **Same-direction duplicates are not conflicts** - if the difference is
    intensity, not sign, choose the clearer statement of the same stance.
 5. If, after these rules, the source genuinely holds both views at once
    (e.g. explicit different horizons with no primary stance), return

@@ -18,10 +18,10 @@ HARD_FAILURE_MATERIALITY = "delta_below_materiality"
 VISUAL_UNVERIFIED_BY_TEXT = "visual_unverified_by_text"
 
 # Materiality floor for forecast-delta evidence (a house forecast endpoint vs.
-# the current level). PROVISIONAL, pending client confirmation — this maps to
+# the current level). PROVISIONAL, pending client confirmation - this maps to
 # open client question 1 in runs/pilot-05/gt-comparison.md ("is a forecast
 # delta a view at all, and if so what floor?"). Below the floor a forecast_delta
-# candidate hard-fails to `delta_below_materiality` (reviewable and reversible —
+# candidate hard-fails to `delta_below_materiality` (reviewable and reversible -
 # never silently dropped, and never converted to `N`: an immaterial move is not
 # evidence of neutrality). At/above the floor it may proceed but is capped below
 # High and flagged, because "delta-as-view" itself is not yet confirmed.
@@ -32,7 +32,7 @@ FORECAST_DELTA_CAP = 74
 # An analyst-style inference (basis: inferred) reads a positioning consequence
 # out of macro/thematic prose that never states a position. It is encouraged but
 # segregated one full band below stated calls: capped into the middle (Medium)
-# band and always flagged for review. Stated calls reach High (>=75); this cap
+# band (the band, not a review flag, carries it). Stated calls reach High (>=75); this cap
 # lands an inference at 74 = the top of Medium, one band down.
 INFERRED_CAP = 74
 
@@ -46,8 +46,8 @@ CHECKER_FAIL_REASONS = {
 
 # Without full checker confirmation a call cannot reach the High band: the
 # rubric arithmetic is unchanged (scores stay comparable across runs), but the
-# score is capped just under the High threshold, which also forces the
-# review flag. "High" therefore means "a second model confirmed the evidence
+# score is capped just under the High threshold; an unconfirmed or missing
+# verdict is a review item. "High" therefore means "a second model confirmed the evidence
 # supports the call".
 CHECKER_UNCONFIRMED_CAP = 74
 
@@ -68,7 +68,7 @@ CHECKER_ADEQUATE_DEDUCTION = 4
 CHECKER_THIN_CAP = 74
 
 # Read-quality floors: a PDF below MIN_PDF_CHARS_PER_PAGE is likely scanned or
-# image-only (its text layer — the quote-check corpus — is unreliable); an HTML
+# image-only (its text layer - the quote-check corpus - is unreliable); an HTML
 # snapshot below MIN_HTML_SNAPSHOT_CHARS is likely bot-blocked or paywalled.
 MIN_PDF_CHARS_PER_PAGE = 200
 MIN_HTML_SNAPSHOT_CHARS = 1000
@@ -81,12 +81,12 @@ MAX_PROSE_SPANS = 3
 MIN_SPAN_MEANINGFUL_TOKENS = 4
 
 # When the cited page is flagged scrambled (its text layer is column-
-# interleaved — see src/ingest.detect_scrambled_page), a correct contiguous
+# interleaved - see src/ingest.detect_scrambled_page), a correct contiguous
 # prose quote of the RENDERED page cannot survive the verbatim check against
 # the scrambled snapshot. On those pages only, prose falls back to the same
 # key-token overlap used for table/visual evidence. That is a weaker guarantee
 # (word order is no longer verified), so the score is capped just below the
-# High band and the row is flagged for review, and the degradation is recorded.
+# High band and the degradation is recorded (the band carries it; no review flag).
 SCRAMBLED_PROSE_CAP = 74
 DEGRADED_PROSE_CAP = SCRAMBLED_PROSE_CAP
 
@@ -96,7 +96,7 @@ DEGRADED_PROSE_CAP = SCRAMBLED_PROSE_CAP
 # be no wider than 3x the quote length. This recovers rendered-page prose broken
 # by column sidebars while still rejecting fabricated or reordered quotes. It is
 # weaker than exact/normalized substring matching, so it uses the degraded prose
-# cap and forces review.
+# cap (the band carries it; no review flag).
 SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP = 15
 SUBSEQUENCE_MAX_WINDOW_MULTIPLE = 3
 
@@ -136,13 +136,13 @@ class EvidenceContext:
     """Deterministic routing of a candidate's evidence-context window.
 
     route:
-      "clean"    — the quote sits on a trustworthy page; `text` is the
+      "clean"    - the quote sits on a trustworthy page; `text` is the
                    surrounding snapshot window (containing paragraph +/- one).
-      "degraded" — the surrounding text could not be trusted (subsequence match,
+      "degraded" - the surrounding text could not be trusted (subsequence match,
                    or the cited page is scrambled/OCR); no text is shipped. The
                    checker should open the page image instead. `cited_page` is
                    the page to open (may be None when the locator names none).
-      "none"     — no context attached (non-prose, empty snapshot, or the quote
+      "none"     - no context attached (non-prose, empty snapshot, or the quote
                    could not be located); the candidate is judged as today.
     """
 
@@ -153,7 +153,7 @@ class EvidenceContext:
 
 class EvidenceFailure(ValueError):
     """A failed evidence check, carrying the human-readable message (not just
-    the reason code) so failure rows can explain what happened — e.g. that a
+    the reason code) so failure rows can explain what happened - e.g. that a
     degraded key-token fallback on a scrambled page also came up empty."""
 
     def __init__(self, check: EvidenceCheck) -> None:
@@ -208,7 +208,7 @@ class ConfidenceResult:
     call_language_note: str = ""
     # The call-language bucket actually scored (after the explicit_dial-on-prose
     # downgrade), persisted so an analyst can audit the effective grade from the
-    # frozen output — not the raw candidate value.
+    # frozen output - not the raw candidate value.
     call_language: str = ""
 
 
@@ -286,8 +286,7 @@ def evidence_passes(
                     True,
                     message=(
                         f"page p.{cited_page} flagged OCR (image-only or low text layer); "
-                        "prose quote check passed on OCR text, but confidence is capped "
-                        "and review required"
+                        "prose quote check passed on OCR text, but confidence is capped"
                     ),
                     degraded=True,
                     quote_match=check.quote_match,
@@ -326,7 +325,7 @@ def evidence_context(
 ) -> EvidenceContext:
     """Route a candidate to a text context window, a visual fallback, or nothing.
 
-    Deterministic — the LLM never judges whether the text is trustworthy. Only
+    Deterministic - the LLM never judges whether the text is trustworthy. Only
     prose candidates are routed (table/visual evidence already has its own
     visual verification route). The route reuses the quote gate's own matching
     machinery to both classify the quote and locate it:
@@ -376,7 +375,7 @@ def _locate_primary_span(
     """Locate the primary (first) span, returning (source_string, start, end).
 
     For an exact match the span is found in the raw snapshot; for a normalized
-    match, in the normalized snapshot (whitespace-collapsed, dehyphenated) — the
+    match, in the normalized snapshot (whitespace-collapsed, dehyphenated) - the
     context window is extracted from whichever string the quote matched in.
     Mirrors the first-span search in _spans_in_order (cursor starts at 0)."""
     raw_spans = [span.strip() for span in candidate.evidence_spans if span.strip()]
@@ -524,8 +523,7 @@ def score_candidate(
             elif checker_strength == "thin":
                 thin_cap_required = True
                 checker_note = (
-                    "checker evidence_strength is thin; confidence capped below High "
-                    "and review required"
+                    "checker evidence_strength is thin; confidence capped below High"
                 )
         else:
             checker_status = "unclear"
@@ -548,16 +546,16 @@ def score_candidate(
     if candidate.basis == "forecast_delta":
         score = min(score, FORECAST_DELTA_CAP)
         cap_reason = (
-            "Basis: forecast_delta — a house forecast endpoint "
+            "Basis: forecast_delta - a house forecast endpoint "
             f"({_fmt(abs(candidate.delta_value or 0.0))}{candidate.delta_unit} move) is treated as a "
             "provisional view (delta-as-view pending client confirmation); "
-            "confidence capped below High and review required."
+            "confidence capped below High."
         )
     elif candidate.basis == "inferred":
         score = min(score, INFERRED_CAP)
         cap_reason = (
-            "Basis: inferred — single-step analyst inference from macro/thematic "
-            "prose; segregated one band below stated calls, review required."
+            "Basis: inferred - single-step analyst inference from macro/thematic "
+            "prose; segregated one band below stated calls."
         )
 
     if checker_enabled:
@@ -567,13 +565,16 @@ def score_candidate(
         score = min(score, CHECKER_THIN_CAP)
         cap_reason = _append_reason(
             cap_reason,
-            "Checker: evidence_strength thin — quoted evidence supports the view "
-            "only just; confidence capped below High and review required.",
+            "Checker: evidence_strength thin - quoted evidence supports the view "
+            "only just; confidence capped below High.",
         )
 
     band = score_band(score)
     review_flag = review_flag_for(score, candidate)
-    if (evidence_check.degraded or cap_reason) and review_flag == "none":
+    # The second reader did not confirm (or did not grade) this call: that is a
+    # judgment gap, so a human looks. Caps (degraded quote, inferred basis,
+    # forecast delta, thin) are carried by the band only.
+    if checker_enabled and checker_status != "confirmed" and review_flag == "none":
         review_flag = "review"
     return ConfidenceResult(
         candidate=candidate,
@@ -634,9 +635,19 @@ def score_band(score: int) -> str:
 
 
 def review_flag_for(score: int, candidate: CandidateCall) -> str:
+    """The review flag means "a judgment was made or dodged here - look at it".
+
+    Review-flag policy (2026-10, after the client found 54% of rows flagged):
+    a confidence CAP is not a review reason - `band` already carries it
+    (Medium = capped/inferred/degraded) - so a Medium score alone no longer
+    flags. What flags: a Low score (strong_review), a within-source conflict,
+    an UNCERTAIN view, an unconfirmed/missing checker verdict (set by the
+    caller), and the judgment notes assemble/reconcile append (arbiter, sibling
+    tripwire, implied challenge, shared evidence kept together, same-firm
+    same-asset pair)."""
     if score < 50:
         return "strong_review"
-    if score < 75 or candidate.conflict or candidate.view == "UNCERTAIN":
+    if candidate.conflict or candidate.view == "UNCERTAIN":
         return "review"
     return "none"
 
@@ -690,7 +701,7 @@ def _prose_evidence_passes(candidate: CandidateCall, snapshot_text: str) -> Evid
                 "prose quote matched as ordered token subsequence "
                 f"(max {SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP} injected tokens per gap, "
                 f"window <= {SUBSEQUENCE_MAX_WINDOW_MULTIPLE}x quote length); "
-                "confidence capped, review required"
+                "confidence capped"
             ),
             degraded=True,
             quote_match="subsequence",
@@ -782,7 +793,7 @@ def _degraded_prose_evidence_passes(
             message=(
                 f"page p.{cited_page} flagged {page_issue} ({message_detail}); "
                 "prose verbatim check degraded to key-token overlap "
-                "(confidence capped, review required)"
+                "(confidence capped)"
             ),
             degraded=True,
             quote_match="key_tokens",
@@ -832,7 +843,7 @@ def _table_or_visual_evidence_passes(
 
 def _key_tokens_overlap(evidence_quote: str, snapshot_text: str) -> bool:
     """At least two (or all, if fewer) of the evidence's meaningful tokens must
-    appear somewhere in the snapshot. Order is not checked — this is the weaker
+    appear somewhere in the snapshot. Order is not checked - this is the weaker
     guarantee used for evidence the snapshot cannot preserve verbatim (tables,
     visuals, and scrambled-page prose)."""
     quote_tokens = set(_meaningful_tokens(evidence_quote))
@@ -843,7 +854,7 @@ def _key_tokens_overlap(evidence_quote: str, snapshot_text: str) -> bool:
 
 
 def _cited_page(locator: str) -> int | None:
-    """First page number in a locator like ``p.2`` / ``p. 2 — Regional grid``."""
+    """First page number in a locator like ``p.2`` / ``p. 2 - Regional grid``."""
     match = re.search(r"p\.?\s*(\d+)", locator, flags=re.IGNORECASE)
     return int(match.group(1)) if match else None
 

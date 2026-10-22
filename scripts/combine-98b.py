@@ -9,15 +9,15 @@ Reads each split's output.csv / failures-client.csv / failures.csv (split 1 via
 its rescored deliverable dir; split 8's files already include the HSBC rerun
 merge) and writes 98b-combined/ with:
 
-- output.csv              — the RECONCILED master (same shape as a run output)
-- output.pre-reconcile.csv — the plain concatenation, before date patch/reconcile
-- output.dated.csv        — the concatenation with the Phase-1 date patch applied
-- reconcile-audit.csv     — per-row reconcile audit (dual-confidence trail)
-- reconcile-summary.md    — reconcile per-action counts + needs_human list
-- failures-client.csv     — split client rows + reconcile failure rows, grouped
+- output.csv              - the RECONCILED master (same shape as a run output)
+- output.pre-reconcile.csv - the plain concatenation, before date patch/reconcile
+- output.dated.csv        - the concatenation with the Phase-1 date patch applied
+- reconcile-audit.csv     - per-row reconcile audit (dual-confidence trail)
+- reconcile-summary.md    - reconcile per-action counts + needs_human list
+- failures-client.csv     - split client rows + reconcile failure rows, grouped
                             by "What happened" label, most-important-first
-- failures.csv            — internal, split rows + reconcile rows, unsorted
-- manifest.md             — per-split row counts + reconcile provenance
+- failures.csv            - internal, split rows + reconcile rows, unsorted
+- manifest.md             - per-split row counts + reconcile provenance
 
 Run from the repo root:
     .venv/bin/python scripts/combine-98b.py [--engine claude --model opus --effort medium] [--no-llm]
@@ -37,6 +37,8 @@ from src.assemble import (  # noqa: E402
     FAILURE_COLUMNS,
     OUTPUT_COLUMNS,
 )
+from src.commentary import STRUCTURED_COLUMNS  # noqa: E402
+from src.csvio import read_csv, write_csv  # noqa: E402
 from src.datefill import apply_patch  # noqa: E402
 from src.reconcile import run_reconcile, write_outputs  # noqa: E402
 
@@ -66,20 +68,19 @@ for rank, (code, (label, _)) in enumerate(CLIENT_FAILURE_LABELS.items()):
 
 
 def read_rows(path: Path, expected_columns: tuple[str, ...]) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        if tuple(reader.fieldnames or ()) != expected_columns:
-            raise SystemExit(f"{path}: unexpected columns {reader.fieldnames}")
-        return list(reader)
+    columns, rows = read_csv(path)
+    # Frozen splits predate the structured commentary columns; accept the
+    # legacy column set too (the reconcile step rebuilds the structured columns).
+    legacy = tuple(c for c in expected_columns if c not in STRUCTURED_COLUMNS)
+    if tuple(columns) not in (expected_columns, legacy):
+        raise SystemExit(f"{path}: unexpected columns {columns}")
+    return rows
 
 
 def write_rows(
     path: Path, columns: tuple[str, ...], rows: list[dict[str, str]]
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv(path, columns, rows)
 
 
 def main() -> None:
@@ -171,7 +172,7 @@ def main() -> None:
     for name, kept, failed in counts:
         lines.append(f"| {name} | {kept} | {failed} |")
     lines.append(
-        f"| **Concatenated** | **{len(output_rows)}** | — |"
+        f"| **Concatenated** | **{len(output_rows)}** | - |"
     )
     lines.append(
         f"| **Reconciled** | **{result.output_row_count}** | **{len(client_rows)}** |"
