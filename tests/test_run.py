@@ -701,11 +701,11 @@ class RunPipelineIngestFaultToleranceTest(unittest.TestCase):
                     runner=runner,
                     out_root=out_root,
                 )
-            with (run_dir / "output.csv").open(newline="", encoding="utf-8") as handle:
+            with (run_dir / "output.csv").open(newline="", encoding="utf-8-sig") as handle:
                 output_rows = list(csv.DictReader(handle))
-            with (run_dir / "failures.csv").open(newline="", encoding="utf-8") as handle:
+            with (run_dir / "failures.csv").open(newline="", encoding="utf-8-sig") as handle:
                 failure_rows = list(csv.DictReader(handle))
-            client_text = (run_dir / "failures-client.csv").read_text(encoding="utf-8")
+            client_text = (run_dir / "failures-client.csv").read_text(encoding="utf-8-sig")
             manifest = (run_dir / "manifest.md").read_text(encoding="utf-8")
 
         self.assertEqual(1, len(result.output_rows))

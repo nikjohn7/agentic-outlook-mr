@@ -389,7 +389,7 @@ class RebuildDateTests(unittest.TestCase):
             write_path = Path(tmp) / "new.csv"
             changed = apply_patch(output, patch, write_path)
 
-            with write_path.open(newline="", encoding="utf-8") as handle:
+            with write_path.open(newline="", encoding="utf-8-sig") as handle:
                 new_rows = list(csv.DictReader(handle))
             self.assertEqual(2, changed)  # Firmco filled + RBC deduped
             self.assertEqual("17/06/2026", new_rows[0]["Date"])

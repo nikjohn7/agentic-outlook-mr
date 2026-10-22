@@ -303,7 +303,7 @@ may present attractive investment opportunities.
                 self.assertTrue(check.passed)
                 self.assertEqual(expected_tier, check.quote_match)
 
-    def test_subsequence_match_is_capped_and_review_flagged(self) -> None:
+    def test_subsequence_match_is_capped_but_not_review_flagged(self) -> None:
         quote = self.PREVIOUSLY_DROPPED[0][1]
         result = score_candidate(
             _candidate(
@@ -317,7 +317,7 @@ may present attractive investment opportunities.
 
         self.assertEqual(SCRAMBLED_PROSE_CAP, result.confidence)
         self.assertEqual("Medium", result.band)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
         self.assertEqual("subsequence", result.evidence_check.quote_match)
         self.assertIn(
             f"max {SUBSEQUENCE_MAX_NOISE_TOKENS_PER_GAP} injected tokens",
@@ -361,7 +361,7 @@ may present attractive investment opportunities.
 
         self.assertEqual(72, result.confidence)
         self.assertEqual("Medium", result.band)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
 
     def test_thin_snapshot_drops_read_quality_points(self) -> None:
         candidate = _candidate(taxonomy_match="semantic", call_language="implied")
@@ -374,7 +374,7 @@ may present attractive investment opportunities.
 
         self.assertEqual(62, result.confidence)
         self.assertEqual("Medium", result.band)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
 
     def test_snapshot_read_quality_pdf_per_page_floor(self) -> None:
         thin_scanned = "a" * (MIN_PDF_CHARS_PER_PAGE * 2)  # 10 pages' worth missing
@@ -528,7 +528,7 @@ class ScrambledPageProseTest(unittest.TestCase):
         self.assertTrue(check.passed)
         self.assertTrue(check.degraded)
 
-    def test_scrambled_page_prose_pass_is_capped_and_flagged(self) -> None:
+    def test_scrambled_page_prose_pass_is_capped_not_flagged(self) -> None:
         candidate = _candidate(
             locator="p.2", evidence_quote=self.QUOTE, taxonomy_match="semantic",
             call_language="directional",
@@ -542,7 +542,7 @@ class ScrambledPageProseTest(unittest.TestCase):
 
         self.assertEqual(SCRAMBLED_PROSE_CAP, result.confidence)
         self.assertEqual("Medium", result.band)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
         self.assertTrue(result.evidence_check.degraded)
 
     def test_scrambled_page_prose_still_fails_when_key_tokens_absent(self) -> None:
@@ -604,7 +604,7 @@ class OcrPageProseTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.taxonomy = Taxonomy.from_csv()
 
-    def test_ocr_page_prose_verbatim_pass_is_capped_and_flagged(self) -> None:
+    def test_ocr_page_prose_verbatim_pass_is_capped_not_flagged(self) -> None:
         quote = "global equities remain attractive"
         candidate = _candidate(locator="p.3", evidence_quote=quote)
 
@@ -616,7 +616,7 @@ class OcrPageProseTest(unittest.TestCase):
         )
 
         self.assertEqual(SCRAMBLED_PROSE_CAP, result.confidence)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
         self.assertTrue(result.evidence_check.degraded)
         self.assertIn("OCR", result.evidence_check.message)
 
@@ -776,7 +776,7 @@ class VisualUnverifiedByTextTest(unittest.TestCase):
         self.assertEqual(decisive.confidence - CHECKER_ADEQUATE_DEDUCTION, adequate.confidence)
         self.assertEqual("High", adequate.band)
         self.assertEqual(CHECKER_THIN_CAP, thin.confidence)
-        self.assertEqual("review", thin.review_flag)
+        self.assertEqual("none", thin.review_flag)
 
     def test_visual_route_checker_fail_is_diagnosable(self) -> None:
         candidate = _candidate(
@@ -840,12 +840,12 @@ class CheckerScoringTest(unittest.TestCase):
         self.assertEqual("none", result.review_flag)
         self.assertEqual("adequate", result.checker_strength)
 
-    def test_thin_verdict_caps_below_high_and_flags_review(self) -> None:
+    def test_thin_verdict_caps_below_high_without_review_flag(self) -> None:
         result = self._score(_verdict(evidence_strength="thin"))
 
         self.assertEqual(CHECKER_THIN_CAP, result.confidence)
         self.assertEqual("Medium", result.band)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
         self.assertEqual("thin", result.checker_strength)
         self.assertIn("evidence_strength thin", result.cap_reason)
 
@@ -911,7 +911,7 @@ class CheckerScoringTest(unittest.TestCase):
         )
 
         self.assertEqual(CHECKER_THIN_CAP, result.confidence)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
         self.assertIn("Basis: inferred", result.cap_reason)
         self.assertIn("evidence_strength thin", result.cap_reason)
 
@@ -941,26 +941,26 @@ class MaterialityGateTest(unittest.TestCase):
             self._score(delta_value=0.86, delta_unit="pct")
         self.assertEqual(HARD_FAILURE_MATERIALITY, str(caught.exception))
 
-    def test_at_floor_bp_delta_is_capped_and_flagged(self) -> None:
+    def test_at_floor_bp_delta_is_capped_not_flagged(self) -> None:
         # Exactly at the floor is material (>=), so it proceeds — but capped.
         result = self._score(delta_value=MATERIALITY_FLOOR_BP, delta_unit="bp")
 
         self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
         self.assertEqual("Medium", result.band)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
         self.assertIn("forecast_delta", result.cap_reason)
 
     def test_material_bp_delta_is_capped_below_high(self) -> None:
         result = self._score(delta_value=40, delta_unit="bp")
 
         self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
 
     def test_material_pct_delta_is_capped(self) -> None:
         result = self._score(delta_value=MATERIALITY_FLOOR_PCT, delta_unit="pct")
 
         self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
 
     def test_negative_delta_is_sized_by_magnitude(self) -> None:
         # A -40bp move is as material as +40bp (gate is sign-agnostic).
@@ -973,7 +973,7 @@ class InferredTierTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.taxonomy = Taxonomy.from_csv()
 
-    def test_inferred_call_is_capped_one_band_below_and_flagged(self) -> None:
+    def test_inferred_call_is_capped_one_band_below_not_flagged(self) -> None:
         candidate = _candidate(
             basis="inferred", taxonomy_match="exact", call_language="explicit"
         )
@@ -986,7 +986,7 @@ class InferredTierTest(unittest.TestCase):
         # Stated calls reach High (>=75); an inference lands one full band down.
         self.assertEqual(INFERRED_CAP, result.confidence)
         self.assertEqual("Medium", result.band)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
         self.assertIn("inferred", result.cap_reason)
 
     def test_stated_call_is_not_capped_by_basis(self) -> None:
@@ -1039,7 +1039,7 @@ class Pilot05RescoreTest(unittest.TestCase):
         # EM sovereigns 8.85 -> 8.51 = 34bp: material, but still only provisional.
         result = self._score_forecast("Emerging Markets - Sovereigns", 34, "bp")
         self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
-        self.assertEqual("review", result.review_flag)
+        self.assertEqual("none", result.review_flag)
 
     def test_jpm_gaa_stated_dial_is_untouched(self) -> None:
         # Frozen pilot-05 used the legacy `explicit` bucket, so this dial row

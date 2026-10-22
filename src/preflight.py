@@ -38,6 +38,7 @@ from src.ingest import (
     load_pilot_sources,
     load_target_sources,
 )
+from src.csvio import CSV_ENCODING
 from src.llm import LLMParseError, _extract_json, call_parsed
 from src.run import resolve_engine_settings
 
@@ -278,7 +279,9 @@ def write_outputs(out_dir: str | Path, records: list[PreflightRecord]) -> tuple[
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / "preflight.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+    # BOM-prefixed so Excel on Windows reads the source titles' punctuation
+    # correctly (see src/csvio.py).
+    with csv_path.open("w", newline="", encoding=CSV_ENCODING) as handle:
         writer = csv.writer(handle)
         writer.writerow(CSV_COLUMNS)
         for record in records:

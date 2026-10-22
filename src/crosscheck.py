@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Callable
 
 from src import llm
+from src.csvio import write_csv
 # Import the join normalization from src.eval rather than reimplementing it, so
 # a "duplicate key" here means exactly what it means to src.eval and to the
 # runs/test2-01-rescored frozen-wins dedupe (precedent: rescore.py). Do not
@@ -460,11 +461,9 @@ def render_summary(reported: list[ReportedKey], paths: list[Path]) -> str:
 
 def write_outputs(reported: list[ReportedKey], out_dir: Path, paths: list[Path]) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = out_dir / "crosscheck.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CROSSCHECK_COLUMNS)
-        writer.writeheader()
-        writer.writerows(_crosscheck_row(key) for key in reported)
+    csv_path = write_csv(
+        out_dir / "crosscheck.csv", CROSSCHECK_COLUMNS, [_crosscheck_row(key) for key in reported]
+    )
 
     summary_path = out_dir / "crosscheck-summary.md"
     summary_path.write_text(render_summary(reported, paths), encoding="utf-8")

@@ -37,6 +37,8 @@ from src.assemble import (  # noqa: E402
     FAILURE_COLUMNS,
     OUTPUT_COLUMNS,
 )
+from src.commentary import STRUCTURED_COLUMNS  # noqa: E402
+from src.csvio import read_csv, write_csv  # noqa: E402
 from src.datefill import apply_patch  # noqa: E402
 from src.reconcile import run_reconcile, write_outputs  # noqa: E402
 
@@ -66,20 +68,19 @@ for rank, (code, (label, _)) in enumerate(CLIENT_FAILURE_LABELS.items()):
 
 
 def read_rows(path: Path, expected_columns: tuple[str, ...]) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        if tuple(reader.fieldnames or ()) != expected_columns:
-            raise SystemExit(f"{path}: unexpected columns {reader.fieldnames}")
-        return list(reader)
+    columns, rows = read_csv(path)
+    # Frozen splits predate the structured commentary columns; accept the
+    # legacy column set too (the reconcile step rebuilds the structured columns).
+    legacy = tuple(c for c in expected_columns if c not in STRUCTURED_COLUMNS)
+    if tuple(columns) not in (expected_columns, legacy):
+        raise SystemExit(f"{path}: unexpected columns {columns}")
+    return rows
 
 
 def write_rows(
     path: Path, columns: tuple[str, ...], rows: list[dict[str, str]]
 ) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv(path, columns, rows)
 
 
 def main() -> None:

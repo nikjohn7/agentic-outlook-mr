@@ -289,7 +289,7 @@ class OutputWritingTest(unittest.TestCase):
             self.assertEqual(len(buckets["model_only"]), 1)
             self.assertEqual(len(buckets["gt_only"]), 1)
 
-            with written["worksheet"].open(newline="") as handle:
+            with written["worksheet"].open(newline="", encoding="utf-8-sig") as handle:
                 worksheet = list(csv.DictReader(handle))
             kinds = sorted(r["kind"] for r in worksheet)
             # 1 gt_only + 1 model_only + 1 view_disagreement

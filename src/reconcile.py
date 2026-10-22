@@ -54,8 +54,9 @@ from src.assemble import (
     FAILURE_COLUMNS,
     OUTPUT_COLUMNS,
     client_failure_label,
-    merge_commentaries,
 )
+from src.commentary import append_note, commentary_from_row, merge_commentaries, row_columns
+from src.csvio import write_csv
 # Reuse the ground-truth join normalization (imported, never reimplemented) so a
 # reconcile key is identical to the eval harness's and to crosscheck's. The
 # leaf-token helpers back the deterministic near-leaf candidate lanes (Phase 3).
@@ -357,16 +358,12 @@ def _or_review_flags(flags: list[str]) -> str:
     return "none"
 
 
-def _locator_from_commentary(commentary: str) -> str:
-    """Best-effort locator for a merged reconcile segment: the first `Locator: X.`
-    the member commentary carries (assemble writes it), minus any trailing source
-    parenthetical. Empty when the commentary has no such marker."""
-    match = re.search(r"Locator:\s*(.+?)\.(?:\s|$)", commentary or "")
-    if not match:
-        return ""
-    locator = match.group(1).strip()
-    locator = re.split(r"\s*\(", locator, maxsplit=1)[0].strip() or locator
-    return locator
+def _merged_commentary_columns(ordered: list[Row]) -> dict[str, str]:
+    """The structured commentary columns (+ rendered Full Commentary) for a
+    merged row: every member's segments, primary first, each labeled by its
+    source title; reviewer notes joined. Members' structured columns are used
+    when present and parsed from Full Commentary for legacy rows."""
+    return row_columns(merge_commentaries([commentary_from_row(r.raw) for r in ordered]))
 
 
 def merge_same_view(members: list[Row]) -> tuple[dict[str, str], Row, list[Row]]:
@@ -375,16 +372,15 @@ def merge_same_view(members: list[Row]) -> tuple[dict[str, str], Row, list[Row]]
     Returns (merged_row, winner, losers). The winner (max confidence, input order
     breaks ties) supplies the deterministic per-member columns (basis,
     checker_strength, call_language, quote_match, band); Source/URL/Date are
-    pipe-joined across all members; commentary is labeled and `||||`-merged;
-    confidence is the max; review_flag is the OR."""
+    pipe-joined across all members; commentary is labeled and `||||`-merged in
+    every structured column, winner first; confidence is the max; review_flag is
+    the OR."""
     winner = max(members, key=lambda r: (r.confidence or 0))
     merged = dict(winner.raw)
     merged["Source"] = _pipe_join_dedupe([r.source_title for r in members])
     merged["URL"] = _pipe_join_dedupe([r.url for r in members])
     merged["Date"] = _pipe_join_dedupe([r.date for r in members])
-    merged["Full Commentary"] = merge_commentaries(
-        [(r.source_title, _locator_from_commentary(r.commentary), r.commentary) for r in members]
-    )
+    merged.update(_merged_commentary_columns([winner, *[r for r in members if r is not winner]]))
     merged["confidence"] = str(max((r.confidence or 0) for r in members))
     merged["band"] = winner.band
     merged["review_flag"] = _or_review_flags([r.review_flag for r in members])
@@ -537,12 +533,25 @@ def _decide_key(firm: str, leaf: str, members: list[Row], scope: Verdict) -> Key
     failures: list[ReconcileFailure] = []
 
     def keep_all(action: str) -> KeyDecision:
-        """needs_human / distinct: every row survives. needs_human forces review."""
-        force_review = action == ACTION_NEEDS_HUMAN
+        """needs_human / distinct: every row survives, flagged for review, each
+        noting the other surviving view(s) on the same asset. Client feedback
+        (2026-10): a same-firm, same-asset contradiction must never read as a
+        clean call — the reader sees both rows and why both stand."""
         for row in members:
             out = dict(row.raw)
-            if force_review and (out.get("review_flag") or "none") == "none":
+            if (out.get("review_flag") or "none") == "none":
                 out["review_flag"] = "review"
+            others = "; ".join(
+                f"{m.view} in '{m.source_title}'" + (f" ({m.date})" if m.date else "")
+                for m in members
+                if m is not row
+            )
+            why = (
+                f"read as distinct claims ({scope.reason}) and no rule picks one; a human should decide"
+                if action == ACTION_KEPT_DISTINCT and scope.reason
+                else "could not be reconciled automatically; a human should decide"
+            )
+            append_note(out, f"Also held by this firm: {others} on the same asset; {why}.")
             emit[id(row)] = out
             per_row_action[id(row)] = action
         bucket = "needs_human" if action == ACTION_NEEDS_HUMAN else "distinct"
@@ -552,16 +561,28 @@ def _decide_key(firm: str, leaf: str, members: list[Row], scope: Verdict) -> Key
             "(all rows kept)", tuple(failures),
         )
 
-    # Scope-gate degraded, or genuinely distinct claims.
+    # Scope-gate degraded: every row survives for a human.
     if scope.verdict == VERDICT_NEEDS_HUMAN:
         return keep_all(ACTION_NEEDS_HUMAN)
-    if scope.verdict == VERDICT_DISTINCT:
-        return keep_all(ACTION_KEPT_DISTINCT)
 
-    # scope.verdict == same_claim.
+    # Distinct claims (client decision 2026-10): the deliverable is ONE row per
+    # firm and asset, so distinct claims go through the same merge / precedence
+    # ladder as a same claim; the surviving row records that the other claim
+    # existed and why it was read as distinct, and the losing row is visible in
+    # the failures file. Only a ladder with no unique winner keeps both rows.
+    distinct = scope.verdict == VERDICT_DISTINCT
+    distinct_tag = f" (read as distinct claims: {scope.reason})" if distinct and scope.reason else ""
+
     views = {row.view for row in members}
     if len(views) == 1:
         merged, winner, losers = merge_same_view(members)
+        if distinct:
+            append_note(
+                merged,
+                "Also held by this firm: the same view in "
+                + "; ".join(f"'{r.source_title}'" + (f" ({r.date})" if r.date else "") for r in losers)
+                + f"{distinct_tag}; merged to keep one row per asset.",
+            )
         emit[id(winner)] = merged
         per_row_action[id(winner)] = ACTION_WINNER
         for loser in losers:
@@ -571,7 +592,8 @@ def _decide_key(firm: str, leaf: str, members: list[Row], scope: Verdict) -> Key
                 ReconcileFailure(
                     REASON_MERGED, firm, loser.source_title, leaf, loser.view,
                     f"same {loser.view} view on '{leaf}' merged into the kept row "
-                    f"from {winner.source_title}; wording preserved in the merged commentary",
+                    f"from {winner.source_title}; wording preserved in the merged commentary"
+                    + distinct_tag,
                 )
             )
         return KeyDecision(
@@ -579,23 +601,32 @@ def _decide_key(firm: str, leaf: str, members: list[Row], scope: Verdict) -> Key
             emit, per_row_action, merged.get("Source", ""), tuple(failures),
         )
 
-    # same_claim, conflicting views → precedence ladder.
+    # Conflicting views → precedence ladder (recency → basis → confidence).
     winner, rule, detail = resolve_conflict(members)
     if winner is None:
-        return keep_all(ACTION_NEEDS_HUMAN)
+        return keep_all(ACTION_KEPT_DISTINCT if distinct else ACTION_NEEDS_HUMAN)
 
-    emit[id(winner)] = dict(winner.raw)
+    out = dict(winner.raw)
+    losers = [m for m in members if m is not winner]
+    append_note(
+        out,
+        "Also held by this firm: "
+        + "; ".join(f"{m.view} in '{m.source_title}'" + (f" ({m.date})" if m.date else "") for m in losers)
+        + f" on the same asset{distinct_tag}; this row kept by {rule} ({detail}), "
+        "the other view is listed in the failures file.",
+    )
+    if (out.get("review_flag") or "none") == "none":
+        out["review_flag"] = "review"
+    emit[id(winner)] = out
     per_row_action[id(winner)] = ACTION_WINNER
-    for loser in members:
-        if loser is winner:
-            continue
+    for loser in losers:
         emit[id(loser)] = None
         per_row_action[id(loser)] = ACTION_SUPERSEDED
         failures.append(
             ReconcileFailure(
                 REASON_SUPERSEDED, firm, loser.source_title, leaf, loser.view,
                 f"{loser.view} superseded by {winner.source_title}'s {winner.view} "
-                f"({rule}: {detail})",
+                f"({rule}: {detail}){distinct_tag}",
             )
         )
     return KeyDecision(
@@ -1210,12 +1241,19 @@ def _nearleaf_merge(
     merged["Source"] = _pipe_join_dedupe([m.source_title for m in members])
     merged["URL"] = _pipe_join_dedupe([m.url for m in members])
     merged["Date"] = _pipe_join_dedupe([m.date for m in members])
-    merged["Full Commentary"] = merge_commentaries(
-        [(m.source_title, _locator_from_commentary(m.commentary), m.commentary) for m in ordered]
-    )
+    merged.update(_merged_commentary_columns(ordered))
     merged["confidence"] = str(max((m.confidence or 0) for m in members))
     merged["band"] = primary.band
-    # Every near-leaf survivor is flagged for review in this opt-in first run.
+    # A near-leaf merge is a judgment (related leaves read as one call): the
+    # survivor is flagged and says which assets were folded in, so the flag is
+    # explained on the row itself (and recomputable from the notes later).
+    others = [m.leaf for m in members if m is not primary]
+    append_note(
+        merged,
+        "Merged from related assets: "
+        + ", ".join(f"'{leaf}'" for leaf in others)
+        + f" (read as one call on '{canonical_leaf}'; review recommended).",
+    )
     merged["review_flag"] = "review"
     return merged
 
@@ -1637,26 +1675,23 @@ def write_outputs(result: ReconcileResult, out_dir: Path, paths: list[Path]) -> 
     reconcile failure rows (client-shaped, for inspection / combine)."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    output_path = out_dir / "output.csv"
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(result.output_rows)
-
-    audit_path = out_dir / "reconcile-audit.csv"
-    with audit_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=AUDIT_COLUMNS)
-        writer.writeheader()
-        writer.writerows(result.audit_rows)
+    output_path = write_csv(out_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
+    audit_path = write_csv(out_dir / "reconcile-audit.csv", AUDIT_COLUMNS, result.audit_rows)
 
     summary_path = out_dir / "reconcile-summary.md"
     summary_path.write_text(render_summary(result, paths), encoding="utf-8")
 
-    failures_path = out_dir / "reconcile-failures-client.csv"
-    with failures_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CLIENT_FAILURE_COLUMNS)
-        writer.writeheader()
-        writer.writerows(failure.client_row() for failure in result.failures)
+    failures_path = write_csv(
+        out_dir / "reconcile-failures-client.csv",
+        CLIENT_FAILURE_COLUMNS,
+        [failure.client_row() for failure in result.failures],
+    )
+
+    # The client-facing twin (structured commentary, no diagnostics, BOM + xlsx).
+    # Late import: export reads the column constants above.
+    from src.export import write_client_files
+
+    write_client_files(out_dir, result.output_rows)
 
     written = {
         "output": output_path,
@@ -1667,19 +1702,12 @@ def write_outputs(result: ReconcileResult, out_dir: Path, paths: list[Path]) -> 
 
     # Phase 3 artifacts, written only when the near-leaf pass ran.
     if result.near_leaf is not None:
-        nl_audit_path = out_dir / "reconcile-nearleaf-audit.csv"
-        with nl_audit_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=NEARLEAF_AUDIT_COLUMNS)
-            writer.writeheader()
-            writer.writerows(result.near_leaf.audit_rows)
-        written["nearleaf_audit"] = nl_audit_path
-
-        coverage_path = out_dir / "taxonomy-coverage-review.csv"
-        with coverage_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=COVERAGE_COLUMNS)
-            writer.writeheader()
-            writer.writerows(result.near_leaf.coverage_rows)
-        written["coverage"] = coverage_path
+        written["nearleaf_audit"] = write_csv(
+            out_dir / "reconcile-nearleaf-audit.csv", NEARLEAF_AUDIT_COLUMNS, result.near_leaf.audit_rows
+        )
+        written["coverage"] = write_csv(
+            out_dir / "taxonomy-coverage-review.csv", COVERAGE_COLUMNS, result.near_leaf.coverage_rows
+        )
 
     return written
 

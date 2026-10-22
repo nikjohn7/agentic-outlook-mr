@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-import csv
 import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from src.commentary import (
+    SEGMENT_SEP,
+    STRUCTURED_COLUMNS,
+    Commentary,
+    Segment,
+    display_locator,
+    row_columns,
+)
 from src.confidence import (
     CHECKER_FAIL_REASONS,
     EvidenceCheck,
@@ -22,7 +29,11 @@ from src.confidence import (
     normalize_quote_text,
     score_candidate,
 )
+from src.csvio import write_csv
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
+from src.sharedevidence import Entry as EvidenceEntry
+from src.sharedevidence import Judge as EvidenceJudge
+from src.sharedevidence import REASON_WEAKER_FIT, gate_entries
 from src.taxonomy import Taxonomy
 
 
@@ -34,36 +45,26 @@ QuoteVisualVerifier = Callable[[CandidateCall, SourceInfo, Path | None], str]
 
 # The shared commentary-merge convention. Wherever two commentaries fold into one
 # row (same-view dedup here, and the firm-reconcile stage in src/reconcile.py),
-# each segment is labeled with its source title and locator and joined by this
-# separator, kept/primary segment first. Defined ONCE here and imported wherever
-# needed so the format can never drift between the two stages.
-COMMENTARY_MERGE_SEP = "  ||||  "
+# each segment is labeled with its source title and joined by this separator,
+# kept/primary segment first. Owned by src/commentary.py (re-exported here) so
+# the format can never drift between the two stages.
+COMMENTARY_MERGE_SEP = SEGMENT_SEP
 
 
-def labeled_commentary_segment(title: str, locator: str, body: str) -> str:
-    """One `<Source Title> (<locator>): <commentary>` segment for a merged row.
-
-    A blank locator drops the parenthetical rather than rendering `()` — some
-    reconcile inputs carry the locator inside the commentary body instead of as a
-    separable field.
-    """
-    label = f"{title} ({locator})" if locator else title
-    return f"{label}: {body}"
-
-
-def merge_commentaries(segments: list[tuple[str, str, str]]) -> str:
-    """Join `(title, locator, body)` segments with COMMENTARY_MERGE_SEP, in the
-    order given (the kept/primary segment must be first)."""
-    return COMMENTARY_MERGE_SEP.join(
-        labeled_commentary_segment(title, locator, body) for title, locator, body in segments
+def _candidate_segment(candidate: CandidateCall, title: str, *, locator_source: str = "") -> Segment:
+    """One structured segment for a candidate: reader-facing locator (page for
+    PDF; `char:` chunk offsets of HTML/transcript sources render blank), the
+    model's reasoning, and the verbatim quote. A grouped-source row suffixes
+    the member title to the locator so the reader knows which document p.N is in."""
+    locator = display_locator(candidate.locator)
+    if locator and locator_source:
+        locator = f"{locator} ({locator_source})"
+    return Segment(
+        title=title,
+        locator=locator,
+        reasoning=candidate.reasoning,
+        evidence=candidate.evidence_quote,
     )
-
-
-def _candidate_commentary_body(candidate: CandidateCall) -> str:
-    """The reasoning + evidence half of a merged segment. The locator is carried
-    by the segment label (see labeled_commentary_segment), so it is omitted here
-    to avoid stating it twice."""
-    return f"{candidate.reasoning} Evidence: {candidate.evidence_quote}."
 
 
 TARGET_OUTPUT_COLUMNS = (
@@ -79,12 +80,12 @@ TARGET_OUTPUT_COLUMNS = (
     "Full Commentary",
 )
 
-# `basis`, `checker_strength`, and `call_language` are exposed after the
-# internal-review columns so an analyst can filter stated vs.
-# forecast_delta/inferred calls, High-but-adequate checker confirmations, and
-# the effective call-language grade at a glance. `call_language` is the value
-# actually scored (after the explicit_dial-on-prose downgrade).
-OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + (
+# The four structured commentary columns (src/commentary.py) follow the
+# workbook shape; `Full Commentary` is rendered from them for internal
+# consumers. `basis`, `checker_strength`, `call_language` and `quote_match`
+# are internal diagnostics for analysts (stated vs inferred, checker grade,
+# quote-verification tier); the client file (src/export.py) never carries them.
+OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + STRUCTURED_COLUMNS + (
     "confidence",
     "band",
     "review_flag",
@@ -150,6 +151,7 @@ _ASSEMBLE_REASON_CODES = frozenset(
         "duplicate_cross_leaf",
         "implied_challenges_stated",
         "source_metadata_missing",
+        REASON_WEAKER_FIT,
     }
 )
 _RUN_REASON_CODES = frozenset(
@@ -276,6 +278,12 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "Change too small to call",
         "The forecast change behind this call was too small to justify a view, "
         "so it was left out. No action needed.",
+    ),
+    REASON_WEAKER_FIT: (
+        "Evidence better supports a related asset",
+        "The same passage was used for more than one asset; it supports another "
+        "asset more directly, so that call was kept and this one was set aside. "
+        "The notes name the kept asset. Review if this asset should also stand.",
     ),
     # Firm-reconcile outcomes (src/reconcile.py). Near the housekeeping end:
     # superseded is a dropped-in-favour-of-a-newer-doc call an analyst may still
@@ -451,9 +459,9 @@ class _Selected:
     display_source: SourceInfo
     member_count: int
     arbiter_note: str = ""
-    # Losing same-view candidates' commentary, as (title, locator, body) segments
-    # to fold into the kept row's Full Commentary (citation-preserving dedup).
-    merged_segments: tuple[tuple[str, str, str], ...] = ()
+    # Losing same-view candidates' passages, as structured segments to fold into
+    # the kept row (citation-preserving dedup).
+    merged_segments: tuple[Segment, ...] = ()
     # Set when a same-leaf implied call challenged the kept stated call
     # (deterministic stated-beats-implied resolution). Rendered on the kept row
     # and forces a review flag so a human sees the recommendation.
@@ -475,8 +483,14 @@ def assemble_candidates(
     group_map: dict[str, str] | None = None,
     quote_visual_verifier: QuoteVisualVerifier | None = None,
     native_source_paths: dict[str, Path] | None = None,
+    shared_evidence_judge: EvidenceJudge | None = None,
 ) -> AssemblyResult:
     """page_counts maps source_id -> PDF page count (absent for HTML sources).
+
+    shared_evidence_judge, when given, runs the shared-evidence gate
+    (src/sharedevidence.py) over the survivors of cross-leaf dedup: one
+    passage cited for several leaves keeps only the most compelling call(s).
+    None skips the gate (tests, --no-evidence-gate).
 
     scrambled_pages maps source_id -> the set of column-interleaved page numbers
     (see src/ingest.detect_scrambled_page); a prose call citing one of them uses
@@ -641,9 +655,7 @@ def assemble_candidates(
                 )
                 dup_source = sources.get(item.candidate.source_id)
                 title = dup_source.source if dup_source else item.candidate.source_id
-                merged_segments.append(
-                    (title, item.candidate.locator, _candidate_commentary_body(item.candidate))
-                )
+                merged_segments.append(_candidate_segment(item.candidate, title))
 
         source = sources.get(selected.candidate.source_id)
         if source is None:
@@ -672,6 +684,13 @@ def assemble_candidates(
 
     survivors, cross_leaf_failures = _dedup_cross_leaf(selected_entries, taxonomy)
     failures.extend(cross_leaf_failures)
+    shared_notes: dict[int, str] = {}
+    shared_review: set[int] = set()
+    if shared_evidence_judge is not None:
+        survivors, shared_notes, shared_review, shared_failures = _gate_shared_evidence(
+            survivors, taxonomy, shared_evidence_judge
+        )
+        failures.extend(shared_failures)
     sibling_notes = _sibling_conflict_notes(survivors, taxonomy)
 
     output_rows = [
@@ -684,6 +703,8 @@ def assemble_candidates(
             merged_segments=entry.merged_segments,
             sibling_note=sibling_notes.get(id(entry), ""),
             challenge_note=entry.challenge_note,
+            shared_note=shared_notes.get(id(entry), ""),
+            shared_review=id(entry) in shared_review,
         )
         for entry in survivors
     ]
@@ -713,7 +734,7 @@ def _visual_quote_check(
             True,
             message=(
                 "visual verifier confirmed the quote verbatim on the rendered "
-                "source page; confidence capped and review required"
+                "source page; confidence capped"
             ),
             degraded=True,
             quote_match="visual",
@@ -896,6 +917,48 @@ def _dedup_cross_leaf(
     return survivors, failures
 
 
+def _gate_shared_evidence(
+    entries: list[_Selected], taxonomy: Taxonomy, judge: EvidenceJudge
+) -> tuple[list[_Selected], dict[int, str], set[int], list[FailureRecord]]:
+    """Shared-evidence gate over the survivors: the same passage in one source
+    DOCUMENT cited for several leaves keeps only the call(s) it most
+    compellingly supports (LLM-categorical, deterministically applied, fails
+    closed to keep-all + review). Returns (survivors, id(entry) -> note, the
+    ids that need review, failures for the dropped calls)."""
+    by_id = {id(entry): entry for entry in entries}
+    gate_inputs: list[EvidenceEntry] = []
+    for entry in entries:
+        candidate = entry.scored.candidate
+        lookup = taxonomy.require_label(candidate.sub_asset_class)
+        gate_inputs.append(
+            EvidenceEntry(
+                entry_id=id(entry),
+                source_key=candidate.source_id,
+                firm=entry.source.firm,
+                source_title=entry.source.source,
+                evidence=candidate.evidence_quote,
+                leaf=candidate.sub_asset_class,
+                view=candidate.view,
+                reasoning=candidate.reasoning,
+                basis=candidate.basis,
+                asset_class=lookup.asset_class,
+                category=lookup.asset_class_category,
+            )
+        )
+    result = gate_entries(gate_inputs, judge)
+    failures = [
+        FailureRecord.from_candidate(
+            REASON_WEAKER_FIT,
+            message,
+            by_id[entry_id].scored.candidate,
+            checker_strength=by_id[entry_id].scored.checker_strength,
+        )
+        for entry_id, message in result.dropped.items()
+    ]
+    survivors = [entry for entry in entries if id(entry) not in result.dropped]
+    return survivors, dict(result.kept_notes), set(result.review_ids), failures
+
+
 def _sibling_conflict_notes(entries: list[_Selected], taxonomy: Taxonomy) -> dict[int, str]:
     """Flag O-vs-U sibling rows on byte-identical evidence.
 
@@ -1016,8 +1079,8 @@ def write_run_outputs(
     run_dir = Path(output_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     all_failures = [*result.failures, *chunk_failures]
-    _write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
-    _write_csv(
+    write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
+    write_csv(
         run_dir / "failures.csv",
         FAILURE_COLUMNS,
         [failure.to_row() for failure in all_failures],
@@ -1029,11 +1092,14 @@ def write_run_outputs(
         (f for f in all_failures if f.reason_code not in _CLIENT_FILE_EXCLUDED_CODES),
         key=lambda failure: client_failure_rank(failure.reason_code),
     )
-    _write_csv(
-        run_dir / "failures-client.csv",
-        CLIENT_FAILURE_COLUMNS,
-        [_client_failure_row(failure, sources or {}) for failure in client_failures],
-    )
+    client_failure_rows = [_client_failure_row(failure, sources or {}) for failure in client_failures]
+    write_csv(run_dir / "failures-client.csv", CLIENT_FAILURE_COLUMNS, client_failure_rows)
+    # The client-facing twin of output.csv (structured commentary, no internal
+    # diagnostics, BOM + xlsx) is written by every run so it can never be
+    # forgotten at hand-off time. Late import: export reads these columns.
+    from src.export import write_client_files
+
+    write_client_files(run_dir, result.output_rows, client_failure_rows)
     manifest = _manifest_text(
         result,
         source_summaries or [],
@@ -1102,60 +1168,68 @@ def _output_row(
     *,
     arbiter_note: str = "",
     locator_source: str = "",
-    merged_segments: tuple[tuple[str, str, str], ...] = (),
+    merged_segments: tuple[Segment, ...] = (),
     sibling_note: str = "",
     challenge_note: str = "",
+    shared_note: str = "",
+    shared_review: bool = False,
 ) -> dict[str, str]:
     candidate = scored.candidate
     lookup = taxonomy.output_fields_for(candidate.sub_asset_class)
-    if merged_segments:
-        # Citation-preserving same-view merge: the kept candidate's own segment
-        # first, then each folded-in loser, all labeled per the shared
-        # convention. locator_source is the kept source's title for a grouped row.
-        primary_title = locator_source or source.source
-        commentary = merge_commentaries(
-            [
-                (primary_title, candidate.locator, _candidate_commentary_body(candidate)),
-                *merged_segments,
-            ]
-        )
-    else:
-        commentary = _commentary(candidate, locator_source=locator_source)
+    # The kept candidate's own passage first, then each folded-in same-view
+    # loser (citation-preserving merge). locator_source is the kept source's
+    # title for a grouped row, so the reader knows which document p.N is in; a
+    # merged row already labels every segment with its title, so the suffix is
+    # only needed on a single-segment grouped row.
+    primary = _candidate_segment(
+        candidate,
+        locator_source or source.source,
+        locator_source="" if merged_segments else locator_source,
+    )
+    segments = (primary, *merged_segments)
+
+    # Reviewer notes: everything that is ABOUT the call rather than from the
+    # document — evidence-check outcome, caps, checker, arbiter, tripwires.
+    notes: list[str] = []
     if scored.evidence_check.degraded:
         detail = scored.evidence_check.message or (
             "cited page used degraded evidence verification "
-            "(confidence capped, review required)"
+            "(confidence capped)"
         )
-        commentary += f" Evidence check: {detail}."
+        notes.append(f"Evidence check: {detail}.")
     if scored.evidence_check.visual_unverified_by_text:
-        commentary += (
-            " Evidence check: snapshot text did not contain the table/visual tokens; "
+        notes.append(
+            "Evidence check: snapshot text did not contain the table/visual tokens; "
             "checker verified the cited page image instead."
         )
     if scored.cap_reason:
-        commentary += f" {scored.cap_reason}"
+        notes.append(scored.cap_reason)
     if scored.call_language_note:
-        commentary += f" {scored.call_language_note}"
+        notes.append(scored.call_language_note)
     if scored.checker_status == "unclear":
         note = f" ({scored.checker_note})" if scored.checker_note else ""
-        commentary += f" Checker: unconfirmed{note}."
+        notes.append(f"Checker: unconfirmed{note}.")
     elif scored.checker_status == "missing":
-        commentary += " Checker: not run."
+        notes.append("Checker: not run.")
     elif scored.checker_status == "confirmed" and scored.checker_note:
-        commentary += f" Checker: {scored.checker_note}."
+        notes.append(f"Checker: {scored.checker_note}.")
     review_flag = scored.review_flag
-    if arbiter_note:
-        commentary += f" Arbiter: {arbiter_note}"
-        if review_flag == "none":
+    for flagged_note, prefix in (
+        (arbiter_note, "Arbiter: "),
+        (sibling_note, ""),
+        (challenge_note, ""),
+    ):
+        if flagged_note:
+            notes.append(f"{prefix}{flagged_note}")
+            if review_flag == "none":
+                review_flag = "review"
+    if shared_note:
+        # A clean single keep is noted only; several calls kept on one passage
+        # (or a failed verdict) is a review item.
+        notes.append(shared_note)
+        if shared_review and review_flag == "none":
             review_flag = "review"
-    if sibling_note:
-        commentary += f" {sibling_note}"
-        if review_flag == "none":
-            review_flag = "review"
-    if challenge_note:
-        commentary += f" {challenge_note}"
-        if review_flag == "none":
-            review_flag = "review"
+    commentary = Commentary(segments, " ".join(notes))
     return {
         "Firm": source.firm,
         "Date": source.date,
@@ -1166,7 +1240,7 @@ def _output_row(
         "Canva Groupings": lookup["Canva Groupings"],
         "Asset Class": lookup["Asset Class"],
         "View": candidate.view,
-        "Full Commentary": commentary,
+        **row_columns(commentary),
         "confidence": str(scored.confidence),
         "band": scored.band,
         "review_flag": review_flag,
@@ -1175,14 +1249,6 @@ def _output_row(
         "call_language": scored.call_language,
         "quote_match": scored.evidence_check.quote_match,
     }
-
-
-def _commentary(candidate: CandidateCall, *, locator_source: str = "") -> str:
-    where = f"{candidate.locator} ({locator_source})" if locator_source else candidate.locator
-    return (
-        f"{candidate.reasoning} Evidence: {candidate.evidence_quote}. "
-        f"Locator: {where}."
-    )
 
 
 def _group_scored(
@@ -1203,13 +1269,6 @@ def _group_scored(
 def _cited_page(locator: str) -> int | None:
     match = re.search(r"p\.?\s*(\d+)", locator, flags=re.IGNORECASE)
     return int(match.group(1)) if match else None
-
-
-def _write_csv(path: Path, columns: tuple[str, ...], rows: list[dict[str, str]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
 
 
 def _manifest_text(

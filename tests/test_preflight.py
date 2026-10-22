@@ -164,7 +164,7 @@ class OutputShapeTest(unittest.TestCase):
     def test_csv_has_header_and_one_row_per_source(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             csv_path, report_path = write_outputs(temp_dir, self._records())
-            with csv_path.open(newline="", encoding="utf-8") as handle:
+            with csv_path.open(newline="", encoding="utf-8-sig") as handle:
                 rows = list(csv.DictReader(handle))
 
             self.assertEqual(3, len(rows))

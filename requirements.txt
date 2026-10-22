@@ -3,3 +3,4 @@ trafilatura
 htmldate
 requests
 python-docx
+openpyxl

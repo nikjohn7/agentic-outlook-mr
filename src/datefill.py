@@ -48,6 +48,8 @@ import csv
 import json
 import re
 import subprocess
+
+from src.csvio import write_csv
 import tempfile
 import unicodedata
 from collections import Counter
@@ -906,11 +908,9 @@ def _datefill_row(source_fill: SourceFill) -> dict[str, str]:
 
 def write_outputs(result: DatefillResult, out_dir: Path) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = out_dir / "datefill.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=DATEFILL_COLUMNS)
-        writer.writeheader()
-        writer.writerows(_datefill_row(sf) for sf in result.fills)
+    csv_path = write_csv(
+        out_dir / "datefill.csv", DATEFILL_COLUMNS, [_datefill_row(sf) for sf in result.fills]
+    )
     summary_path = out_dir / "datefill-summary.md"
     summary_path.write_text(render_summary(result), encoding="utf-8")
     return {"datefill": csv_path, "summary": summary_path}
@@ -1055,11 +1055,7 @@ def apply_patch(output_csv: Path, patch_csv: Path, write_path: Path) -> int:
         if rebuilt != (row.get("Date") or "").strip():
             changed += 1
         row["Date"] = rebuilt
-    write_path.parent.mkdir(parents=True, exist_ok=True)
-    with write_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    write_csv(write_path, fieldnames, rows)
     return changed
 
 

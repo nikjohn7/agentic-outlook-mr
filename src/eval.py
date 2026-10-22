@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Iterable
 
 from src import confidence
+from src.csvio import write_csv
 from src.schemas import CandidateCall
 from src.taxonomy import Taxonomy, load_taxonomy
 
@@ -933,11 +934,9 @@ def write_eval_outputs(result: EvalResult, out_dir: Path) -> dict[str, Path]:
         encoding="utf-8",
     )
 
-    worksheet_path = out_dir / "judgment-worksheet.csv"
-    with worksheet_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=WORKSHEET_COLUMNS)
-        writer.writeheader()
-        writer.writerows(_worksheet_rows(result))
+    worksheet_path = write_csv(
+        out_dir / "judgment-worksheet.csv", WORKSHEET_COLUMNS, list(_worksheet_rows(result))
+    )
 
     return {
         "report": report_path,
