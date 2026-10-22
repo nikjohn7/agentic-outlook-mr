@@ -323,7 +323,15 @@ the reconciled file final.
   and split rows on embedded newlines), plus a native `.xlsx` twin.
 - `failures-client.csv` (+ `.xlsx`) — all dropped/merged rows with
   plain-language labels, importance-sorted (labels explained in
-  `output-guide.html`).
+  `output-guide.html`). Combine writes the `.csv` only and reconcile's
+  automatic export writes no failures file, so finish every batch with one
+  explicit export over the combined folder; it rewrites both client files
+  (BOM + `.xlsx`) and folds in any shared-key losers:
+
+  ```bash
+  .venv/bin/python -m src.export --output <combined>/output.csv --out-dir <combined> \
+      --failures <combined>/failures-client.csv
+  ```
 - `output.pre-reconcile.csv`, `output.dated.csv` — kept intermediates.
 - `manifest.md` — per-split counts + reconcile provenance.
 - internal: `failures.csv`, audit CSVs.
@@ -341,8 +349,15 @@ master), run it post-hoc — it writes new files, never edits in place:
 .venv/bin/python -m src.sharedevidence --output <output.csv> --out-dir <dir>             # ~20 groups per LLM call
 ```
 
-Then fold `<dir>/shared-evidence-failures-client.csv` into the batch's
-`failures-client.csv` (label-block order) and export `<dir>/output.csv`.
+The gated `<dir>/output.csv` gets an `output-client.csv/.xlsx` twin, but the
+gate's dropped rows stay in `<dir>/shared-evidence-failures-client.csv`. Fold
+them into the batch's `failures-client.csv` (label-block order), then re-run
+the export with that folded file:
+
+```bash
+.venv/bin/python -m src.export --output <dir>/output.csv --out-dir <dir> \
+    --failures <folded failures-client.csv>
+```
 
 ### 3.5 Optional reader deliverable — firm pages + Word binder
 

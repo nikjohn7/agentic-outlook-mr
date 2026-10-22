@@ -418,11 +418,17 @@ def entries_from_rows(rows: list[dict[str, str]]) -> list[Entry]:
         if not commentary.segments:
             continue
         primary = commentary.segments[0]
-        title = primary.title or (row.get("Source") or "").split("|")[0].strip()
+        titles = [part.strip() for part in (row.get("Source") or "").split("|")]
+        title = (primary.title or titles[0]).strip()
+        # A firm can reuse a title across documents, so the document identity
+        # also carries the primary source's URL (grouped rows join URLs by "|").
+        urls = [part.strip() for part in (row.get("URL") or "").split("|")]
+        position = titles.index(title) if title in titles else 0
+        url = urls[position] if position < len(urls) else ""
         entries.append(
             Entry(
                 entry_id=index,
-                source_key=f"{normalize_firm(row.get('Firm', ''))}::{title.strip().lower()}",
+                source_key=f"{normalize_firm(row.get('Firm', ''))}::{title.lower()}::{url.lower()}",
                 firm=row.get("Firm", ""),
                 source_title=title,
                 evidence=primary.evidence,
@@ -555,6 +561,11 @@ def main(argv: list[str] | None = None) -> int:
     write_csv(out_dir / "shared-evidence-audit.csv", AUDIT_COLUMNS, audit)
     summary = render_summary(result, len(rows), len(survivors))
     (out_dir / "shared-evidence-summary.md").write_text(summary, encoding="utf-8")
+    from src.export import write_client_files
+
+    # Client twin of the gated output; the gate's failure rows stay in their own
+    # file until folded into the batch's failures-client.csv via src.export.
+    write_client_files(out_dir, survivors)
     print(summary)
     return 0
 

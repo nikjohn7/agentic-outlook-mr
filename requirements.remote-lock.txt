@@ -10,6 +10,7 @@ htmldate==1.10.0
 idna==3.18
 iniconfig==2.3.0
 jusText==3.0.2
+et-xmlfile==2.0.0
 lxml==6.1.1
 lxml_html_clean==0.4.5
 packaging==26.2

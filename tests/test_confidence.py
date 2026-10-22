@@ -72,7 +72,7 @@ class ConfidenceTest(unittest.TestCase):
             evidence_passes(en_dash, "In our view the risk–reward balance favors equities.").passed
         )
         self.assertTrue(
-            evidence_passes(em_dash, "We hold a long-term overweight stance today.").passed
+            evidence_passes(em_dash, "We hold a long\u2014term overweight stance today.").passed
         )
 
     def test_prose_paraphrase_or_reorder_still_fails(self) -> None:

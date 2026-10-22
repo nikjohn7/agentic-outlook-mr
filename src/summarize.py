@@ -59,9 +59,10 @@ FIRMPAGE_ENGINE, FIRMPAGE_MODEL, FIRMPAGE_EFFORT = "claude", PINNED_FIRMPAGE_SON
 
 Runner = Callable[[list[str], str], object]
 
-# The em-dash-delimited memory header written by run.py `_memory_header`:
-# ``# {firm} - {title}  ({source_id})``.
-_MEMORY_HEADER = re.compile(r"^#\s+(?P<firm>.+?)\s+-\s+(?P<title>.+?)\s+\((?P<sid>[^()]+)\)\s*$")
+# The memory header written by run.py `_memory_header`:
+# ``# {firm} - {title}  ({source_id})``. Runs frozen before 2026-10 used an em
+# dash as the delimiter, so both are accepted.
+_MEMORY_HEADER = re.compile(r"^#\s+(?P<firm>.+?)\s+[\u2014-]\s+(?P<title>.+?)\s+\((?P<sid>[^()]+)\)\s*$")
 
 _PIPE_SPLIT = re.compile(r"\s*\|\s*")
 

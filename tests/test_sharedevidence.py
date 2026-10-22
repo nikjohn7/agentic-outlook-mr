@@ -195,11 +195,19 @@ class GateRowsTest(unittest.TestCase):
             src = Path(temp_dir) / "output.csv"
             write_csv(src, tuple(rows[0]), rows)
             self.assertEqual(0, sharedevidence.main(["--output", str(src), "--out-dir", temp_dir + "/o", "--dry-run"]))
+            self.assertFalse((Path(temp_dir) / "o").exists())  # dry run writes nothing
             self.assertEqual(0, sharedevidence.main(["--output", str(src), "--out-dir", temp_dir + "/o", "--no-llm"]))
             _, out = read_csv(Path(temp_dir) / "o" / "output.csv")
             self.assertEqual(2, len(out))  # fail-closed: both kept ...
             self.assertEqual({"review"}, {r["review_flag"] for r in out})  # ... for review
             self.assertTrue((Path(temp_dir) / "o" / "shared-evidence-audit.csv").is_file())
+            self.assertTrue((Path(temp_dir) / "o" / "output-client.xlsx").is_file())
+
+    def test_same_title_different_documents_never_grouped(self) -> None:
+        rows = [self._row("Small/Mid-Cap", LONG, URL="u1"), self._row("Supply Chain Reshoring", LONG, URL="u2")]
+        survivors, failures, _, result = gate_rows(rows, lambda groups: {0: GroupVerdict((0,), "named")})
+        self.assertEqual(2, len(survivors))
+        self.assertEqual([], failures)
 
 
 class MatrixTest(unittest.TestCase):

@@ -193,7 +193,7 @@ class VerifyTests(unittest.TestCase):
 
     def test_normalized_quote_match(self) -> None:
         source = _source("Firmco", "Outlook")
-        text = "Firmco Outlook - 17 June 2026"  # em dash in source
+        text = "Firmco Outlook \u2014 17 June 2026"  # em dash in source
         cand = Candidate(WHERE_STATED, "17 June 2026", "1", "Outlook - 17 June 2026", GRAN_FULL)
         verified, _ = verify_candidates([cand], source, text, self._no_fetch)
         self.assertEqual(1, len(verified))

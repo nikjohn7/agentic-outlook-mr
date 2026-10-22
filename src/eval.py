@@ -435,7 +435,7 @@ _EVIDENCE_VISUAL_CUES = re.compile(
 # prose. The source-title parenthetical is stripped before this test, so these
 # words only appear when the locator genuinely names a grid/table/figure.
 _LOCATOR_TABLE_CUES = re.compile(
-    r"(-|-\s'|table|grid|figure|forecast|dashboard|view list|chart)",
+    r"(\s[\u2014-]\s|-\s'|table|grid|figure|forecast|dashboard|view list|chart)",
     re.IGNORECASE,
 )
 

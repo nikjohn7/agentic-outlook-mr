@@ -83,19 +83,19 @@
 
   <p>
     Each run reads a set of fund and asset-manager outlook documents and produces
-    two spreadsheets and one Word document. <code>output.csv</code> lists every
+    two spreadsheets and one Word document. <code>output-client.csv</code> lists every
     allocation call we kept, one row per call. <code>failures-client.csv</code>
     lists everything we considered but did not keep, and why. The one-page firm
     summaries Word document gives a readable, per-firm digest of each manager's
     views. This guide explains the two spreadsheets and the actions to take.
   </p>
 
-  <h2>output.csv - the calls we kept</h2>
+  <h2>output-client.csv - the calls we kept</h2>
   <p>
     Each row is one allocation call: a view on one sub-asset class, taken from one
     source document, with the supporting text. The first nine columns identify the
     call; the next four show the evidence behind it; the last three help you review
-    it. The same rows are supplied as <code>output-client.xlsx</code> for Excel.
+    it. The same file is supplied as <code>output-client.xlsx</code> for Excel.
   </p>
   <div class="table-scroll">
   <table>
@@ -116,7 +116,7 @@
       <tr><td class="col">Reviewer Notes</td><td>Notes about the call rather than from the document: what the second reader found, how a conflict between two passages was resolved, why the confidence was capped, and whether another document from the same firm holds a different view on the same asset.</td></tr>
       <tr><td class="col">confidence</td><td>A 0–100 score from fixed rules (evidence quality, how clearly the view is stated, whether a second reader confirmed it). It is <em>not</em> a model's own opinion of its confidence.</td></tr>
       <tr><td class="col">band</td><td>The confidence score in words: High, Medium, or Low.</td></tr>
-      <tr><td class="col">review_flag</td><td>Whether a human should take a closer look. <code>review</code> means a judgment was involved - two passages or documents disagreed and one was chosen, a second reader could not confirm the call, an implied reading challenges a stated one, or the view is <code>UNCERTAIN</code>. <code>none</code> means the call stands on its own; a Medium band on such a row only says the evidence was indirect or inferred, not that it needs a decision.</td></tr>
+      <tr><td class="col">review_flag</td><td>Whether a human should take a closer look. <code>strong_review</code> means the confidence score is below 50 (a Low band): check these first. <code>review</code> means a judgment was involved - two passages or documents disagreed and one was chosen, a second reader could not confirm the call, an implied reading challenges a stated one, or the view is <code>UNCERTAIN</code>. <code>none</code> means the call stands on its own; a Medium band on such a row only says the evidence was indirect or inferred, not that it needs a decision.</td></tr>
     </tbody>
   </table>
   </div>
@@ -128,8 +128,9 @@
     title and separated by <code>&nbsp;||||&nbsp;</code>.
     <strong>Two views on one asset.</strong> The file holds one row per firm and
     asset. When two of a firm's documents take different positions on the same
-    asset, the more current document wins (then: a stated view over an inferred
-    one, then the higher confidence); the kept row is flagged, its Reviewer Notes
+    asset, the more recent document wins when both are dated on different days
+    (otherwise: a view the document states over one derived from its forecasts,
+    over an inferred one, then the higher confidence); the kept row is flagged, its Reviewer Notes
     name the other document and its view, and the other call is listed in
     <code>failures-client.csv</code> as "Superseded". Only when no rule can
     separate them are both rows kept, flagged, each naming the other.
@@ -182,7 +183,7 @@
 
   <h2>What to do with the output</h2>
   <ul>
-    <li><strong>Review the flagged rows first.</strong> In <code>output.csv</code>, sort or filter on <code>review_flag = review</code> - these are the calls we think most warrant a human eye.</li>
+    <li><strong>Review the flagged rows first.</strong> In <code>output-client.csv</code>, filter on every <code>review_flag</code> other than <code>none</code> (<code>strong_review</code> first, then <code>review</code>) - these are the calls we think most warrant a human eye.</li>
     <li><strong>Treat <code>UNCERTAIN</code> as a deliberate abstention, not an error.</strong> It means the document did not take a clear position on that asset; we chose not to invent one.</li>
     <li><strong>Spot-check a call.</strong> Read the Verbatim Evidence and confirm it against the Locator page in the source document (for a web page, search the page for the quoted text).</li>
     <li><strong>Send back anything that looks wrong.</strong> If a kept call reads the wrong way, an expected call is missing, or a whole document produced no calls, let us know the Firm, Source, and Sub-Asset Class so we can look into it.</li>
