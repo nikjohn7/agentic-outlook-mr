@@ -31,6 +31,7 @@ from src.llm import (
     parse_verdicts,
     resolve_codex_model,
 )
+from src import sharedevidence
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import load_taxonomy
 
@@ -72,6 +73,10 @@ def run_pipeline(
     quote_visual_engine: str = "codex",
     quote_visual_model: str | None = "gpt-5.6-luna",
     quote_visual_effort: str = "high",
+    evidence_gate: bool = True,
+    evidence_engine: str = sharedevidence.DEFAULT_ENGINE,
+    evidence_model: str | None = sharedevidence.DEFAULT_MODEL,
+    evidence_effort: str = sharedevidence.DEFAULT_EFFORT,
     runner=None,
     analyze_prompt: str | Path = ANALYZE_PROMPT,
     brain_text: str | None = None,
@@ -99,6 +104,8 @@ def run_pipeline(
         grouper_model = DEFAULT_CODEX_MODEL
     if quote_visual_engine == "codex" and quote_visual_model is None:
         quote_visual_model = DEFAULT_CODEX_MODEL
+    if evidence_engine == "codex" and evidence_model is None:
+        evidence_model = DEFAULT_CODEX_MODEL
     taxonomy = load_taxonomy()
     taxonomy_block = taxonomy.grouped_block()
     brain = brain_text if brain_text is not None else _brain_text()
@@ -298,6 +305,15 @@ def run_pipeline(
         runner=runner,
         stats=quote_visual_stats,
     )
+    # Shared-evidence gate (src/sharedevidence.py): one passage cited for
+    # several leaves keeps only the most compelling call(s). Judgment-tier model.
+    shared_evidence_judge = (
+        sharedevidence.make_judge(
+            engine=evidence_engine, model=evidence_model, effort=evidence_effort, runner=runner
+        )
+        if evidence_gate
+        else None
+    )
     result = assemble_candidates(
         all_candidates,
         sources=source_infos,
@@ -312,6 +328,7 @@ def run_pipeline(
         group_map=group_map or None,
         quote_visual_verifier=quote_visual_verifier,
         native_source_paths=native_source_paths,
+        shared_evidence_judge=shared_evidence_judge,
     )
     run_config = {
         "engine": engine,
@@ -322,6 +339,9 @@ def run_pipeline(
         "arbiter": f"{arbiter_engine}/{arbiter_model}/{arbiter_effort}",
         "quote visual verifier": (
             f"{quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
+        ),
+        "shared-evidence gate": (
+            f"{evidence_engine}/{evidence_model}/{evidence_effort}" if evidence_gate else "off"
         ),
     }
     if group_notes_text:
@@ -939,6 +959,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="reasoning effort for tier-3 visual quote verification (default high)",
     )
     parser.add_argument(
+        "--evidence-engine",
+        choices=("claude", "codex"),
+        default=sharedevidence.DEFAULT_ENGINE,
+        help=f"engine for the shared-evidence gate (default {sharedevidence.DEFAULT_ENGINE})",
+    )
+    parser.add_argument(
+        "--evidence-model",
+        default=sharedevidence.DEFAULT_MODEL,
+        help=f"model for the shared-evidence gate (default {sharedevidence.DEFAULT_MODEL})",
+    )
+    parser.add_argument(
+        "--evidence-effort",
+        default=sharedevidence.DEFAULT_EFFORT,
+        help=f"reasoning effort for the shared-evidence gate (default {sharedevidence.DEFAULT_EFFORT})",
+    )
+    parser.add_argument(
+        "--no-evidence-gate",
+        action="store_true",
+        help="skip the shared-evidence gate (one passage cited for several assets "
+        "then keeps every call, as before 2026-10)",
+    )
+    parser.add_argument(
         "--out-root",
         help="optional root for this run's artifacts: writes to <out-root>/<run-id>/ "
         "and <out-root>/work/<run-id>/ instead of runs/<run-id> and work/<run-id> "
@@ -984,6 +1026,9 @@ def main() -> int:
         quote_visual_model, quote_visual_effort = resolve_engine_settings(
             args.quote_visual_engine, args.quote_visual_model, args.quote_visual_effort
         )
+        evidence_model, evidence_effort = resolve_engine_settings(
+            args.evidence_engine, args.evidence_model, args.evidence_effort
+        )
     except (ValueError, OSError) as exc:
         parser.error(str(exc))
 
@@ -997,7 +1042,8 @@ def main() -> int:
         f"checker={args.checker_engine}/{checker_model}/{checker_effort}"
         f"{'+context' if args.checker_context else ''} | "
         f"arbiter={args.arbiter_engine}/{arbiter_model}/{arbiter_effort} | "
-        f"quote_visual={args.quote_visual_engine}/{quote_visual_model}/{quote_visual_effort}"
+        f"quote_visual={args.quote_visual_engine}/{quote_visual_model}/{quote_visual_effort} | "
+        f"evidence_gate={'off' if args.no_evidence_gate else f'{args.evidence_engine}/{evidence_model}/{evidence_effort}'}"
         f"{grouper_line}"
     )
     result, chunk_failures, run_dir = run_pipeline(
@@ -1021,6 +1067,10 @@ def main() -> int:
         quote_visual_engine=args.quote_visual_engine,
         quote_visual_model=quote_visual_model,
         quote_visual_effort=quote_visual_effort,
+        evidence_gate=not args.no_evidence_gate,
+        evidence_engine=args.evidence_engine,
+        evidence_model=evidence_model,
+        evidence_effort=evidence_effort,
         out_root=args.out_root,
     )
     kept = len(result.output_rows)

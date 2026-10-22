@@ -5,6 +5,29 @@ workflow can later port to an API with the same contract.
 
 ## Active Prompts
 
+### `select_evidence_leaf.md` — v1 (2026-10-23)
+
+The shared-evidence gate (`src/sharedevidence.py`), built from the client's
+feedback on the July deliverable: one passage of a document had been used as
+the evidence for calls on several different sub-asset classes (367 passages,
+882 rows). Deterministic code finds every passage cited for 2+ leaves within
+ONE source document (normalized-equal quotes, or bounded containment ≥60
+chars); the model then reads each group and returns, categorically, which
+`row_id`s the passage most compellingly supports — one, or several only when
+the passage supports each equally (a list, a pair, a rotation). It never
+changes a view, invents a leaf, or emits a number. Deterministic code
+validates the answer (kept ids must be a non-empty subset of the group, else
+the group fails closed: all rows kept, flagged), drops the losers to failures
+as `shared_evidence_weaker_fit` ("Evidence better supports a related asset"),
+and notes on every survivor that it shares its evidence. Runs in-run inside
+`src.assemble` (after cross-leaf dedup, before rendering; `--no-evidence-gate`
+skips it) and as a CLI over an existing output.csv. Batched ≤20 groups per
+call. Default engine claude/opus/medium (checker-tier judgment; in
+`tests/test_model_matrix.py`). Parsed by `sharedevidence.parse_select_evidence`.
+No template vars. Inputs (appended JSON): `groups[]` with `group_id`, firm,
+source_title, evidence_quote, and `candidates[]` (row_id, sub_asset_class,
+asset_class, category, view, reasoning, basis).
+
 ### `reconcile_scope.md` — v1 (2026-07-10)
 
 The scope gate of the post-run firm-reconcile stage (`src/reconcile.py`, v1.2

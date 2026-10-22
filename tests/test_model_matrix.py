@@ -17,6 +17,7 @@ matching assertion here fails. The matrix (see the build instructions / STATE.md
     datefill cascade     claude / sonnet      / medium
     summarize digest     claude / claude-sonnet-5   / high  (pinned id)
     summarize firmpages  claude / claude-sonnet-4-6 / high  (pinned id)
+    shared-evidence gate claude / opus        / medium (2026-10, checker-tier judgment)
 """
 
 from __future__ import annotations
@@ -47,6 +48,11 @@ class RunCliMatrixTest(unittest.TestCase):
             ("codex", "gpt-5.6-luna", "high"),
             (args.quote_visual_engine, args.quote_visual_model, args.quote_visual_effort),
         )
+        self.assertEqual(
+            ("claude", "opus", "medium"),
+            (args.evidence_engine, args.evidence_model, args.evidence_effort),
+        )
+        self.assertFalse(args.no_evidence_gate)  # the gate is on by default
 
 
 class ScoutMatrixTest(unittest.TestCase):
