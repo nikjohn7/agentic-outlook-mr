@@ -25,7 +25,7 @@ Markets Recon is a local-first POC that ingests fund and asset-manager outlook d
 
 ## Next / Open
 
-- Run the shared-evidence gate over the July master (`python -m src.sharedevidence --output client-runs/master-combined-15072026/output.csv --out-dir …/shared-evidence`; 23 LLM calls), fold its failure rows into `failures-client.csv`, re-export, and re-send the client package (`client-export/`) with the updated `output-guide.pdf`.
+- The July master is FROZEN (decision 2026-10-23: no more reruns). The shared-evidence gate was not run over it and will not be; its re-exported client package is `client-runs/master-combined-15072026/client-export/` plus the updated `output-guide.pdf`. The next work is a NEW client batch: follow `docs/PIPELINE_RUNBOOK.md`; the gate runs inside `src.run` by default and this will be its first live exercise, so check split 1's "Evidence better supports a related asset" failure rows and shared-evidence notes before launching the rest.
 - Client feedback still to triage: the "42 sub-asset classes" = the 42 of 396 taxonomy leaves no document took a view on (354 used; list via a one-liner over `output.csv` vs the locked list — only 5 were ever attempted); American Century's stale 2022/2023 documents (now resolved by recency to the 2023 doc, but both are stale); Carlyle still unfetchable (Cloudflare 403).
 - Review whether the opt-in near-leaf reconciliation and checker evidence-context features should be promoted to their default workflows.
 - Resolve the open ground-truth discrepancies with the Markets Recon team and obtain a broader analyst-reviewed evaluation set.
