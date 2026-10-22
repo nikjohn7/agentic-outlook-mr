@@ -179,10 +179,10 @@ ALL_REASON_CODES = (
 # reason_code -> (What happened, Explanation), both written for a non-technical
 # reader. `What happened` is a short label; `Explanation` says in one plain
 # sentence what it means and what (if anything) the reader should do. This is a
-# mapping layer only — the internal reason codes are never renamed.
+# mapping layer only - the internal reason codes are never renamed.
 #
 # ORDER MATTERS: dict order is the importance order (most attention-worthy
-# first), and failures-client.csv is sorted by it — whole-document and
+# first), and failures-client.csv is sorted by it - whole-document and
 # needs-a-human-decision entries at the top, no-action housekeeping (duplicates,
 # too-small changes) at the bottom. Codes sharing a label sit adjacent so the
 # client file groups cleanly. failures.csv (internal) is never re-ordered.
@@ -194,7 +194,7 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "re-run it.",
     ),
     "unresolved_conflict": (
-        "Conflicting views — none kept",
+        "Conflicting views - none kept",
         "Two views for this asset disagreed and could not be reconciled "
         "automatically, so neither was kept. A human should decide which is "
         "correct.",
@@ -215,18 +215,18 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "affected calls weren't confirmed. Let us know so we can re-run it.",
     ),
     "source_metadata_missing": (
-        "Skipped — source details missing",
+        "Skipped - source details missing",
         "The document's identifying details were unavailable, so this call "
         "could not be attached to a source. Usually a processing issue; let us "
         "know if it recurs.",
     ),
     "implied_challenges_stated": (
-        "Suggestion — review recommended",
+        "Suggestion - review recommended",
         "An implied reading challenges the firm's stated call; the stated call "
         "was kept and this row records the challenge for review.",
     ),
     "arbitrated_out": (
-        "Conflicting views — other call kept",
+        "Conflicting views - other call kept",
         "Two documents disagreed; the more current or more specific call was "
         "kept. Review if the kept call looks wrong.",
     ),
@@ -270,7 +270,7 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "cited page.",
     ),
     "taxonomy_no_match": (
-        "Skipped — asset not on the list",
+        "Skipped - asset not on the list",
         "The asset named didn't match any item on the approved asset list, so "
         "it was left out. No action needed unless it should be on the list.",
     ),
@@ -290,37 +290,37 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
     # want to eyeball; merged is pure de-duplication with the evidence visible in
     # the reconciled row.
     "superseded_by_reconcile": (
-        "Superseded — a newer document from this firm updated this view",
+        "Superseded - a newer document from this firm updated this view",
         "Another document from the same firm took a different view on this asset, "
         "and a more current (or otherwise preferred) call was kept in its place. "
         "Review if the kept call looks wrong.",
     ),
     "near_leaf_superseded": (
-        "Merged into a related call — please review",
+        "Merged into a related call - please review",
         "This firm made views on two closely related assets (e.g. a broad category "
         "and a specific part of it) that pointed different ways; they were read as "
         "one collective call and the most relevant view was kept. Review that the "
         "kept view is the right one.",
     ),
     "duplicate_same_view": (
-        "Duplicate — already covered",
+        "Duplicate - already covered",
         "The same view for this asset appears in another of this firm's "
         "documents; it was kept once. No action needed.",
     ),
     "duplicate_cross_leaf": (
-        "Duplicate — same call, related asset",
+        "Duplicate - same call, related asset",
         "This repeats a view already kept for a closely related asset from the "
         "same piece of text; it was kept once to avoid double-counting. No "
         "action needed.",
     ),
     "merged_by_reconcile": (
-        "Merged — same view stated in several documents",
+        "Merged - same view stated in several documents",
         "Several documents from this firm made the same call on this asset; they "
         "were merged into one row and every document's wording is preserved in "
         "that row's commentary. No action needed.",
     ),
     "near_leaf_merged": (
-        "Merged — same view on a closely related asset",
+        "Merged - same view on a closely related asset",
         "This firm made the same call on two closely related assets (e.g. a broad "
         "category and a specific part of it); they were merged into one row on the "
         "most precise asset and every document's wording is preserved. No action "
@@ -360,7 +360,7 @@ def client_failure_label(reason_code: str) -> tuple[str, str]:
 def client_failure_rank(reason_code: str) -> int:
     """Sort key for failures-client.csv: the code's position in
     CLIENT_FAILURE_LABELS (dict order = most important first). An unmapped code
-    sorts to the very top — something we didn't anticipate deserves the most
+    sorts to the very top - something we didn't anticipate deserves the most
     attention, not the least."""
     return _CLIENT_FAILURE_RANKS.get(reason_code, -1)
 
@@ -451,7 +451,7 @@ class AssemblyResult:
 @dataclass(frozen=True, slots=True)
 class _Selected:
     """One (source/group, leaf) winner that survived scoring, same-view dedup,
-    and conflict arbitration — carried to the cross-leaf dedup pass and then
+    and conflict arbitration - carried to the cross-leaf dedup pass and then
     rendered. Bundles the display context computed during grouping."""
 
     scored: ConfidenceResult
@@ -639,7 +639,7 @@ def assemble_candidates(
         else:
             selected = max(group, key=lambda item: item.confidence)
             # Fold every losing same-view candidate's commentary into the kept
-            # row (within one source and across grouped companion sources — one
+            # row (within one source and across grouped companion sources - one
             # convention). The failures.csv entry stays for audit, its note
             # reworded to say the evidence was merged, not discarded.
             for item in group:
@@ -760,7 +760,7 @@ def _resolve_stated_vs_implied(
     group: list[ConfidenceResult],
 ) -> tuple[ConfidenceResult, list[tuple[ConfidenceResult, str, str]], str] | None:
     """Deterministic stated-beats-implied resolution for one conflicting
-    (source/group, leaf) — the client's rule (ROADMAP decision 5).
+    (source/group, leaf) - the client's rule (ROADMAP decision 5).
 
     Fires only on the clean split it covers: the group holds only `stated` and
     `inferred` candidates, at least one of each, and the stated side carries a
@@ -775,7 +775,7 @@ def _resolve_stated_vs_implied(
     is present return None and keep the existing arbiter path unchanged.
 
     The `implied_challenges_stated` message carries the implied view and its
-    reasoning as a recommendation — the deliberate hook the v1.2 confidence-based
+    reasoning as a recommendation - the deliberate hook the v1.2 confidence-based
     override path will build on (a high-confidence implied call overriding a
     low-confidence stated view); v1 records the recommendation, nothing more.
     """
@@ -784,10 +784,10 @@ def _resolve_stated_vs_implied(
     if not stated or not inferred:
         return None
     if len(stated) + len(inferred) != len(group):
-        return None  # a third basis (e.g. forecast_delta) is present — use the arbiter
+        return None  # a third basis (e.g. forecast_delta) is present - use the arbiter
     stated_views = {item.candidate.view for item in stated}
     if len(stated_views) != 1:
-        return None  # the stated side disagrees with itself — that is arbiter work
+        return None  # the stated side disagrees with itself - that is arbiter work
     (stated_view,) = tuple(stated_views)
 
     winner = max(stated, key=lambda item: item.confidence)
@@ -854,11 +854,11 @@ def _dedup_cross_leaf(
     """Deterministic cross-leaf dedup: one source doc emitting the SAME view on
     the SAME evidence under several leaves is fanning one call out.
 
-    Cluster key: (source_id, view, normalized evidence span-set) — same source
+    Cluster key: (source_id, view, normalized evidence span-set) - same source
     DOC (not group), identical spans, order-insensitive. Within a cluster of
     more than one row:
     - A leaf SURVIVES if its name is grounded in the evidence text (token
-      overlap with the evidence — the same signal as the keep rule). When the
+      overlap with the evidence - the same signal as the keep rule). When the
       evidence names several distinct leaves (e.g. "long NOK ... and long AUD",
       or "the information technology and communication services sectors"), every
       named leaf is a real, distinct call and all survive.
@@ -868,7 +868,7 @@ def _dedup_cross_leaf(
       (tie-break: locked-taxonomy order) and fail the rest.
 
     Rows that differ in view or evidence never share a cluster, so they never
-    collapse — even on sibling leaves.
+    collapse - even on sibling leaves.
 
     Known limitation: the trigger is IDENTICAL evidence. The AB global-duration
     triple (Duration / Global Govt Bonds/SSAs / DM Sovereigns) cites a DIFFERENT
@@ -1116,7 +1116,7 @@ def _client_failure_row(
 ) -> dict[str, str]:
     """One failures-client.csv row: firm/source titles resolved from `sources`,
     a plain What-happened label and Explanation, and the row's own message (or
-    reasoning) as human-readable evidence — no internal codes."""
+    reasoning) as human-readable evidence - no internal codes."""
     what_happened, explanation = client_failure_label(failure.reason_code)
     source_info = sources.get(failure.source_id)
     notes = failure.message or failure.reasoning or failure.evidence_quote
@@ -1189,7 +1189,7 @@ def _output_row(
     segments = (primary, *merged_segments)
 
     # Reviewer notes: everything that is ABOUT the call rather than from the
-    # document — evidence-check outcome, caps, checker, arbiter, tripwires.
+    # document - evidence-check outcome, caps, checker, arbiter, tripwires.
     notes: list[str] = []
     if scored.evidence_check.degraded:
         detail = scored.evidence_check.message or (
@@ -1290,7 +1290,7 @@ def _manifest_text(
         lines.append("## Grouping")
         lines.append(f"- group notes: {grouping.get('notes_path')}")
         for group in grouping.get("groups", []):
-            note = f" — note: {group['note']}" if group.get("note") else ""
+            note = f" - note: {group['note']}" if group.get("note") else ""
             lines.append(f"- {group['group_id']}: {', '.join(group['source_ids'])}{note}")
         for warning in grouping.get("warnings", []):
             lines.append(f"- warning: {warning}")

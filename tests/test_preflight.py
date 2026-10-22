@@ -178,7 +178,7 @@ class OutputShapeTest(unittest.TestCase):
         report = render_report(self._records())
 
         self.assertIn("## FAILED links", report)
-        self.assertIn("Bad Firm — Dead Link", report)
+        self.assertIn("Bad Firm - Dead Link", report)
         self.assertIn("HTTPError: 404 Not Found", report)
         self.assertIn("## Suspect content", report)
         self.assertIn("professional-investor gate", report)

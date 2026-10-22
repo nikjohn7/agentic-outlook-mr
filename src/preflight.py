@@ -1,9 +1,9 @@
 """Link preflight: fetch every source in a list and flag broken / wrong links.
 
 A standalone sweep (NOT a pipeline run) over a whole source CSV. For each row it
-calls the existing ingest ``create_snapshot`` — the same deterministic fetch the
+calls the existing ingest ``create_snapshot`` - the same deterministic fetch the
 run uses (HTML fetch, visual-heavy print-to-PDF, remote-PDF download with the
-`%PDF` magic guard, snapshot text, document-date extraction) — wrapped so one
+`%PDF` magic guard, snapshot text, document-date extraction) - wrapped so one
 failure never stops the sweep. Because it is a preflight and not a run, the
 20-source-per-run cap does NOT apply and is deliberately not enforced here.
 
@@ -12,14 +12,14 @@ type, page count or snapshot char count, the visual-heavy / printed-PDF flags,
 and the document-extracted date and its provenance (which doubles as the first
 at-scale validation of the document-only date policy). After the deterministic
 sweep, ONE batched LLM content-sanity pass (categorical `looks_right` /
-`suspect`, no scores — house rule) smell-tests that each fetch landed on the
+`suspect`, no scores - house rule) smell-tests that each fetch landed on the
 titled document rather than a consent wall / listing page / wrong doc; a failed
 call degrades every source to `unchecked`, never a crash.
 
 Outputs to ``--out-dir``: ``preflight.csv`` (one row per source) and
 ``preflight-report.md`` (summary counts, the FAILED list first, then the
 suspects, then a date-extraction table). Downloaded PDFs and print-captured
-pages stay under ``<out-dir>/work/`` — the "PDF downloaded locally" deliverable.
+pages stay under ``<out-dir>/work/`` - the "PDF downloaded locally" deliverable.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ def load_preflight_sources(path: str | Path) -> list[SourceRecord]:
     The 37-source workbook copy (`Id`/`Firm`/`Title`/`Published At`/`Source Link`)
     loads via ``load_target_sources`` (preserving its `Id`s as source ids); any
     other pilot-family CSV (header aliases accepted) falls back to
-    ``load_pilot_sources``. Either way loading never applies a source cap — a
+    ``load_pilot_sources``. Either way loading never applies a source cap - a
     preflight sweeps the whole list.
     """
     try:
@@ -340,18 +340,18 @@ def render_report(records: list[PreflightRecord]) -> str:
     lines.append("")
     if failed:
         for record in failed:
-            lines.append(f"- **{record.firm} — {record.title}**")
+            lines.append(f"- **{record.firm} - {record.title}**")
             lines.append(f"  - {record.url}")
             lines.append(f"  - {record.error}")
     else:
-        lines.append("(none — every link fetched)")
+        lines.append("(none - every link fetched)")
     lines.append("")
 
     lines.append("## Suspect content (fetched, but may be the wrong page)")
     lines.append("")
     if suspects:
         for record in suspects:
-            lines.append(f"- **{record.firm} — {record.title}**: {record.content_reason}")
+            lines.append(f"- **{record.firm} - {record.title}**: {record.content_reason}")
             lines.append(f"  - {record.url}")
     else:
         lines.append("(none flagged suspect)")

@@ -24,14 +24,14 @@ VALID_CHECK_VERDICTS = ("pass", "unclear", "fail")
 CHECK_QUESTIONS = ("supports_view", "forward_looking", "asset_match")
 VALID_EVIDENCE_STRENGTHS = ("decisive", "adequate", "thin")
 
-# How the call was derived — drives the deterministic materiality gate and the
+# How the call was derived - drives the deterministic materiality gate and the
 # analyst-inference confidence tier (src/confidence.py):
-#   stated         — an explicit dial/score/tier position or explicit OW/N/UW
+#   stated         - an explicit dial/score/tier position or explicit OW/N/UW
 #                    prose ("we are overweight X"). First-class, uncapped.
-#   forecast_delta — a house forecast endpoint vs. the current level (a yield,
+#   forecast_delta - a house forecast endpoint vs. the current level (a yield,
 #                    FX, or price-target table). Requires delta_value/delta_unit
 #                    so the materiality gate can size the move.
-#   inferred       — a single-step analyst inference from macro/thematic prose
+#   inferred       - a single-step analyst inference from macro/thematic prose
 #                    that never states a position. Capped one band below stated.
 VALID_BASIS = ("stated", "forecast_delta", "inferred")
 VALID_DELTA_UNITS = ("bp", "pct")
@@ -148,7 +148,7 @@ class CandidateCall:
 class CheckVerdict:
     """A second-reader model's categorical verdicts on one candidate.
 
-    Verdicts are facts fed into the deterministic rubric — never a
+    Verdicts are facts fed into the deterministic rubric - never a
     self-confidence number. `index` echoes the candidate's position in the
     checked batch so alignment is exact.
     """
@@ -225,7 +225,7 @@ def _require_spans(value: dict[str, Any], field: str) -> tuple[str, ...]:
     """Accept evidence as one verbatim span (a string) or an explicit list of
     verbatim spans. Structure only: every span must be a non-empty string. The
     span-count/order/token guardrails are deterministic gates in
-    src/confidence.py, not schema rules — and ellipses are never parsed out of a
+    src/confidence.py, not schema rules - and ellipses are never parsed out of a
     single string here (only an explicit list produces multiple spans)."""
     item = value.get(field)
     if isinstance(item, str):

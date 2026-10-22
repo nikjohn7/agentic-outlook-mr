@@ -20,7 +20,7 @@ from src.commentary import (
 class DisplayLocatorTest(unittest.TestCase):
     def test_page_locators_pass_through(self) -> None:
         self.assertEqual("p.13", display_locator("p.13"))
-        self.assertEqual("p.5 — 'Fixed Income Views' grid", display_locator("p.5 — 'Fixed Income Views' grid"))
+        self.assertEqual("p.5 - 'Fixed Income Views' grid", display_locator("p.5 - 'Fixed Income Views' grid"))
 
     def test_char_offsets_render_blank(self) -> None:
         # HTML / transcript chunk offsets mean nothing to a reader (client decision 10).
@@ -30,7 +30,7 @@ class DisplayLocatorTest(unittest.TestCase):
     def test_char_offset_keeps_a_trailing_figure_name(self) -> None:
         self.assertEqual(
             "Figure 1: Summary of sector market perspectives",
-            display_locator("char:0-8000 — Figure 1: Summary of sector market perspectives"),
+            display_locator("char:0-8000 - Figure 1: Summary of sector market perspectives"),
         )
 
 
@@ -76,7 +76,7 @@ class RenderTest(unittest.TestCase):
         columns = structured_columns(commentary)
         self.assertEqual("Doc A: Reason one." + SEGMENT_SEP + "Doc B: Reason two.", columns["Reasoning"])
         self.assertEqual("Doc A: Quote one" + SEGMENT_SEP + "Doc B: Quote two", columns["Verbatim Evidence"])
-        self.assertEqual("Doc A: p.3" + SEGMENT_SEP + "Doc B: —", columns["Locator"])
+        self.assertEqual("Doc A: p.3" + SEGMENT_SEP + "Doc B: -", columns["Locator"])
         self.assertEqual("Arbiter: kept A.", columns["Reviewer Notes"])
 
     def test_row_columns_carries_full_commentary_and_the_four(self) -> None:
@@ -109,7 +109,7 @@ class ParseLegacyTest(unittest.TestCase):
         text = (
             "M&G favours asset-based financings. Evidence: Inflationary pressures may "
             "favour floating rate private credit asset classes.. Locator: p.20. "
-            "Basis: inferred — single-step analyst inference; review required. "
+            "Basis: inferred - single-step analyst inference; review required. "
             "Checker: unconfirmed (conditional)."
         )
         parsed = parse_full_commentary(text, "Doc A")
@@ -123,16 +123,16 @@ class ParseLegacyTest(unittest.TestCase):
         self.assertEqual("p.20", seg.locator)
         self.assertEqual("Doc A", seg.title)
         self.assertEqual(
-            "Basis: inferred — single-step analyst inference; review required. "
+            "Basis: inferred - single-step analyst inference; review required. "
             "Checker: unconfirmed (conditional).",
             parsed.notes,
         )
         self.assertEqual(text, render_full_commentary(parsed))
 
     def test_locator_with_period_inside_is_not_truncated(self) -> None:
-        text = "R. Evidence: Q. Locator: p.5 — 'T. Rowe Price views' grid. Evidence check: degraded."
+        text = "R. Evidence: Q. Locator: p.5 - 'T. Rowe Price views' grid. Evidence check: degraded."
         seg = parse_full_commentary(text, "Doc").segments[0]
-        self.assertEqual("p.5 — 'T. Rowe Price views' grid", seg.locator)
+        self.assertEqual("p.5 - 'T. Rowe Price views' grid", seg.locator)
         self.assertEqual("Evidence check: degraded.", parse_full_commentary(text, "Doc").notes)
 
     def test_char_locator_is_blanked_on_parse(self) -> None:

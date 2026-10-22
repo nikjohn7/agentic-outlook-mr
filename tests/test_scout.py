@@ -152,7 +152,7 @@ class RunScoutTest(unittest.TestCase):
                     }
                 ],
                 "ungrouped_firms": [
-                    {"firm": "Beta", "reason": "equity vs fixed income — separate desks"}
+                    {"firm": "Beta", "reason": "equity vs fixed income - separate desks"}
                 ],
             }
         )

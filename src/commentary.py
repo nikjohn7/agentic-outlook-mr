@@ -6,11 +6,11 @@ source for merged rows). The client asked for it split into the verbatim
 evidence, the locator, and the second-reader notes. This module owns that split
 so every stage that writes or merges a row works on the SAME four fields:
 
-- `Reasoning`         — why the view was read that way (one segment per source)
-- `Verbatim Evidence` — the exact supporting text, nothing else
-- `Locator`           — page (PDF) or blank (HTML / transcript: the quote is
+- `Reasoning`         - why the view was read that way (one segment per source)
+- `Verbatim Evidence` - the exact supporting text, nothing else
+- `Locator`           - page (PDF) or blank (HTML / transcript: the quote is
                         the locator, client decision 10)
-- `Reviewer Notes`    — second-reader, arbiter, evidence-check and reconcile
+- `Reviewer Notes`    - second-reader, arbiter, evidence-check and reconcile
                         notes; everything that is about the call rather than
                         from the document
 
@@ -43,7 +43,7 @@ _CHAR_LOCATOR = re.compile(r"^\s*char:\d+-\d+\s*(?:[—–-]\s*)?(?P<rest>.*)$",
 def display_locator(locator: str) -> str:
     """The locator as a reader should see it: page references pass through;
     `char:` offsets (HTML / transcript chunks) are dropped, keeping any
-    figure/table name that followed them (`char:0-8000 — Figure 1: …` →
+    figure/table name that followed them (`char:0-8000 - Figure 1: …` →
     `Figure 1: …`)."""
     text = (locator or "").strip()
     match = _CHAR_LOCATOR.match(text)
@@ -61,7 +61,7 @@ class Segment:
     evidence: str
 
     def body(self) -> str:
-        """`{reasoning} Evidence: {quote}.` — the legacy body format, kept so the
+        """`{reasoning} Evidence: {quote}.` - the legacy body format, kept so the
         rendered Full Commentary stays parseable by every existing consumer."""
         return f"{self.reasoning} Evidence: {self.evidence}."
 
@@ -117,7 +117,7 @@ def structured_columns(commentary: Commentary) -> dict[str, str]:
     return {
         "Reasoning": SEGMENT_SEP.join(f"{seg.title}: {seg.reasoning}" for seg in segments),
         "Verbatim Evidence": SEGMENT_SEP.join(f"{seg.title}: {seg.evidence}" for seg in segments),
-        "Locator": SEGMENT_SEP.join(f"{seg.title}: {seg.locator or '—'}" for seg in segments),
+        "Locator": SEGMENT_SEP.join(f"{seg.title}: {seg.locator or '-'}" for seg in segments),
         "Reviewer Notes": commentary.notes,
     }
 
@@ -200,7 +200,7 @@ def _strip_period(text: str) -> str:
 
 
 def _strip_title_paren(locator: str, titles: list[str]) -> str:
-    """`p.3 (Source Title)` — grouped rows suffix the member title; drop it."""
+    """`p.3 (Source Title)` - grouped rows suffix the member title; drop it."""
     for title in titles:
         suffix = f"({title})"
         if title and locator.endswith(suffix):
@@ -304,7 +304,7 @@ def _commentary_from_structured(row: dict[str, str], titles: list[str]) -> Comme
         title_r, reasoning = reasonings[index] if index < len(reasonings) else ("", "")
         title_e, evidence = evidences[index] if index < len(evidences) else ("", "")
         _, locator = locators[index] if index < len(locators) else ("", "")
-        locator = "" if locator == "—" else locator
+        locator = "" if locator == "-" else locator
         segments.append(
             Segment(
                 title=title_r or title_e or (titles[0] if titles else ""),

@@ -1,4 +1,4 @@
-# Brain — worked examples for allocation-call extraction
+# Brain - worked examples for allocation-call extraction
 
 _Version: v1.6_
 
@@ -20,7 +20,7 @@ contract.
   Record the tier name inside the evidence.
 - Published-level-wins with narrower commentary: a positioning grid places
   `Gold/Precious` in the Overweight column while a nearby note frets about gold
-  *miners'* margins. The chart call stands — `Gold/Precious` `O` — because the
+  *miners'* margins. The chart call stands - `Gold/Precious` `O` - because the
   cautious commentary is about a narrower sub-asset (mining equities), not the
   charted leaf; only commentary on gold itself could refine it.
 - Bought / "added substantially" → `O` (implied); "largely exited most of
@@ -40,7 +40,7 @@ contract.
 
 ## Implied calls
 
-- "We now expect Brent to peak around $110 per barrel — far higher than our
+- "We now expect Brent to peak around $110 per barrel - far higher than our
   prior forecast of approximately $60" → `Oil` `O`.
 - "Australian 10-year to run 15 bps higher, at 4.8%" → `Australia Govt Bonds`
   `U` (yield up = price call down).
@@ -69,7 +69,7 @@ contract.
 
 ## Not-a-call boundaries
 
-- "The index is down 7.3% since the war began" → not a call — unless a
+- "The index is down 7.3% since the war began" → not a call - unless a
   forward expectation is attached ("…keeping it under pressure in the near
   term" → `U`).
 - "Repricing has opened pockets of value across LatAm… though we express no
@@ -94,9 +94,9 @@ contract.
   house writes: "Indonesia's nickel-processing boom keeps drawing sustained
   foreign investment, and Vietnam is capturing the supply chains relocating out
   of China." The taxonomy has both `Indonesia Equities` and `Vietnam Equities`,
-  so the single-step inference lands on the two **named** country leaves —
+  so the single-step inference lands on the two **named** country leaves -
   `Indonesia Equities` `O` **and** `Vietnam Equities` `O` (`basis: inferred`,
-  each carrying that same quoted span) — and the regional aggregate `Asia
+  each carrying that same quoted span) - and the regional aggregate `Asia
   Equities` is **not** emitted. Two named countries → two country candidates is
   the multi-call pattern (each leaf is named in the evidence), not a fan-out;
   the "no fan-out" rule only bars pushing a *broad stated* call ("we favor EM

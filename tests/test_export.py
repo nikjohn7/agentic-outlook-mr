@@ -58,7 +58,7 @@ class SharedKeyTest(unittest.TestCase):
         self.assertIn("Also held by this firm: O in 'Equity Market Outlook' (29/06/2026) on the same asset", kept["Reviewer Notes"])
         self.assertIn("kept by recency", kept["Reviewer Notes"])
         self.assertEqual(1, len(failures))
-        self.assertEqual("Superseded — a newer document from this firm updated this view", failures[0]["What happened"])
+        self.assertEqual("Superseded - a newer document from this firm updated this view", failures[0]["What happened"])
         self.assertEqual(("O", "Equity Market Outlook"), (failures[0]["View (proposed)"], failures[0]["Source"]))
         # Idempotent: a second pass sees the note and leaves things alone.
         again, more = resolve_shared_keys(resolved)
@@ -72,7 +72,7 @@ class SharedKeyTest(unittest.TestCase):
         self.assertEqual("Equity Market Outlook | Mid-Year Outlook", merged["Source"])
         self.assertIn("Equity Market Outlook: We favour Asia ex Japan  ||||  Mid-Year Outlook: We favour Asia ex Japan", merged["Verbatim Evidence"])
         self.assertIn("merged to keep one row per asset", merged["Reviewer Notes"])
-        self.assertEqual("Merged — same view stated in several documents", failures[0]["What happened"])
+        self.assertEqual("Merged - same view stated in several documents", failures[0]["What happened"])
 
     def test_tie_keeps_both_flagged_and_noted(self) -> None:
         rows = [normalize_row(_legacy_row()), normalize_row(_legacy_row(View="U", Source="Other", Date="29/06/2026"))]
@@ -92,7 +92,7 @@ class ReviewFlagPolicyTest(unittest.TestCase):
     def test_caps_are_cleared_judgments_and_uncertain_stay(self) -> None:
         rows = [
             normalize_row(_legacy_row(review_flag="review", confidence="74", band="Medium", basis="inferred",
-                                      **{"Full Commentary": "R. Evidence: Q. Locator: p.1. Basis: inferred — single-step analyst inference."})),
+                                      **{"Full Commentary": "R. Evidence: Q. Locator: p.1. Basis: inferred - single-step analyst inference."})),
             normalize_row(_legacy_row(review_flag="review", **{"Full Commentary": "R. Evidence: Q. Locator: p.1. Arbiter: kept this one."})),
             normalize_row(_legacy_row(review_flag="none", View="UNCERTAIN")),
             normalize_row(_legacy_row(review_flag="review", confidence="40", band="Low")),
@@ -131,11 +131,11 @@ class ClientRowsTest(unittest.TestCase):
         self.assertEqual("review", projected[0]["review_flag"])  # "Checker: not run" is a judgment gap
 
     def test_merge_failure_rows_keeps_label_block_order(self) -> None:
-        existing = [{"What happened": "Duplicate — already covered"}, {"What happened": "Document could not be ingested"}]
-        added = [{"What happened": "Superseded — a newer document from this firm updated this view"}]
+        existing = [{"What happened": "Duplicate - already covered"}, {"What happened": "Document could not be ingested"}]
+        added = [{"What happened": "Superseded - a newer document from this firm updated this view"}]
         merged = merge_failure_rows(existing, added)
         self.assertEqual(
-            ["Document could not be ingested", "Superseded — a newer document from this firm updated this view", "Duplicate — already covered"],
+            ["Document could not be ingested", "Superseded - a newer document from this firm updated this view", "Duplicate - already covered"],
             [r["What happened"] for r in merged],
         )
 
@@ -145,7 +145,7 @@ class ClientRowsTest(unittest.TestCase):
             write_csv(src, tuple(_legacy_row()), [_legacy_row(), _legacy_row(View="U", Date="30/06/2026", Source="Later")])
             fail = Path(temp_dir) / "failures-client.csv"
             write_csv(fail, ("Firm", "Source", "Sub-Asset Class", "View (proposed)", "What happened", "Explanation", "Evidence / notes"),
-                      [{"Firm": "F", "Source": "S", "Sub-Asset Class": "X", "View (proposed)": "O", "What happened": "Duplicate — already covered", "Explanation": "e", "Evidence / notes": "n\nm"}])
+                      [{"Firm": "F", "Source": "S", "Sub-Asset Class": "X", "View (proposed)": "O", "What happened": "Duplicate - already covered", "Explanation": "e", "Evidence / notes": "n\nm"}])
             out = Path(temp_dir) / "client"
             report = export(src, out, failures_csv=fail)
             self.assertEqual((2, 1, 1), (report["rows_in"], report["rows_out"], report["shared_key_failure_rows"]))
@@ -157,7 +157,7 @@ class ClientRowsTest(unittest.TestCase):
             self.assertTrue((out / "output-client.csv").read_bytes().startswith(b"\xef\xbb\xbf"))
             _, failure_rows = read_csv(out / "failures-client.csv")
             self.assertEqual(2, len(failure_rows))
-            self.assertEqual("Superseded — a newer document from this firm updated this view", failure_rows[0]["What happened"])
+            self.assertEqual("Superseded - a newer document from this firm updated this view", failure_rows[0]["What happened"])
             self.assertEqual("n m", failure_rows[1]["Evidence / notes"])
 
 

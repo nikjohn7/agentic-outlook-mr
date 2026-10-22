@@ -23,7 +23,7 @@ deterministic steps:
 2. One agent call per source (`prompts/find_date.md`): the model reads the
    pre-extracted document text (and the file, for a date printed only in a cover
    image) and reports any STATED publication date it sees, or hunts the landing
-   page. It returns categorical claims only — never a metadata date, never an
+   page. It returns categorical claims only - never a metadata date, never an
    invented one.
 3. Deterministic, fail-closed verification of every claim: the stated quote must
    re-appear in the freshly extracted document text; a landing-page date must
@@ -84,7 +84,7 @@ DOC_TEXT_HEAD_CHARS = 6000
 DOC_TEXT_TAIL_CHARS = 3000
 
 # Browser "Save/Print as PDF" writers stamp the SAVE time into CreationDate, not
-# the publication date — exactly the failure the spec's print-capture guard
+# the publication date - exactly the failure the spec's print-capture guard
 # names (our own Playwright captures are Skia/PDF; manual Firefox/Safari "Save as
 # PDF" on macOS goes through Quartz). Their metadata is a capture time, so it is
 # never used as a publication date. Publisher-original PDFs (Adobe InDesign,
@@ -180,7 +180,7 @@ def _month_num(word: str) -> int | None:
 def parse_verbatim_date(date_verbatim: str, granularity: str) -> ParsedDate | None:
     """Parse the agent's verbatim date string into a ParsedDate, deterministically.
 
-    The agent's own formatting is never trusted — only what the regexes recover
+    The agent's own formatting is never trusted - only what the regexes recover
     from the literal string, and only within the year window. Quarter/season
     granularity never yields a fillable date (returns None). Extends the worded-
     date parsing in `src/ingest.py` with abbreviations, ISO, and disambiguated
@@ -212,7 +212,7 @@ def _parse_full(text: str) -> ParsedDate | None:
     m = re.search(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", low)
     if m:
         return _make_date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
-    # numeric d/m/y or m/d/y — only when the day component disambiguates (>12);
+    # numeric d/m/y or m/d/y - only when the day component disambiguates (>12);
     # a fully ambiguous pair (both <= 12) is rejected rather than guessed.
     m = re.search(r"\b(\d{1,2})[/.](\d{1,2})[/.](\d{4})\b", low)
     if m:
@@ -273,7 +273,7 @@ def pdf_metadata_date_from_meta(meta: dict | None) -> ParsedDate | None:
     """A PDF's CreationDate as a windowed ParsedDate, or None.
 
     Returns None for browser print-to-PDF captures (their CreationDate is the
-    save time, not a publication date) — the spec's print-capture guard, applied
+    save time, not a publication date) - the spec's print-capture guard, applied
     by producer/creator signature so it also catches manual Firefox/Safari "Save
     as PDF" files, not just our own Playwright captures.
     """
@@ -296,7 +296,7 @@ def pdf_metadata_date(path: Path) -> ParsedDate | None:
     try:
         with pdfplumber.open(path) as pdf:
             meta = dict(pdf.metadata or {})
-    except Exception:  # noqa: BLE001 — an unreadable PDF simply yields no metadata date
+    except Exception:  # noqa: BLE001 - an unreadable PDF simply yields no metadata date
         return None
     return pdf_metadata_date_from_meta(meta)
 
@@ -326,7 +326,7 @@ def collect_undated_sources(
 
     A blank-`Date` row's `Source` may pipe-join several titles (grouped rows);
     each member is split out and joined to the master on normalized firm+title.
-    Returns (matched master records, unmatched (firm, title) pairs) — an
+    Returns (matched master records, unmatched (firm, title) pairs) - an
     unmatched source is logged, never a crash (the master carries a known title
     typo, "Reisnsurance", and a firm variant, "Aon's")."""
     index = {(normalize_firm(r.firm), normalize_title(r.source)): r for r in master}
@@ -379,7 +379,7 @@ def _clip_for_prompt(text: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Agent call (find_date.md) — one per source, cascade of two engines
+# Agent call (find_date.md) - one per source, cascade of two engines
 # --------------------------------------------------------------------------- #
 
 
@@ -469,13 +469,13 @@ def find_date_for_source(
         completed = runner(command, stdin_text)
     except subprocess.TimeoutExpired:
         return [], f"{engine} timed out after {AGENT_TIMEOUT_SECONDS}s"
-    except Exception as exc:  # noqa: BLE001 — subprocess/launch failure must not kill the sweep
+    except Exception as exc:  # noqa: BLE001 - subprocess/launch failure must not kill the sweep
         return [], f"{engine} launch failed: {exc}"
     if completed.returncode != 0:
         return [], (completed.stderr or "").strip()[:300] or f"{engine} exited non-zero"
     try:
         return parse_find_date_response(completed.stdout), ""
-    except Exception as exc:  # noqa: BLE001 — bad JSON is logged, not fatal
+    except Exception as exc:  # noqa: BLE001 - bad JSON is logged, not fatal
         return [], f"unparseable agent output: {exc}"
 
 
@@ -606,7 +606,7 @@ def verify_candidates(
       see fails closed.
     - landing_page: the locator page must be fetchable, the evidence quote must
       appear on it, AND the page must reference this document (links the source
-      URL/PDF filename, or contains the title) — killing "grabbed a sibling
+      URL/PDF filename, or contains the title) - killing "grabbed a sibling
       outlook's date".
     - the date string is parsed here (never the agent's formatting) and the year
       must fall in the batch window.
@@ -768,7 +768,7 @@ class _Extractor:
             try:
                 result = ingest._fetch_html(url)
                 self._page_cache[url] = result.html if isinstance(result, ingest.HtmlFetchResult) else result
-            except Exception:  # noqa: BLE001 — an unfetchable page just yields no verification
+            except Exception:  # noqa: BLE001 - an unfetchable page just yields no verification
                 self._page_cache[url] = None
         return self._page_cache[url]
 
@@ -836,7 +836,7 @@ def run_datefill(
     with tempfile.TemporaryDirectory(prefix="datefill-") as tmp:
         extractor = _Extractor(Path(tmp))
         for position, source in enumerate(sources, start=1):
-            say(f"[{position}/{len(sources)}] {source.firm} — {source.source[:60]}")
+            say(f"[{position}/{len(sources)}] {source.firm} - {source.source[:60]}")
             doc = extractor.extract(source)
             metadata_date, metadata_from = _compute_metadata(source, doc)
 
@@ -936,7 +936,7 @@ def render_summary(result: DatefillResult) -> str:
     lines.append(
         "Post-run document-date backfill (`src/datefill.py`). The frozen run "
         "output was NOT modified. Review the `datefill.csv` patch, then run "
-        "`--apply` to write a NEW file (a sibling such as `output.dated.csv`) — "
+        "`--apply` to write a NEW file (a sibling such as `output.dated.csv`) - "
         "replace the frozen `output.csv` only after that review."
     )
     lines.append("")
@@ -964,7 +964,7 @@ def render_summary(result: DatefillResult) -> str:
         for firm in sorted(per_firm):
             entries = per_firm[firm]
             dates = ", ".join(f"{sf.fill.date} ({sf.fill.date_from})" for sf in entries)
-            lines.append(f"- {firm}: {len(entries)} — {dates}")
+            lines.append(f"- {firm}: {len(entries)} - {dates}")
     else:
         lines.append("_None._")
     lines.append("")
@@ -977,15 +977,15 @@ def render_summary(result: DatefillResult) -> str:
                 if sf.discards
                 else "no dated candidate found and no usable metadata"
             )
-            lines.append(f"- {sf.source.firm} — {sf.source.source[:70]}: {reason}")
+            lines.append(f"- {sf.source.firm} - {sf.source.source[:70]}: {reason}")
     else:
-        lines.append("_None — every processed source was filled._")
+        lines.append("_None - every processed source was filled._")
     lines.append("")
     lines.append("## Sources not matched to the master CSV (not processed)")
     lines.append("")
     if result.unmatched:
         for firm, title in result.unmatched:
-            lines.append(f"- {firm} — {title[:70]} (fix the master firm/title to include it)")
+            lines.append(f"- {firm} - {title[:70]} (fix the master firm/title to include it)")
     else:
         lines.append("_None._")
     lines.append("")
@@ -993,7 +993,7 @@ def render_summary(result: DatefillResult) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Apply — write a NEW output.csv with Date filled + grouped dates rebuilt
+# Apply - write a NEW output.csv with Date filled + grouped dates rebuilt
 # --------------------------------------------------------------------------- #
 
 
@@ -1019,7 +1019,7 @@ def rebuild_date_cell(row: dict[str, str], fills: dict[tuple[str, str], str]) ->
     Each member's date is its patch fill when present (undated sources we
     backfilled), else its aligned original date entry (decision 9: member dates
     are pipe-joined in Source order). Blanks are skipped, and exact duplicates
-    are collapsed order-preserving — fixing the cosmetic `15/06/2026 | ×4`
+    are collapsed order-preserving - fixing the cosmetic `15/06/2026 | ×4`
     grouped-row repetition flagged in STATE.md.
     """
     firm = (row.get("Firm") or "").strip()
@@ -1066,7 +1066,7 @@ def apply_patch(output_csv: Path, patch_csv: Path, write_path: Path) -> int:
 
 def _resolve_model(engine: str, model: str | None, *, claude_default: str | None) -> str | None:
     """claude needs an explicit model (supply a default). codex passes the model
-    through unchanged — None lets the adapter fill DEFAULT_CODEX_MODEL, a named
+    through unchanged - None lets the adapter fill DEFAULT_CODEX_MODEL, a named
     model is validated downstream (never silently dropped)."""
     if engine == "claude" and model is None:
         return claude_default

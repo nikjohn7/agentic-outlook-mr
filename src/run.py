@@ -88,7 +88,7 @@ def run_pipeline(
     Up to four LLM steps, each with its own engine/model/effort: analyze (the
     extraction workhorse), checker (second-reader verdicts per source batch),
     arbiter (conflict resolution, only called when views collide), and the
-    group resolver (only when analyst group notes are supplied — translates
+    group resolver (only when analyst group notes are supplied - translates
     free-text pairing notes into an explicit, saved grouping plan once, before
     any analysis).
     """
@@ -111,7 +111,7 @@ def run_pipeline(
     brain = brain_text if brain_text is not None else _brain_text()
     conventions = conventions_text if conventions_text is not None else _conventions_text()
     # Default paths (out_root absent) are exactly today's: work/<id> and runs/<id>.
-    # An out_root reroots both under it: <out_root>/work/<id> and <out_root>/<id> —
+    # An out_root reroots both under it: <out_root>/work/<id> and <out_root>/<id> -
     # so a production batch keeps all its artifacts out of the test/pilot trees.
     if out_root is not None:
         base = Path(out_root)
@@ -234,7 +234,7 @@ def run_pipeline(
         if group_id:
             group_ledgers[group_id] = (
                 "\n## Companion document already analyzed in this grouped source set\n"
-                "Report this document's own stances normally — corroboration and\n"
+                "Report this document's own stances normally - corroboration and\n"
                 "conflicts across the set are resolved downstream; mark `conflict:\n"
                 "true` where this document disagrees with the companion.\n\n"
                 f"{source_memory}\n"
@@ -381,7 +381,7 @@ def analyze_source(
 ) -> tuple[list[CandidateCall], list[FailureRecord]]:
     """Analyze every chunk of one source with rolling memory between chunks.
 
-    initial_memory seeds the rolling memory before the first chunk — used to
+    initial_memory seeds the rolling memory before the first chunk - used to
     carry a grouped companion document's ledger into this document's read.
     """
     source = ingested.source
@@ -443,12 +443,12 @@ def _check_candidates(
     """One second-reader call for all of a source's candidates.
 
     Returns {local candidate index: verdict}. A failed checker call returns no
-    verdicts plus a failure record — candidates then proceed capped and
+    verdicts plus a failure record - candidates then proceed capped and
     flagged for review, never silently promoted.
 
     memory_text is the source's complete rolling memory (the same ledger built
     during analyze). It is injected as whole-file context so the checker can see
-    whether a candidate is corroborated or contradicted elsewhere in the file —
+    whether a candidate is corroborated or contradicted elsewhere in the file -
     but it never relaxes the per-candidate evidence bar (the prompt says so).
 
     When checker_context is on, each candidate is deterministically routed
@@ -551,7 +551,7 @@ def _context_fields(
 
     Empty (no fields) unless --checker-context is on. A CLEAN route adds
     `evidence_context` (the text window); a DEGRADED route adds
-    `context_unreliable: true` — but only when there is a PDF page image to open
+    `context_unreliable: true` - but only when there is a PDF page image to open
     (native PDF present and a cited page), otherwise nothing is attached and the
     candidate is judged exactly as today. Never raises."""
     if not enabled:
@@ -758,7 +758,7 @@ def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
             f"This chunk is pages {pages} of the PDF file at:\n"
             f"`{chunk.source_path}`\n\n"
             f"{capture_note}"
-            "Open and read those pages as rendered pages — view them so you see "
+            "Open and read those pages as rendered pages - view them so you see "
             "tables, positioning/view grids, arrows, and dial gauges as printed, not "
             "only the extracted text. Cite what you actually see on the page."
         )
@@ -783,7 +783,7 @@ def _html_chunk_text(chunk: Chunk) -> str:
 
 
 def _memory_header(source: SourceRecord) -> str:
-    return f"# {source.firm} — {source.source}  ({source.source_id})\n"
+    return f"# {source.firm} - {source.source}  ({source.source_id})\n"
 
 
 def _append_memory(
@@ -819,8 +819,8 @@ def load_sources(spec: str) -> list[SourceRecord]:
 
     ``pilot`` and ``target`` load the built-in CSVs; any other value is a path
     to a source CSV in the pilot column family (canonical firm/date/source/url +
-    optional local_file, header aliases accepted — see ``ingest._COLUMN_ALIASES``)
-    — so adding a second test set needs no code change. The <=20 source limit is
+    optional local_file, header aliases accepted - see ``ingest._COLUMN_ALIASES``)
+    - so adding a second test set needs no code change. The <=20 source limit is
     enforced by the caller for every case.
     """
     if spec == "pilot":
@@ -837,7 +837,7 @@ def resolve_engine_settings(engine: str, model: str | None, effort: str | None) 
     full name) so a run never silently inherits the CLI's settings default.
     codex: model defaults to ``DEFAULT_CODEX_MODEL`` when omitted and must be a
     member of the codex allowlist otherwise. effort is required for both engines
-    and must be a level the engine accepts (the codex floor is ``low`` — no
+    and must be a level the engine accepts (the codex floor is ``low`` - no
     ``minimal``).
     """
     if engine == "codex":

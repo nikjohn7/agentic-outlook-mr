@@ -15,22 +15,25 @@ class CleanCellTest(unittest.TestCase):
         self.assertEqual("", clean_cell(None))
         self.assertEqual("7", clean_cell(7))
 
-    def test_typographic_characters_are_preserved(self) -> None:
-        # The fix for Excel is the BOM, not stripping the document's punctuation.
-        self.assertEqual("we’re “neutral” — for now", clean_cell("we’re “neutral” — for now"))
+    def test_typographic_characters_are_preserved_except_em_dashes(self) -> None:
+        # The fix for Excel is the BOM, not stripping the document's punctuation;
+        # the one exception is the house ban on em dashes (replaced by a hyphen).
+        self.assertEqual("we’re “neutral” - for now", clean_cell("we’re “neutral” — for now"))
+        self.assertEqual("Duplicate - already covered", clean_cell("Duplicate — already covered"))
+        self.assertEqual("a-b", clean_cell("a—b"))
 
 
 class WriteCsvTest(unittest.TestCase):
     def test_writes_bom_single_line_cells_and_reads_back(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "sub" / "out.csv"
-            write_csv(path, ("Firm", "Full Commentary"), [{"Firm": "A — B", "Full Commentary": "line1\nline2", "extra": "x"}])
+            write_csv(path, ("Firm", "Full Commentary"), [{"Firm": "A - B", "Full Commentary": "line1\nline2", "extra": "x"}])
             raw = path.read_bytes()
             self.assertTrue(raw.startswith(b"\xef\xbb\xbf"), "BOM required for Excel on Windows")
             self.assertNotIn(b"line1\nline2", raw)
             columns, rows = read_csv(path)
             self.assertEqual(["Firm", "Full Commentary"], columns)
-            self.assertEqual([{"Firm": "A — B", "Full Commentary": "line1 line2"}], rows)
+            self.assertEqual([{"Firm": "A - B", "Full Commentary": "line1 line2"}], rows)
             # Plain csv with utf-8-sig sees the same thing (no stray BOM in the header).
             with path.open(newline="", encoding="utf-8-sig") as handle:
                 self.assertEqual(["Firm", "Full Commentary"], next(csv.reader(handle)))

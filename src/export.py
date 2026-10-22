@@ -7,13 +7,13 @@ run. It exists so the problems the client reported can never reach them again:
 - the four structured commentary columns replace `Full Commentary` (parsed
   from the blob for legacy rows, taken directly from new rows);
 - internal diagnostics (`basis`, `checker_strength`, `call_language`,
-  `quote_match`) are dropped — they confused readers and one was undocumented;
+  `quote_match`) are dropped - they confused readers and one was undocumented;
 - `char:` locators (HTML / transcript chunk offsets) are blank, keeping any
   figure name that followed them;
 - **one row per firm and asset**: rows that share a (firm, sub-asset class)
-  are resolved the way reconcile resolves them — same view → merged
+  are resolved the way reconcile resolves them - same view → merged
   (citation-preserving), conflicting views → the precedence ladder (newest →
-  stated beats inferred → confidence) — with the loser listed in the failures
+  stated beats inferred → confidence) - with the loser listed in the failures
   file and named on the kept row; only a tie keeps both rows, flagged;
 - **review flags mean a judgment**: a confidence cap (inferred basis, degraded
   quote match, forecast delta, thin checker) is carried by `band`, not by the

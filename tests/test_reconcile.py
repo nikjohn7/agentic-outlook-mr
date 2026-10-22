@@ -340,7 +340,7 @@ class WriteOutputsTests(unittest.TestCase):
         self.assertEqual(2, len(audit))  # both members audited
         self.assertEqual({"winner", "merged"}, {r["action"] for r in audit})
         self.assertEqual(1, len(client))  # one merged_by_reconcile client row
-        self.assertEqual("Merged — same view stated in several documents", client[0]["What happened"])
+        self.assertEqual("Merged - same view stated in several documents", client[0]["What happened"])
 
 
 # --------------------------------------------------------------------------- #
@@ -377,7 +377,7 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 
 
 # =========================================================================== #
-# Phase 3 — near-leaf reconciliation
+# Phase 3 - near-leaf reconciliation
 # =========================================================================== #
 
 from src.reconcile import (  # noqa: E402

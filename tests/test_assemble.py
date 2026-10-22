@@ -199,7 +199,7 @@ class ClientFailuresFileTest(unittest.TestCase):
         # ALL_REASON_CODES and given a client label, or this fails.
         unmapped = ALL_REASON_CODES - set(CLIENT_FAILURE_LABELS)
         self.assertEqual(set(), unmapped, f"reason codes with no client label: {unmapped}")
-        # No stray labels either — the mapping and the registry match exactly.
+        # No stray labels either - the mapping and the registry match exactly.
         self.assertEqual(set(), set(CLIENT_FAILURE_LABELS) - ALL_REASON_CODES)
 
     def test_source_from_candidate_reason_literals_are_registered(self) -> None:
@@ -215,7 +215,7 @@ class ClientFailuresFileTest(unittest.TestCase):
         found: set[str] = set()
         for name in ("assemble.py", "run.py"):
             found |= set(pattern.findall((root / name).read_text(encoding="utf-8")))
-        self.assertTrue(found, "scan found no literal reason codes — pattern drifted")
+        self.assertTrue(found, "scan found no literal reason codes - pattern drifted")
         self.assertEqual(set(), found - ALL_REASON_CODES, f"unregistered: {found - ALL_REASON_CODES}")
 
     def test_unmapped_code_falls_back_gracefully(self) -> None:
@@ -253,7 +253,7 @@ class ClientFailuresFileTest(unittest.TestCase):
             "Emerging Markets Q2 2026 Outlook: Shifting Sands", tax_row["Source"]
         )
         self.assertEqual("O", tax_row["View (proposed)"])
-        self.assertEqual("Skipped — asset not on the list", tax_row["What happened"])
+        self.assertEqual("Skipped - asset not on the list", tax_row["What happened"])
         self.assertTrue(tax_row["Explanation"])
         # No internal jargon leaks into the reader columns.
         self.assertNotIn("taxonomy_no_match", tax_row["What happened"])
@@ -294,14 +294,14 @@ class ClientFailuresFileTest(unittest.TestCase):
         self.assertEqual(
             [
                 "Document could not be ingested",
-                "Conflicting views — none kept",
+                "Conflicting views - none kept",
                 "Evidence could not be verified",
-                "Skipped — asset not on the list",
+                "Skipped - asset not on the list",
             ],
             [row["What happened"] for row in client],
         )
         self.assertNotIn(
-            "Duplicate — already covered", [row["What happened"] for row in client]
+            "Duplicate - already covered", [row["What happened"] for row in client]
         )
 
     def test_unmapped_code_sorts_to_the_top(self) -> None:
@@ -535,7 +535,7 @@ class CheckerAndArbiterAssemblyTest(unittest.TestCase):
     def test_inferred_candidate_rejected_by_checker_is_auditable(self) -> None:
         # An inferred call the checker rejects lands in failures.csv with its
         # basis, the inference reasoning (what was inferred), and the checker's
-        # note (why it failed) — so the rejected inference is never glazed over.
+        # note (why it failed) - so the rejected inference is never glazed over.
         candidate = _candidate(
             basis="inferred",
             view="U",
@@ -1088,7 +1088,7 @@ class CallLanguageOutputTest(unittest.TestCase):
 class StatedBeatsImpliedTest(unittest.TestCase):
     """Deterministic stated-beats-implied resolution (client decision 5): a
     same-leaf conflict between a stated call and an implied one is resolved
-    without the arbiter — stated wins, the implied side is logged as a flagged
+    without the arbiter - stated wins, the implied side is logged as a flagged
     recommendation."""
 
     @classmethod

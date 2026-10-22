@@ -15,6 +15,8 @@ writes:
   the document. They were correctly quoted, but Excel's text-import path and
   some spreadsheet tools split them into extra rows (which looked like calls
   with no View). Cells are flattened to a single line at write time.
+- **Em dashes.** House style bans them in delivered text; the writer turns
+  any that reach it into a hyphen.
 
 `write_xlsx` writes the same rows as a native Excel workbook next to the CSV,
 which sidesteps both problems entirely for anyone who opens it in Excel.
@@ -31,13 +33,19 @@ CSV_ENCODING = "utf-8-sig"
 
 _LINE_BREAKS = re.compile(r"[\r\n  ]+")
 _RUN_OF_SPACES = re.compile(r"[ \t]{2,}")
+# House style (client request, July 2026; made a hard rule 2026-10): no em
+# dashes in anything we deliver. The prompts forbid them and the code's own
+# strings no longer use them, but a model can still emit one, so the writer is
+# the backstop: every em dash becomes a hyphen, in every column.
+_EM_DASH = "—"
 
 
 def clean_cell(value: object) -> str:
-    """One line, no control characters, as a string. None becomes ""."""
+    """One line, no control characters, no em dashes, as a string. None
+    becomes ""."""
     if value is None:
         return ""
-    text = _LINE_BREAKS.sub(" ", str(value))
+    text = _LINE_BREAKS.sub(" ", str(value)).replace(_EM_DASH, "-")
     return _RUN_OF_SPACES.sub(" ", text).strip()
 
 

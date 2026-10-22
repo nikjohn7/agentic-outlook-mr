@@ -1,16 +1,16 @@
-"""Shared-evidence gate: one passage, several sub-asset classes — keep the
+"""Shared-evidence gate: one passage, several sub-asset classes - keep the
 call(s) the passage most compellingly supports.
 
 Client feedback on the July deliverable (2026-10): the same evidence line was
-used to support two (sometimes five) different asset classes — 367 passages,
+used to support two (sometimes five) different asset classes - 367 passages,
 882 rows in the master file. Some were legitimate ("South Korea and Taiwan
 stand out" is two calls), many were stretches (a "smaller companies" sentence
 also backing a supply-chain theme). The client's rule: this is not a hard
 rule; per evidence line the MOST compelling call is kept, and a second is kept
 only when the evidence supports it equally.
 
-That is a judgment, so an LLM makes it — categorically (which row ids to keep,
-one sentence why) — and deterministic code does everything else: finds the
+That is a judgment, so an LLM makes it - categorically (which row ids to keep,
+one sentence why) - and deterministic code does everything else: finds the
 shared passages, batches the groups, validates the answer (kept ids must be a
 non-empty subset of the group; otherwise the group fails CLOSED: all rows
 kept, flagged for review), drops the losers to the failures file with a
@@ -18,9 +18,9 @@ plain-language label, and notes on every survivor that it shares its evidence.
 
 Two entry points:
 
-- `gate_entries` — called inside `src.assemble` for every new run, on the
+- `gate_entries` - called inside `src.assemble` for every new run, on the
   survivors of cross-leaf dedup.
-- the CLI (`python -m src.sharedevidence --output …`) — the same gate over an
+- the CLI (`python -m src.sharedevidence --output …`) - the same gate over an
   existing output.csv (the July master), writing a new output next to an audit
   file; the input is never edited in place.
 """
@@ -212,7 +212,7 @@ def judge_groups(
 ) -> dict[int, GroupVerdict]:
     """One batched call per BATCH_MAX_GROUPS groups. Any failure, or a missing
     verdict, degrades THAT batch/group to a failed verdict (all rows kept,
-    review) — never a crash."""
+    review) - never a crash."""
     if not groups:
         return {}
     if not use_llm:
@@ -231,7 +231,7 @@ def judge_groups(
                 parser=parse_select_evidence,
             )
             payload: dict[int, GroupVerdict] = result.payload
-        except Exception:  # noqa: BLE001 — fail closed, never crash the run
+        except Exception:  # noqa: BLE001 - fail closed, never crash the run
             payload = {}
         for group in batch:
             verdicts[group.group_id] = payload.get(

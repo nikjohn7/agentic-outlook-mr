@@ -1,7 +1,7 @@
 # Resolve analyst group notes into source groups
 
 Financial analysts sometimes review two documents from the same firm as ONE
-combined source — typically a market review paired with an outlook. They flag
+combined source - typically a market review paired with an outlook. They flag
 this in free-text "group notes": informal lines naming which titles belong
 together.
 
@@ -14,7 +14,7 @@ Rules:
 - Use ONLY `source_id` values from the machine-readable `sources` list below.
 - A group needs at least two sources. Never invent a group the notes do not
   state, and never add a source a note does not reference.
-- Note wording is informal — match tolerantly (partial titles, firm names,
+- Note wording is informal - match tolerantly (partial titles, firm names,
   quarter references). But if you cannot confidently identify EVERY source a
   note names among this run's sources, put the whole note line in
   `unmatched_notes` instead of guessing: a wrong guess silently merges the

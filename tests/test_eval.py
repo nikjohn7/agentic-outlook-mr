@@ -251,7 +251,7 @@ class CandidateReconstructionTest(unittest.TestCase):
             "U",
             commentary=(
                 "Forecast implies weaker yuan. Evidence: USD/CNY 7.2 -> 7.4. "
-                "Locator: p.5 — 'China' forecast table."
+                "Locator: p.5 - 'China' forecast table."
             ),
         )
         candidate = ev._reconstruct_candidate(row)
@@ -355,7 +355,7 @@ class Pilot05RegressionTest(unittest.TestCase):
         # Every frozen output row already passed evidence at run time, so the
         # best-effort re-verification should report zero failures. Needs the
         # run's work/ snapshots, which are scratch (not in git) and were
-        # cleaned from this machine 2026-07-07 — the spot check skips cleanly
+        # cleaned from this machine 2026-07-07 - the spot check skips cleanly
         # without them, so this pin only bites where the snapshots exist.
         spot = self.result.spot_check
         if not spot["ran"]:

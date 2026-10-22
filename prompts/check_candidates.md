@@ -1,4 +1,4 @@
-# Verify candidate allocation calls — second reader
+# Verify candidate allocation calls - second reader
 
 _Version: v1.8_
 
@@ -16,7 +16,7 @@ into scores and review routing.
 
 The extractor is REQUIRED to follow these conventions when translating a
 source's language into calls. Verify each candidate against its evidence AS
-READ UNDER these conventions — never fail a candidate for following one (for
+READ UNDER these conventions - never fail a candidate for following one (for
 example, a two-sided path netting to `N` is a correct `N`, not a sign
 mismatch, when the quote shows both directions). Reserve `fail` for evidence
 that contradicts the claimed view even after the conventions are applied.
@@ -27,14 +27,14 @@ never the source itself.
 
 ## Whole-file context (rolling memory)
 
-Below is the source's rolling memory — a running ledger, in reading order, of
+Below is the source's rolling memory - a running ledger, in reading order, of
 what each chunk of the document said and which calls were captured. Use it as
 WHOLE-FILE CONTEXT: when judging a candidate you may consult it to see whether
 the same stance is corroborated or contradicted elsewhere in the file (a call
 one chunk makes that a later passage walks back, or an implied call that other
 passages support). For a grouped source set the memory begins with a
 "Companion document already analyzed" section carrying the paired document's
-ledger — that is intentional, and usable as cross-document context for the same
+ledger - that is intentional, and usable as cross-document context for the same
 firm.
 
 This context never lowers the evidence bar. The candidate's `evidence_quote`
@@ -52,7 +52,7 @@ Some candidates carry an `evidence_context` field: a short window of the source
 text immediately surrounding this candidate's `evidence_quote` (the quote's own
 paragraph plus roughly one paragraph either side). It is provided so you can
 detect that the text right around the quote **hedges, conditions, negates, or
-attributes to someone else** THIS quote — a quote can read supportive in
+attributes to someone else** THIS quote - a quote can read supportive in
 isolation while its own sentence says "we would favour X only if...", "having
 previously been overweight X", or "the bulls argue X".
 
@@ -62,7 +62,7 @@ Normative rules for `evidence_context`:
   the candidate's own `evidence_quote` must still support the call on its own,
   exactly as for a candidate with no context. Context can only move you toward
   `unclear`/`fail` when the immediate surroundings undercut the quoted sentence
-  — it can never rescue a quote whose own words do not support the view (do not
+  - it can never rescue a quote whose own words do not support the view (do not
   `pass` a weak quote because the surrounding context is suggestive), and it
   never lets you pass a call off content that is merely nearby but unquoted.
 - Only the **immediate reading of the quoted sentence** matters here. Do NOT
@@ -75,8 +75,8 @@ Normative rules for `evidence_context`:
   itself.
 
 Some candidates instead carry `context_unreliable: true`. This means the text
-around the quote could NOT be trusted — the cited page is column-interleaved
-(scrambled), OCR'd, or the quote matched only loosely — so shipping that text
+around the quote could NOT be trusted - the cited page is column-interleaved
+(scrambled), OCR'd, or the quote matched only loosely - so shipping that text
 would mislead you (an unrelated hedge can be spliced next to the quote). For
 these candidates:
 
@@ -90,48 +90,48 @@ these candidates:
 For each candidate, answer three independent questions. Each answer is exactly
 one of `pass`, `unclear`, `fail`:
 
-1. **supports_view** — does `evidence_quote` actually support the claimed
+1. **supports_view** - does `evidence_quote` actually support the claimed
    `view` sign? `O` = overweight/favor/prefer/add; `U` =
    underweight/reduce/avoid/cautious; `N` = explicitly neutral/marketweight/
    balanced, **or** a two-sided view that nets to neutral under the house
    conventions (the quote then legitimately shows both directions);
    `UNCERTAIN` = the quote itself is ambiguous or self-conflicting
    about the stance.
-   - `fail` — the evidence points the other way, or expresses no direction at
+   - `fail` - the evidence points the other way, or expresses no direction at
      all for this view.
-   - `unclear` — a direction is plausible but the quote alone is not decisive
+   - `unclear` - a direction is plausible but the quote alone is not decisive
      (check `reasoning` for the claimed inference; judge whether the inference
      is sound, not whether you'd have made it).
 
-2. **forward_looking** — is the evidence a stance (positioning, preference,
+2. **forward_looking** - is the evidence a stance (positioning, preference,
    outlook, forecast-based tilt) rather than a recap?
-   - `fail` — pure market-move reporting or past-performance description
+   - `fail` - pure market-move reporting or past-performance description
      ("equities fell in the quarter", "bonds outperformed") with no stance.
-   - `unclear` — mixes recap with a possible stance and the stance part is
+   - `unclear` - mixes recap with a possible stance and the stance part is
      thin.
 
-3. **asset_match** — is the evidence about the asset named in
+3. **asset_match** - is the evidence about the asset named in
    `sub_asset_class` (allowing the recorded snap from `sub_asset_raw`)?
    Judge subject identity, not label wording: do not re-litigate taxonomy
    naming or granularity preferences.
-   - `fail` — the quote is about a different asset, or so much broader/
+   - `fail` - the quote is about a different asset, or so much broader/
      narrower that the call misattributes the stance.
-   - `unclear` — the mapping is defensible but a reviewer could read the
+   - `unclear` - the mapping is defensible but a reviewer could read the
      subject differently.
 
 Then answer one independent evidence-force question:
 
-4. **evidence_strength** — how much force does the quoted evidence itself carry
+4. **evidence_strength** - how much force does the quoted evidence itself carry
    for the claimed view? Judge only the presented fields; do not fetch or open
    the source except for `text_unverifiable_visual: true` candidates, where you
    must inspect the cited page image in `native_source_path`.
-   - `decisive` — the quoted evidence alone compels the claimed view; a
+   - `decisive` - the quoted evidence alone compels the claimed view; a
      skeptical reader could not construct a reasonable alternative reading. If
      you can imagine a defensible alternative reading, it is `adequate` at best.
-   - `adequate` — the evidence supports the view, but requires the stated
+   - `adequate` - the evidence supports the view, but requires the stated
      reasoning or house conventions to connect, or the stance sits inside a
      broader passage.
-   - `thin` — the evidence supports the view only just: heavy interpretation,
+   - `thin` - the evidence supports the view only just: heavy interpretation,
      weak language, or the stance is a small part of what the quote says.
 
 Rules:
@@ -168,7 +168,7 @@ Rules:
   directional call.** If the evidence is pure scenario/risk language the house
   raises without adopting a side, and the call is a directional `U` (or `O`),
   that view is not supported → `supports_view: fail` (it should be `UNCERTAIN`).
-- **`inferred` basis** — some candidates carry `basis: inferred`: an
+- **`inferred` basis** - some candidates carry `basis: inferred`: an
   analyst-style read from macro/thematic prose to a leaf the source never
   explicitly positions. For these, judge whether the inference is a plausible
   **single step** from the quoted prose to the named leaf (e.g. country
@@ -180,12 +180,12 @@ Rules:
   contradicts the inferred stance. Corroboration elsewhere strengthens a `pass`;
   a contradiction elsewhere (for example, a passage where the source takes the
   opposite side on the same leaf) is grounds for `unclear` or `fail`. This does
-  not change the output — you still answer the same categorical questions plus
+  not change the output - you still answer the same categorical questions plus
   `evidence_strength`. Every inferred candidate must be actively judged this way
   and given a verdict; none is passed over silently.
 - **Dial/chart calls vs. narrower commentary.** A clear dial, table, or chart
-  position on a leaf stands on its own. Do not `fail` such a call — including a
-  `text_unverifiable_visual` visual call you confirm on the page image — just
+  position on a leaf stands on its own. Do not `fail` such a call - including a
+  `text_unverifiable_visual` visual call you confirm on the page image - just
   because nearby prose is cautious or bullish about a *narrower* sub-asset than
   the charted leaf. Cautious commentary on gold *mining* does not contradict a
   chart's call on *gold*. Only let commentary override a visually clear call
@@ -201,7 +201,7 @@ Rules:
   candidates in the batch.
 - Judge `evidence_strength` independently of the three pass/unclear/fail
   answers. It is required on every verdict.
-- `pass` requires positive support, not absence of doubt about a vague quote —
+- `pass` requires positive support, not absence of doubt about a vague quote -
   a quote you cannot connect to the question is `unclear`, never `pass`.
 - Do not punish house dialect: "constructive" supports `O`, "cautious"
   supports `U`, a printed dial/score/tier level described in the evidence is
@@ -211,7 +211,7 @@ Rules:
 
 ## Output contract
 
-Return exactly one JSON object and nothing else — one verdict per input
+Return exactly one JSON object and nothing else - one verdict per input
 candidate, echoing its `index`:
 
 ```json

@@ -103,7 +103,7 @@ class LoadingTests(unittest.TestCase):
 
 class JoinNormalizationTests(unittest.TestCase):
     def test_firm_name_variant_collapses_via_imported_normalize_firm(self) -> None:
-        """A firm-name spelling variant must join to one key — proving the join
+        """A firm-name spelling variant must join to one key - proving the join
         reuses src.eval.normalize_firm (dots removed, case-folded)."""
         with tempfile.TemporaryDirectory() as tmp:
             a = Path(tmp) / "a.csv"

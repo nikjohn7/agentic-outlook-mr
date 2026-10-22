@@ -72,7 +72,7 @@ class ConfidenceTest(unittest.TestCase):
             evidence_passes(en_dash, "In our view the risk–reward balance favors equities.").passed
         )
         self.assertTrue(
-            evidence_passes(em_dash, "We hold a long—term overweight stance today.").passed
+            evidence_passes(em_dash, "We hold a long-term overweight stance today.").passed
         )
 
     def test_prose_paraphrase_or_reorder_still_fails(self) -> None:
@@ -942,7 +942,7 @@ class MaterialityGateTest(unittest.TestCase):
         self.assertEqual(HARD_FAILURE_MATERIALITY, str(caught.exception))
 
     def test_at_floor_bp_delta_is_capped_not_flagged(self) -> None:
-        # Exactly at the floor is material (>=), so it proceeds — but capped.
+        # Exactly at the floor is material (>=), so it proceeds - but capped.
         result = self._score(delta_value=MATERIALITY_FLOOR_BP, delta_unit="bp")
 
         self.assertEqual(FORECAST_DELTA_CAP, result.confidence)
@@ -1050,7 +1050,7 @@ class Pilot05RescoreTest(unittest.TestCase):
             basis="stated",
             evidence_kind="visual",
             evidence_quote="EM overweight dial",
-            locator="p.6 — 'Global Asset Allocation' views table",
+            locator="p.6 - 'Global Asset Allocation' views table",
             call_language="explicit",
         )
         result = score_candidate(
@@ -1200,7 +1200,7 @@ class EvidenceContextRoutingTest(unittest.TestCase):
         candidate = _candidate(
             evidence_kind="table",
             evidence_quote="Regional grid places EM equities overweight",
-            locator="p.3 — Regional grid",
+            locator="p.3 - Regional grid",
         )
         context = evidence_context(candidate, self.CLEAN_SNAPSHOT)
         self.assertEqual("none", context.route)
