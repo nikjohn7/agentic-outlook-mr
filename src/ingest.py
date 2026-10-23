@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import html as html_lib
 import json
 import re
 import shutil
@@ -89,6 +90,33 @@ _DAY_FIRST_DATE_RE = re.compile(
 _MONTH_FIRST_DATE_RE = re.compile(
     rf"\b({_MONTH_RE})\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+({_YEAR_RE})\b"
 )
+
+# Local Markdown documents (a client's PDF-to-Markdown conversion). The received
+# file is copied byte-for-byte as the native source; the snapshot the model
+# reads and quotes are checked against is a plain-text rendering of it, the
+# same role pdfplumber's text plays for a PDF. Only presentation markup is
+# removed (heading hashes, bold/italic markers, inline HTML tags such as <br>,
+# <u>, <sup>, link/image targets, backslash escapes); every word, number and
+# table cell is kept in order, so a quote taken from the snapshot is a quote
+# from the document. HTML comments are kept as bracketed text: the client's
+# converter wraps text OCR'd from a chart or image in
+# `<!-- Start of picture text -->` / `<!-- End of picture text -->`, and the
+# model needs to see that boundary. Markdown has no pages, so locators are
+# char ranges.
+MARKDOWN_SUFFIXES = frozenset({".md", ".markdown"})
+_MD_COMMENT = re.compile(r"<!--\s*(.*?)\s*-->", re.DOTALL)
+# A numeric footnote marker ("2027<sup>2</sup>") is dropped, never glued on:
+# "20272" would corrupt the figure a quote is checked against.
+_MD_FOOTNOTE_MARK = re.compile(r"<sup>\s*[0-9*\u2020\u2021,\s]+\s*</sup>", re.IGNORECASE)
+_MD_BREAK = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_MD_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*)?/?>")
+_MD_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
+_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_MD_HEADING = re.compile(r"(?m)^[ \t]{0,3}#{1,6}[ \t]+")
+_MD_STRONG_BETWEEN_WORDS = re.compile(r"(?<=\w)(?:\*\*|__)(?=\w)")  # "**Title**Body"
+_MD_STRONG = re.compile(r"\*\*|__")
+_MD_EMPHASIS = re.compile(r"(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])")
+_MD_ESCAPE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!<>|$~])")
 
 PRINTED_PDF_NAME = "printed.pdf"
 PRINT_NAVIGATION_TIMEOUT_MS = 60_000
@@ -180,7 +208,8 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
     using `Entity Name` / `Title` / `External link` loads with no editing.
     A row's `source_type` is `pdf` when it resolves to a local PDF (`local_file`)
     or its URL points at a `.pdf` (fetched remotely); `txt` when local_file is a
-    plain-text transcript (video sources ship as transcripts); otherwise `html`.
+    plain-text transcript (video sources ship as transcripts); `md` when it is a
+    Markdown document; otherwise `html`.
     See `_resolve_local_file` for the local_file contract. Any second test set is
     a CSV of this family - pointing `--sources <path>` at it needs no code change.
     """
@@ -313,13 +342,38 @@ def detect_source_type(locator: str) -> str:
 
 
 def _local_source_type(local_path: Path) -> str:
-    return "txt" if local_path.suffix.lower() == ".txt" else "pdf"
+    suffix = local_path.suffix.lower()
+    if suffix == ".txt":
+        return "txt"
+    if suffix in MARKDOWN_SUFFIXES:
+        return "md"
+    return "pdf"
 
 
 def date_provenance(source_type: str) -> str:
-    """Where a filled document date came from, keyed by source type:
-    the PDF's first-page text, the transcript's text, or the HTML markup."""
-    return {"pdf": "pdf_text", "txt": "txt_text"}.get(source_type, "html")
+    """Where a filled document date came from, keyed by source type: the PDF's
+    first-page text, the transcript's or Markdown's text, or the HTML markup."""
+    return {"pdf": "pdf_text", "txt": "txt_text", "md": "md_text"}.get(source_type, "html")
+
+
+def markdown_to_text(markdown: str) -> str:
+    """Plain-text rendering of a Markdown document (see MARKDOWN_SUFFIXES):
+    presentation markup removed, content and order untouched. Table rows stay
+    one line each (a <br> inside a cell becomes a space)."""
+    text = _MD_COMMENT.sub(lambda m: f" [{m.group(1)}] " if m.group(1) else " ", markdown)
+    text = _MD_FOOTNOTE_MARK.sub("", text)
+    text = _MD_BREAK.sub(" ", text)
+    text = _MD_TAG.sub("", text)
+    text = _MD_IMAGE.sub(r"\1", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _MD_HEADING.sub("", text)
+    text = _MD_STRONG_BETWEEN_WORDS.sub(" ", text)
+    text = _MD_STRONG.sub("", text)
+    text = _MD_EMPHASIS.sub(r"\1", text)
+    text = _MD_ESCAPE.sub(r"\1", text)
+    text = html_lib.unescape(text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return "\n".join(line.strip() for line in text.splitlines()).strip() + "\n"
 
 
 def extract_html_date(html: str) -> str:
@@ -376,13 +430,16 @@ def create_snapshot(
     ocr_note = ""
     fetched_via = ""
     document_date = ""
-    if source.source_type == "txt":
-        # A local plain-text transcript (video sources): the text IS the
-        # document, so it doubles as the snapshot / quote-check corpus, and
-        # chunking/locators follow the HTML char-range convention.
+    if source.source_type in ("txt", "md"):
+        # A local text document - a plain-text transcript (video sources) or a
+        # Markdown conversion: the text IS the document, so it doubles as the
+        # snapshot / quote-check corpus (Markdown rendered to plain text first),
+        # and chunking/locators follow the HTML char-range convention.
         native_path = output_dir / source.local_path.name
         shutil.copy2(source.local_path, native_path)
         snapshot_text = native_path.read_text(encoding="utf-8")
+        if source.source_type == "md":
+            snapshot_text = markdown_to_text(snapshot_text)
         snapshot_path = output_dir / "snapshot.txt"
         snapshot_path.write_text(snapshot_text, encoding="utf-8")
         chunks = _html_chunks(snapshot_path, len(snapshot_text))
@@ -575,8 +632,9 @@ def _read_csv(path: str | Path) -> list[dict[str, str]]:
 def _resolve_local_file(
     local_file: str | None, *, firm: str, title: str
 ) -> Path | None:
-    """Resolve a source row's optional `local_file` value to a local PDF or
-    plain-text transcript (`.txt`, for video sources).
+    """Resolve a source row's optional `local_file` value to a local PDF, a
+    plain-text transcript (`.txt`, for video sources) or a Markdown document
+    (`.md`).
 
     `local_file` is a repo-relative path (resolved against PROJECT_ROOT). Its
     three-way contract, shared by every source CSV:
@@ -598,10 +656,10 @@ def _resolve_local_file(
             f"local_file '{raw}' for source '{firm} - {title}' does not exist "
             f"(resolved to {path}); fix the path or clear the column to fetch the URL"
         )
-    if path.suffix.lower() not in {".pdf", ".txt"}:
+    if path.suffix.lower() not in {".pdf", ".txt"} | MARKDOWN_SUFFIXES:
         raise ValueError(
-            f"local_file '{raw}' for source '{firm} - {title}' must be a .pdf "
-            f"or a .txt transcript; got '{path.suffix}'"
+            f"local_file '{raw}' for source '{firm} - {title}' must be a .pdf, "
+            f"a .txt transcript or a .md document; got '{path.suffix}'"
         )
     return path
 

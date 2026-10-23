@@ -763,9 +763,19 @@ def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
             "only the extracted text. Cite what you actually see on the page."
         )
     text = _html_chunk_text(chunk)
+    origin = ingested.source.resolved_url or ingested.native_source_path.name
+    conversion_note = (
+        "This text is a Markdown conversion of the document, rendered to plain "
+        "text: charts, positioning grids, dots, arrows and other graphics may be "
+        "missing, and multi-column pages may be interleaved. Never infer a view "
+        "from a visual you cannot see in the text.\n"
+        if ingested.source.source_type == "md"
+        else ""
+    )
     return (
         f"This chunk is the extracted text below "
-        f"(locator {chunk.locator}, from {ingested.source.resolved_url}).\n"
+        f"(locator {chunk.locator}, from {origin}).\n"
+        f"{conversion_note}"
         "If the text references a chart, figure, or infographic you cannot see, "
         "say so in your summary rather than guessing its contents.\n\n"
         "-----\n"

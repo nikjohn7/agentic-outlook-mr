@@ -781,9 +781,11 @@ class _Extractor:
         return self._pdf_cache[url]
 
     def extract(self, source: ingest.SourceRecord) -> ExtractedDoc:
-        if source.source_type == "txt" and source.local_path:
+        if source.source_type in ("txt", "md") and source.local_path:
             text = Path(source.local_path).read_text(encoding="utf-8", errors="replace")
-            return ExtractedDoc(text, None, source.local_path, "txt")
+            if source.source_type == "md":
+                text = ingest.markdown_to_text(text)
+            return ExtractedDoc(text, None, source.local_path, source.source_type)
         if source.source_type == "pdf":
             path = source.local_path or self._download_pdf(source.resolved_url)
             text = ""

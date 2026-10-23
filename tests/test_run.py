@@ -804,6 +804,26 @@ class ChunkContentTest(unittest.TestCase):
         self.assertIn("https://example.test/outlook", content)
         self.assertIn("rendered pages", content)
 
+    def test_markdown_chunk_warns_that_graphics_may_be_lost(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            snapshot = Path(temp_dir) / "snapshot.txt"
+            snapshot.write_text("We are overweight EM equities.", encoding="utf-8")
+            source = SourceRecord(
+                source_id="nb-aao", firm="Neuberger Berman", date="", source="AAO 4Q 2026",
+                url="", resolved_url="", source_type="md",
+            )
+            ingested = IngestedSource(
+                source=source,
+                snapshot_text_path=snapshot,
+                native_source_path=Path(temp_dir) / "AAO_4Q2026.md",
+                chunks=[Chunk(chunk_id="char:0-30", locator="char:0-30", source_path=snapshot)],
+            )
+            content = _chunk_content(ingested, ingested.chunks[0])
+        self.assertIn("from AAO_4Q2026.md", content)  # no URL: name the file
+        self.assertIn("Markdown conversion", content)
+        self.assertIn("Never infer a view from a visual", content)
+        self.assertIn("We are overweight EM equities.", content)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,6 +28,7 @@ from src.ingest import (
     enforce_source_limit,
     extract_html_date,
     extract_pdf_text_date,
+    markdown_to_text,
     is_visual_heavy,
     load_pilot_sources,
     resolve_url,
@@ -174,6 +175,16 @@ class LocalFileLoaderTest(unittest.TestCase):
         self.assertEqual("txt", source.source_type)
         self.assertEqual("vanguard-update.txt", source.local_path.name)
         self.assertEqual("https://example.test/video", source.url)  # URL kept as metadata
+
+    def test_md_local_file_loads_as_markdown_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc = Path(temp_dir) / "AAO_4Q2026.md"
+            doc.write_text("# Outlook", encoding="utf-8")
+            csv_path = self._write_csv(temp_dir, f"Neuberger Berman,,Asset Allocation Outlook,,{doc}\n")
+            [source] = load_pilot_sources(csv_path)
+
+        self.assertEqual("md", source.source_type)
+        self.assertEqual("AAO_4Q2026.md", source.local_path.name)
 
     def test_unsupported_local_file_extension_hard_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -807,6 +818,64 @@ class TxtTranscriptIngestTest(unittest.TestCase):
 
         self.assertEqual("", ingested.source.date)
         self.assertEqual("", meta["date_from"])
+
+
+class MarkdownToTextTest(unittest.TestCase):
+    """The Markdown snapshot drops presentation markup only: every word and
+    number survives in order, so a quote from it is a quote from the document."""
+
+    def test_markup_is_removed_and_words_kept(self) -> None:
+        markdown = (
+            "## **Market Views Executive Summary**Based on Outlook\n"
+            "- **Equities.** We are *overweight* [EM equities](https://x.test).\n"
+            "Housing &amp; credit\\* remain <u>underweight</u>.\n"
+        )
+        self.assertEqual(
+            "Market Views Executive Summary Based on Outlook\n"
+            "- Equities. We are overweight EM equities.\n"
+            "Housing & credit* remain underweight.\n",
+            markdown_to_text(markdown),
+        )
+
+    def test_table_rows_stay_on_one_line(self) -> None:
+        markdown = "|Asset|View|\n|---|---|\n|US<br>Treasuries|Underweight|\n"
+        self.assertIn("|US Treasuries|Underweight|", markdown_to_text(markdown))
+
+    def test_footnote_marker_is_dropped_not_glued_to_a_number(self) -> None:
+        text = markdown_to_text("Growth slows in 2027<sup>2</sup> as rates rise.")
+        self.assertEqual("Growth slows in 2027 as rates rise.\n", text)
+
+    def test_picture_text_boundaries_stay_visible(self) -> None:
+        text = markdown_to_text("<!-- Start of picture text -->\nOW UW N<br><!-- End of picture text -->")
+        self.assertEqual("[Start of picture text]\nOW UW N [End of picture text]\n", text)
+
+
+class MarkdownIngestTest(unittest.TestCase):
+    """Local `.md` documents: the received file is copied byte-for-byte, the
+    snapshot is its plain-text rendering, chunked by char ranges."""
+
+    BODY = "# House View\n\nPublished 8 October 2026. We are **overweight** European equities.\n"
+
+    def test_native_copy_is_verbatim_and_snapshot_is_rendered(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc = Path(temp_dir) / "house-view.md"
+            doc.write_text(self.BODY, encoding="utf-8")
+            source = SourceRecord(
+                source_id="allianz-house-view", firm="Allianz Global Investors", date="",
+                source="House View Q4 2026", url="", resolved_url="", source_type="md",
+                local_path=doc,
+            )
+            work_dir = Path(temp_dir) / "work"
+            ingested = create_snapshot(source, work_dir)
+            native = ingested.native_source_path.read_bytes()
+            snapshot_text = ingested.snapshot_text_path.read_text(encoding="utf-8")
+            meta = json.loads((work_dir / source.source_id / "ingest_meta.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(self.BODY.encode("utf-8"), native)
+        self.assertEqual("House View\n\nPublished 8 October 2026. We are overweight European equities.\n", snapshot_text)
+        self.assertEqual([f"char:0-{len(snapshot_text)}"], [c.locator for c in ingested.chunks])
+        self.assertEqual("md", meta["source_type"])
+        self.assertEqual(("08/10/2026", "md_text"), (ingested.source.date, meta["date_from"]))
 
 
 if __name__ == "__main__":

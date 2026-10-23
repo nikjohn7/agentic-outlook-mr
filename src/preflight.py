@@ -75,7 +75,7 @@ class PreflightRecord:
     visual_heavy: bool = False
     printed_pdf: bool = False
     date: str = ""
-    date_from: str = ""  # "" | "html" | "pdf_text"
+    date_from: str = ""  # "" | "html" | "pdf_text" | "txt_text" | "md_text"
     content_check: str = ""  # "" (not run) | looks_right | suspect | unchecked
     content_reason: str = ""
     error: str = ""
@@ -318,11 +318,13 @@ def render_report(records: list[PreflightRecord]) -> str:
     pdf_ok = [r for r in ok if r.source_type == "pdf"]
     html_ok = [r for r in ok if r.source_type == "html"]
     txt_ok = [r for r in ok if r.source_type == "txt"]
+    md_ok = [r for r in ok if r.source_type == "md"]
     printed = [r for r in ok if r.printed_pdf]
     dated = [r for r in ok if r.date]
     from_html = [r for r in dated if r.date_from == "html"]
     from_pdf = [r for r in dated if r.date_from == "pdf_text"]
     from_txt = [r for r in dated if r.date_from == "txt_text"]
+    from_md = [r for r in dated if r.date_from == "md_text"]
     blank_dates = [r for r in ok if not r.date]
 
     lines: list[str] = ["# Link preflight report", ""]
@@ -331,7 +333,7 @@ def render_report(records: list[PreflightRecord]) -> str:
     lines.append(f"- FAILED: {len(failed)}")
     lines.append(f"- OK by type: {len(pdf_ok)} PDF, {len(html_ok)} HTML "
                  f"({len(printed)} print-captured visual-heavy), "
-                 f"{len(txt_ok)} transcript (txt)")
+                 f"{len(txt_ok)} transcript (txt), {len(md_ok)} Markdown (md)")
     lines.append(f"- Content check: {len(suspects)} suspect, "
                  f"{len(unchecked)} unchecked, {len(ok) - len(suspects) - len(unchecked)} looks_right")
     lines.append("")
@@ -365,7 +367,7 @@ def render_report(records: list[PreflightRecord]) -> str:
     lines.append("")
     lines.append(f"- OK sources with a document date: {len(dated)} of {len(ok)} "
                  f"({len(from_html)} from HTML, {len(from_pdf)} from PDF text, "
-                 f"{len(from_txt)} from transcript text)")
+                 f"{len(from_txt)} from transcript text, {len(from_md)} from Markdown text)")
     lines.append(f"- Blank (no document date found): {len(blank_dates)}")
     lines.append("")
     lines.append("| Firm | Title | Type | Date | From |")
