@@ -683,7 +683,7 @@ def run_reconcile(
     paths: list[Path],
     *,
     engine: str = "claude",
-    model: str | None = "opus",
+    model: str | None = "claude-opus-5-5",
     effort: str | None = "medium",
     runner: Runner | None = None,
     use_llm: bool = True,
@@ -1722,7 +1722,7 @@ def _resolve_model(engine: str, model: str | None) -> str | None:
     codex passes the model through unchanged - None → the adapter's default codex
     model, a named codex model validated downstream (never silently dropped)."""
     if engine == "claude" and model is None:
-        return "opus"
+        return "claude-opus-5-5"
     return model
 
 
@@ -1736,7 +1736,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--outputs", required=True, nargs="+", type=Path, help="one or more frozen run output.csv files")
     parser.add_argument("--out-dir", required=True, type=Path, help="directory for the reconciled output + audit + summary")
     parser.add_argument("--engine", default="claude", help="LLM engine for the scope gate (default: claude)")
-    parser.add_argument("--model", default="opus", help="model for the scope gate (claude default: opus; codex: allowlist member, default gpt-5.5)")
+    parser.add_argument("--model", default="claude-opus-5-5", help="model for the scope gate (claude default: claude-opus-5-5; codex: allowlist member, default gpt-5.5)")
     parser.add_argument("--effort", default="medium", help="reasoning effort (default: medium)")
     parser.add_argument("--no-llm", action="store_true", help="skip the scope gate; every multi-row key degrades to needs_human")
     parser.add_argument(

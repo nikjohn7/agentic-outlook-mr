@@ -24,7 +24,7 @@ Runner = Callable[[list[str], str], subprocess.CompletedProcess[str]]
 # a claude model. A codex call with model=None uses DEFAULT_CODEX_MODEL and emits
 # a command line byte-identical to the old single-pin behavior; a model outside
 # CODEX_MODELS raises. Adding the next model drop is a one-line edit here.
-CODEX_MODELS = ("gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
+CODEX_MODELS = ("gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-luna", "gpt-6.1-sol")
 DEFAULT_CODEX_MODEL = "gpt-5.5"
 
 # Reasoning efforts accepted for codex across every model. `minimal` is

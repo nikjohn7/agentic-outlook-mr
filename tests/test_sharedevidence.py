@@ -212,7 +212,7 @@ class GateRowsTest(unittest.TestCase):
 
 class MatrixTest(unittest.TestCase):
     def test_defaults(self) -> None:
-        self.assertEqual(("claude", "opus", "medium"), (sharedevidence.DEFAULT_ENGINE, sharedevidence.DEFAULT_MODEL, sharedevidence.DEFAULT_EFFORT))
+        self.assertEqual(("claude", "claude-opus-5-5", "medium"), (sharedevidence.DEFAULT_ENGINE, sharedevidence.DEFAULT_MODEL, sharedevidence.DEFAULT_EFFORT))
 
 
 if __name__ == "__main__":

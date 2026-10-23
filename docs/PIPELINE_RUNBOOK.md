@@ -34,26 +34,29 @@ Sanity check before a production batch:
 
 ### Model matrix (the selected model choices)
 
-The code defaults ARE the selected configuration (wired 2026-07-10, regression
+The code defaults ARE the selected configuration (revamped 2026-10-23, regression
 net `tests/test_model_matrix.py`). A bare invocation of any tool — no
 engine/model/effort flags — resolves to this matrix. Only pass model flags to
 deliberately deviate.
 
 | Step | Engine | Model | Effort |
 |---|---|---|---|
-| analyze (per-chunk extraction) | codex | gpt-5.6-sol | high |
-| checker (per-source second reader) | claude | opus | medium |
-| conflict arbiter | codex | gpt-5.6-luna | high |
-| group-notes resolver | claude | haiku | high |
-| tier-3 visual quote verifier | codex | gpt-5.6-luna | high |
-| scout (pre-run grouping proposals) | codex | gpt-5.6-luna | medium |
-| preflight content-sanity call | codex | gpt-5.6-luna | high |
-| reconcile scope gate (+ near-leaf pass, inherited) | claude | opus | medium |
-| datefill primary → cascade | codex gpt-5.6-luna high → claude sonnet medium |
-| crosscheck (report only) | claude | sonnet | medium |
-| summarize digest | claude | claude-sonnet-5 (pinned) | high |
-| summarize firmpages | claude | claude-sonnet-5 (pinned) | high |
-| shared-evidence gate (in-run, and `src.sharedevidence` CLI) | claude | opus | medium |
+| analyze (per-chunk extraction) | codex | gpt-6.1-sol | high |
+| checker (per-source second reader) | claude | claude-opus-5-5 | high |
+| conflict arbiter | claude | claude-haiku-5-5 | high |
+| group-notes resolver | codex | gpt-6-luna | high |
+| tier-3 visual quote verifier | codex | gpt-6-luna | high |
+| scout (pre-run grouping proposals) | codex | gpt-6-luna | medium |
+| preflight content-sanity call | claude | claude-sonnet-5-5 | low |
+| reconcile scope gate (+ near-leaf pass, inherited) | claude | claude-opus-5-5 | medium |
+| datefill primary → cascade | codex gpt-6-luna high → claude claude-sonnet-5-5 medium |
+| crosscheck (report only) | claude | claude-sonnet-5-5 | medium |
+| summarize digest | claude | claude-sonnet-5-5 (pinned) | medium |
+| summarize firmpages | claude | claude-sonnet-5-5 (pinned) | high |
+| shared-evidence gate (in-run, and `src.sharedevidence` CLI) | claude | claude-opus-5-5 | medium |
+
+Claude stages use full model IDs, not aliases (`opus`, `sonnet`), so a batch
+cannot silently change model when the CLI's alias moves.
 
 Everything that is a join, lookup, count, score, or merge rule is plain
 deterministic code — no model ever produces a number (confidence comes from

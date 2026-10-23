@@ -36,11 +36,11 @@ from src.run import resolve_engine_settings
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCOUT_PROMPT = PROJECT_ROOT / "prompts" / "scout_groups.md"
 
-# Metadata triage over same-firm titles: a fast codex 5.6 model at medium effort
-# (model revamp 2026-07-10; the earlier claude/haiku/low default was never
-# user-approved and is removed). Overridable via the CLI flags.
+# Metadata triage over same-firm titles: a fast codex luna model at medium effort
+# (model revamp 2026-10-23, was gpt-5.6-luna; the earlier claude/haiku/low
+# default was never user-approved and is removed). Overridable via the CLI flags.
 DEFAULT_ENGINE = "codex"
-DEFAULT_MODEL = "gpt-5.6-luna"
+DEFAULT_MODEL = "gpt-6-luna"
 DEFAULT_EFFORT = "medium"
 
 # Same failure modes worth catching as the run pipeline (unparseable/contract-

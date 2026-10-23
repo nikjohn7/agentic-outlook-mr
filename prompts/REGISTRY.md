@@ -22,7 +22,7 @@ as `shared_evidence_weaker_fit` ("Evidence better supports a related asset"),
 and notes on every survivor that it shares its evidence. Runs in-run inside
 `src.assemble` (after cross-leaf dedup, before rendering; `--no-evidence-gate`
 skips it) and as a CLI over an existing output.csv. Batched ≤20 groups per
-call. Default engine claude/opus/medium (checker-tier judgment; in
+call. Default engine claude/claude-opus-5-5/medium (checker-tier judgment; in
 `tests/test_model_matrix.py`). Parsed by `sharedevidence.parse_select_evidence`.
 No template vars. Inputs (appended JSON): `groups[]` with `group_id`, firm,
 source_title, evidence_quote, and `candidates[]` (row_id, sub_asset_class,
@@ -42,7 +42,7 @@ merge (house rule: the LLM is categorical; deterministic code in `reconcile.py`
 owns every merge and the recency→basis→confidence→needs_human precedence ladder).
 A failed call or an unparseable/missing verdict degrades that key to
 `needs_human` in `src/reconcile.py` (crosscheck precedent), never a crash.
-Default engine claude/opus/medium (effort raised from low 2026-07-10; codex allowlist member
+Default engine claude/claude-opus-5-5/medium (model revamp 2026-10-23; effort raised from low 2026-07-10; codex allowlist member
 if selected). Parsed by `reconcile.parse_reconcile_scope`. No template vars. Inputs (appended
 JSON): `groups[]` with `group_id`, firm, sub_asset_leaf, and each row's
 view/source_title/date/full_commentary. This is the v1.2 stage that supersedes
@@ -65,7 +65,7 @@ merge, the taxonomy-field rebuild, and all scoring. Any contract violation
 (non-partition, canonical not in the cluster, missing primary on a conflicting-view
 merge, malformed/failed response) fails **closed** to `needs_human` for that whole
 cluster (all rows kept, flagged for review) in `src/reconcile.py`, never a crash.
-Default engine claude/opus/medium - INHERITED from the scope gate, no independent
+Default engine claude/claude-opus-5-5/medium - INHERITED from the scope gate, no independent
 model default. Parsed by `reconcile.parse_nearleaf`. No template vars. Inputs
 (appended JSON): `clusters[]` with `cluster_id`, firm, `leaves[]`
 (label/category/asset_class/canva_grouping/locked_order), and `rows[]`
@@ -89,8 +89,8 @@ infers a date, and is told to ignore "data as of" trap dates. Every claim is
 re-verified deterministically downstream (quote must reappear; landing page must
 reference the document; date parsed and year-windowed), so a hallucinated or
 mis-located date fails closed to blank. Cascade engines (model revamp
-2026-07-10): codex/gpt-5.6-luna/high (primary; web search via
-`-c tools.web_search=true`), then claude/sonnet/medium on
+2026-10-23): codex/gpt-6-luna/high (primary; web search via
+`-c tools.web_search=true`), then claude/claude-sonnet-5-5/medium on
 sources still blank (prompt via stdin because `--allowed-tools` is variadic;
 tools WebSearch/WebFetch/Read, no Bash so it cannot stall shelling out). Parsed
 by `datefill.parse_find_date_response`. No template vars. Inputs (appended JSON):
@@ -106,8 +106,8 @@ categorical judgment only: `present_verbatim`, `present_paraphrase`, or
 keeps the candidate with `quote_match: visual`, cap 74, and forced review;
 `present_paraphrase` is dropped (the system never keeps non-verbatim evidence);
 `absent`, malformed JSON, and engine failures also drop with
-`quote_not_found_visual`. Default engine codex/gpt-5.6-luna/high (model revamp
-2026-07-10 A/B: 17/18 vs the claude/sonnet/medium incumbent's 9/18, 0 vs 1
+`quote_not_found_visual`. Default engine codex/gpt-6-luna/high (model revamp
+2026-10-23; the luna family won the 2026-07-10 A/B: 17/18 vs the claude/sonnet/medium incumbent's 9/18, 0 vs 1
 worst-class false-verbatim, 0 vs 5 malformed), overridable with
 `run.py` quote-visual flags. Inputs (appended JSON): source identity,
 `native_source_path`, candidate locator, evidence_quote, sub_asset_class, and
@@ -126,8 +126,8 @@ different document/firm than the title claims) plus one short reason. No scores
 or numbers (house rule: deterministic scoring; the LLM never emits numbers), and
 it judges only that the fetch landed on the right content, never the document's
 quality. A failed call degrades every source to `unchecked` in
-`src/preflight.py`, never a crash. Default engine codex/gpt-5.6-luna/high
-(model revamp 2026-07-10; overridable; the only live call in the tool). Parsed by
+`src/preflight.py`, never a crash. Default engine claude/claude-sonnet-5-5/low
+(model revamp 2026-10-23; overridable; the only live call in the tool). Parsed by
 `preflight.parse_content_verdicts`. No template vars. Inputs (appended JSON):
 `sources[]` with `index`, `firm`, `expected_title`, `snapshot_head`.
 
@@ -145,7 +145,7 @@ internal artifact optimized for faithful density, not prose. Hard grounding: sta
 only what the document/calls/memory contain; every figure/name/quote must appear
 in the source material; the stance summary must agree with the kept calls; no
 confidence numbers (house rule). Parsed by `summarize.parse_digest`. Default engine
-claude/claude-sonnet-5/high (pinned Sonnet 5 id, client-facing prose; overridable).
+claude/claude-sonnet-5-5/medium (pinned Sonnet 5.5 id, model revamp 2026-10-23; client-facing prose; overridable).
 Inputs (appended JSON):
 source_id, firm, document_title, url, date, native_source_path, kept_calls[].
 
@@ -167,7 +167,7 @@ described in-line as a divergence, never silently collapsed to one side. Length
 disciplined to ~500–800 words (one printed page). Single-source firms pass through
 the same call for a consistent voice. Parsed by `summarize.parse_firm_page` (requires
 the `# ` heading + a `## Sources` section). Default engine
-claude/claude-sonnet-4-6/high (pinned Sonnet 4.6 id for editorial prose; overridable);
+claude/claude-sonnet-5-5/high (pinned Sonnet 5.5 id for editorial prose, model revamp 2026-10-23; overridable);
 the digest stage uses its separate Sonnet 5 pin. The agreed
 escalation if a sample reads flat is claude/opus/medium. Inputs (appended JSON): firm, digests[], final_calls[] (with
 `unresolved`/`views`/`divergence` for unresolved keys), sources[].
@@ -184,7 +184,7 @@ conflict) - plus a one-sentence note. Categorical only, no confidence number
 (house rule: deterministic scoring; the LLM never emits numbers). Same-view
 duplicates never reach this prompt (pure-code auto-resolve). A failed call
 degrades every conflict group to `needs_human` in `src/crosscheck.py`, never a
-crash. Default engine claude/sonnet/medium (model revamp 2026-07-10; codex
+crash. Default engine claude/claude-sonnet-5-5/medium (model revamp 2026-10-23; codex
 allowlist member if selected). Inputs (appended JSON): `groups[]` with `group_id`, firm,
 sub_asset_leaf, and each row's view/source_title/date/full_commentary. No
 template vars. Deliberately NOT the v1.2 dual-confidence reconcile (ROADMAP.md
@@ -458,8 +458,8 @@ and **no self-confidence number**: verdicts are facts consumed by the
 deterministic rubric (`src/confidence.py`) - any `fail` hard-fails the
 candidate to review (`checker_sign_mismatch` / `checker_not_forward_looking`
 / `checker_asset_mismatch`); anything short of all-pass caps confidence at 74
-so the call cannot reach High. Default engine claude/opus/medium (model revamp
-2026-07-10; `--checker-engine/--checker-model/--checker-effort`). Inputs (appended JSON):
+so the call cannot reach High. Default engine claude/claude-opus-5-5/high (model revamp
+2026-10-23; `--checker-engine/--checker-model/--checker-effort`). Inputs (appended JSON):
 source_id, firm, source_title, candidates[] with echoed `index`.
 
 ### `scout_groups.md` - v1 (2026-07-07)
@@ -478,7 +478,7 @@ Deterministic guards in `scout._apply_guards` then drop unknown ids, overlaps,
 cross-firm merges, and sub-pairs as warnings. The scout emits a
 `--group-notes`-compatible notes file (consumed by `run._resolve_groups` →
 `resolve_groups.md`) plus a per-firm reasoning sidecar for human review. Default
-engine codex/gpt-5.6-luna/medium (model revamp 2026-07-10 - the earlier
+engine codex/gpt-6-luna/medium (model revamp 2026-10-23, was gpt-5.6-luna - the earlier
 claude/haiku/low default was never user-approved; `--engine/--model/--effort`). Inputs
 (appended JSON): `firms[]` with `firm` and `sources[]` of source_id/title/date.
 
@@ -494,8 +494,8 @@ guards in `run.py` `_resolve_groups` drop unknown/overlapping ids with
 warnings; the plan is frozen to `work/<run-id>/groups.json` and echoed in the
 manifest, and all downstream grouping (cross-doc rolling memory, group-keyed
 dedup/conflict, pipe-joined output rows) consumes the plan, not the notes.
-Resolver failure degrades to an ungrouped run. Default engine claude/haiku/high
-(model revamp 2026-07-10; `--grouper-*` flags). Inputs (appended JSON): sources[] with
+Resolver failure degrades to an ungrouped run. Default engine codex/gpt-6-luna/high
+(model revamp 2026-10-23; `--grouper-*` flags). Inputs (appended JSON): sources[] with
 source_id/firm/title/date; `{{group_notes}}` injected.
 
 ### `arbitrate_conflict.md` - v1.1 (2026-07-05)
@@ -516,7 +516,7 @@ routing). Winner is kept but always flagged `review` with the arbiter's
 reasoning appended to commentary; losers land in `failures.csv` as
 `arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
 confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
-Default engine codex/gpt-5.6-luna/high (model revamp 2026-07-10; `--arbiter-*` flags).
+Default engine claude/claude-haiku-5-5/high (model revamp 2026-10-23; `--arbiter-*` flags).
 
 ### `brain.md` - v1.6 (2026-07-07)
 

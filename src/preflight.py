@@ -47,11 +47,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONTENT_CHECK_PROMPT = PROJECT_ROOT / "prompts" / "preflight_content_check.md"
 
 # The content check is a short batched triage over ~400-char snippets. Model
-# revamp 2026-07-10: codex/gpt-5.6-luna at high effort (was codex/gpt-5.5/medium).
-# Override with --model from the allowlist.
-DEFAULT_ENGINE = "codex"
-DEFAULT_MODEL = "gpt-5.6-luna"
-DEFAULT_EFFORT = "high"
+# revamp 2026-10-23: claude/claude-sonnet-5-5 at low effort (was
+# codex/gpt-5.6-luna/high, before that codex/gpt-5.5/medium). Overridable.
+DEFAULT_ENGINE = "claude"
+DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULT_EFFORT = "low"
 
 # How much of each snapshot's opening text the content check sees per source.
 SNAPSHOT_HEAD_CHARS = 400
@@ -394,7 +394,7 @@ def main() -> int:
         "holding downloaded PDFs / print-captured pages",
     )
     parser.add_argument("--engine", choices=("claude", "codex"), default=DEFAULT_ENGINE)
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"model (codex allowlist member, default {DEFAULT_MODEL})")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"model (default {DEFAULT_MODEL}; with --engine codex an allowlist member)")
     parser.add_argument("--effort", default=DEFAULT_EFFORT)
     parser.add_argument(
         "--no-llm",

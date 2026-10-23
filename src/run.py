@@ -59,19 +59,19 @@ def run_pipeline(
     model: str | None = None,
     effort: str | None = None,
     checker_engine: str = "claude",
-    checker_model: str | None = "opus",
-    checker_effort: str = "medium",
+    checker_model: str | None = "claude-opus-5-5",
+    checker_effort: str = "high",
     checker_context: bool = False,
-    arbiter_engine: str = "codex",
-    arbiter_model: str | None = "gpt-5.6-luna",
+    arbiter_engine: str = "claude",
+    arbiter_model: str | None = "claude-haiku-5-5",
     arbiter_effort: str = "high",
     group_notes_text: str | None = None,
     group_notes_path: str | None = None,
-    grouper_engine: str = "claude",
-    grouper_model: str | None = "haiku",
+    grouper_engine: str = "codex",
+    grouper_model: str | None = "gpt-6-luna",
     grouper_effort: str = "high",
     quote_visual_engine: str = "codex",
-    quote_visual_model: str | None = "gpt-5.6-luna",
+    quote_visual_model: str | None = "gpt-6-luna",
     quote_visual_effort: str = "high",
     evidence_gate: bool = True,
     evidence_engine: str = sharedevidence.DEFAULT_ENGINE,
@@ -876,14 +876,14 @@ def build_parser() -> argparse.ArgumentParser:
         "read as a PDF; any other URL takes the HTML path. <=20 sources.",
     )
     parser.add_argument("--run-id", required=True)
-    # Defaults below are the model matrix (revamp 2026-07-10); a bare
+    # Defaults below are the model matrix (revamp 2026-10-23); a bare
     # `python -m src.run --run-id X --sources ...` resolves to it fully.
     parser.add_argument("--engine", choices=("claude", "codex"), default="codex")
     parser.add_argument(
         "--model",
-        default="gpt-5.6-sol",
+        default="gpt-6.1-sol",
         help="model for the analyze run: with --engine codex one of "
-        f"{', '.join(CODEX_MODELS)} (default gpt-5.6-sol); required with --engine claude",
+        f"{', '.join(CODEX_MODELS)} (default gpt-6.1-sol); required with --engine claude",
     )
     parser.add_argument(
         "--effort",
@@ -899,13 +899,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--checker-model",
-        default="opus",
-        help="model for the checker step (default opus; required with --checker-engine claude)",
+        default="claude-opus-5-5",
+        help="model for the checker step (default claude-opus-5-5; required with --checker-engine claude)",
     )
     parser.add_argument(
         "--checker-effort",
-        default="medium",
-        help="reasoning effort for the checker step (default medium)",
+        default="high",
+        help="reasoning effort for the checker step (default high)",
     )
     parser.add_argument(
         "--checker-context",
@@ -918,13 +918,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--arbiter-engine",
         choices=("claude", "codex"),
-        default="codex",
-        help="engine for the conflict-arbiter step (default codex)",
+        default="claude",
+        help="engine for the conflict-arbiter step (default claude)",
     )
     parser.add_argument(
         "--arbiter-model",
-        default="gpt-5.6-luna",
-        help="model for the arbiter step (default gpt-5.6-luna; required with --arbiter-engine claude)",
+        default="claude-haiku-5-5",
+        help="model for the arbiter step (default claude-haiku-5-5; required with --arbiter-engine claude)",
     )
     parser.add_argument(
         "--arbiter-effort",
@@ -939,13 +939,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--grouper-engine",
         choices=("claude", "codex"),
-        default="claude",
-        help="engine for the group-notes resolver step (default claude)",
+        default="codex",
+        help="engine for the group-notes resolver step (default codex)",
     )
     parser.add_argument(
         "--grouper-model",
-        default="haiku",
-        help="model for the group-notes resolver (default haiku; required with --grouper-engine claude)",
+        default="gpt-6-luna",
+        help="model for the group-notes resolver (default gpt-6-luna; required with --grouper-engine claude)",
     )
     parser.add_argument(
         "--grouper-effort",
@@ -960,8 +960,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--quote-visual-model",
-        default="gpt-5.6-luna",
-        help="model for tier-3 visual quote verification (default gpt-5.6-luna)",
+        default="gpt-6-luna",
+        help="model for tier-3 visual quote verification (default gpt-6-luna)",
     )
     parser.add_argument(
         "--quote-visual-effort",

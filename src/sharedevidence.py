@@ -47,7 +47,7 @@ SELECT_EVIDENCE_PROMPT = PROJECT_ROOT / "prompts" / "select_evidence_leaf.md"
 
 # Model matrix (checker-tier judgment; same as the checker and reconcile gate).
 DEFAULT_ENGINE = "claude"
-DEFAULT_MODEL = "opus"
+DEFAULT_MODEL = "claude-opus-5-5"
 DEFAULT_EFFORT = "medium"
 
 REASON_WEAKER_FIT = "shared_evidence_weaker_fit"

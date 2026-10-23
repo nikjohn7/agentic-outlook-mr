@@ -8,7 +8,7 @@ across runs by the 20-items-per-run cap). It NEVER modifies any run output.
 
     .venv/bin/python -m src.crosscheck \\
         --outputs runs/a/output.csv runs/b/output.csv \\
-        --out-dir tmp/crosscheck [--engine claude --model sonnet --effort medium]
+        --out-dir tmp/crosscheck [--engine claude --model claude-sonnet-5-5 --effort medium]
 
 What it does:
 
@@ -511,7 +511,7 @@ def _resolve_model(engine: str, model: str | None) -> str | None:
     codex passes the model through unchanged - None → the adapter's default codex
     model, a named codex model validated downstream (never silently dropped)."""
     if engine == "claude" and model is None:
-        return "sonnet"
+        return "claude-sonnet-5-5"
     return model
 
 
@@ -534,7 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         default=None,
-        help="model for the conflict pass (claude default: sonnet; codex: allowlist member, default gpt-5.5)",
+        help="model for the conflict pass (claude default: claude-sonnet-5-5; codex: allowlist member, default gpt-5.5)",
     )
     parser.add_argument("--effort", default="medium", help="reasoning effort (default: medium)")
     parser.add_argument(
