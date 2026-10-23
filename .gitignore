@@ -21,6 +21,9 @@ htmlcov/
 !.env.example
 *.local
 
+# Original client-supplied documents
+client-inputs/
+
 # Logs and temporary files
 *.log
 tmp/

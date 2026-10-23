@@ -1,0 +1,319 @@
+{
+  "batch_id": "runs-23102026-16rows",
+  "intake_date": "2026-10-23",
+  "code_commit_inspected": "41cc227",
+  "status": "intake inspected; no pipeline run",
+  "source_files_policy": "Preserve received bytes; generated artifacts belong in this batch folder.",
+  "limitations": [
+    "Initial intake inspection only; not a complete extraction-quality audit or approved benchmark.",
+    "Firm/title metadata and publication dates require normalization before generating runnable source CSVs.",
+    "Original source URLs have not been established.",
+    "Current local_file loader accepts PDF and TXT only; Markdown and paired-PDF support are pending."
+  ],
+  "sources": [
+    {
+      "intake_id": "oct2026-01",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/2026-global-private-markets-outlook.md",
+        "bytes": 42126,
+        "sha256": "f17cb1f12e40d07564d8d35f3349fcc738bd574ba8b4a37623a1306e61dd4e93"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/2026-global-private-markets-outlook - NYLI.pdf",
+        "bytes": 2637104,
+        "sha256": "c2de82f950a2306611a3c194c097cc966b2297277a012db8cf482c2bfe29041f",
+        "pages": 24
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-02",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/2610-global-investment-strategy-committee-outlook-q4-2026 - Amova Asset Management.md",
+        "bytes": 62082,
+        "sha256": "e0515d4f46efd314523cc6711cd9d1863d3c6a16ffca8e9d78e6917f16d03ee7"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/2610-global-investment-strategy-committee-outlook-q4-2026 - Amove Asset Management.pdf",
+        "bytes": 1046185,
+        "sha256": "d2a2b795e3489e6cc00c479e6967646b84475c3406b0e6df9e0c9937a5b059ed",
+        "pages": 17
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": [
+        "PDF filename says Amove; document and Markdown identify Amova."
+      ]
+    },
+    {
+      "intake_id": "oct2026-03",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/4Q_2026_Equity_Market_Outlook_Final_for_Posting_10_12_26.md",
+        "bytes": 54197,
+        "sha256": "8c929ec6c4d31a6c4a414d85642e1a758029c34e50349f7aee6f519d03c7dbb5"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/4Q_2026_Equity_Market_Outlook_Final_for_Posting_10_12_26 - Neuberger Berman.pdf",
+        "bytes": 2906938,
+        "sha256": "b2885fece19c6e4edbc771303f50820c3d695150cdb647505bd5497d2f4a9409",
+        "pages": 23
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-04",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/AAO_4Q2026.md",
+        "bytes": 27180,
+        "sha256": "5b37693dc8f5cbda31a8181f858f4c8c9ceafbc712ee421c7e097380543244f7"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/AAO_4Q2026 - Neuberger Berman.pdf",
+        "bytes": 4680460,
+        "sha256": "b1bde46f3916c67f0faa8f0ef3adf1be4c5c2ca76de5940b8b569733784528d1",
+        "pages": 12
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [
+        4
+      ],
+      "notes": [
+        "Visual inspection: allocation dots and change arrows lost; Markdown interleaves columns."
+      ]
+    },
+    {
+      "intake_id": "oct2026-05",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/House View Q4 2026 _ Allianz Global Investors.md",
+        "bytes": 7053,
+        "sha256": "550e071f2606a46bc28f8564111d78ccf9cd5cf97dfce07e1402e3ce0737e6cb"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/House View Q4 2026 _ Allianz Global Investors.pdf",
+        "bytes": 35172689,
+        "sha256": "e31e38eef4056967cc782d2912593582dd25dc0b9258e6f1dec06f0cbca211d8",
+        "pages": 7
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-06",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/LOIM_Asset_Simply_put___Q4_2026_final.md",
+        "bytes": 62826,
+        "sha256": "e69da55d4b08e8928dd1a94008ac575d6b2a402eee236736043230f80bc8213b"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/LOIM_Asset_Simply_put___Q4_2026_final - Lombard Odier.pdf",
+        "bytes": 2485131,
+        "sha256": "64b85f5af6c3c252293ceb280e91c096fb8ddd5cd92e548c80450386982872fe",
+        "pages": 16
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-07",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/Multi-Asset Investment Outlook 2027 - Technological tailwind, geopolitical headwind.md",
+        "bytes": 79725,
+        "sha256": "aca47f38b9ae3505f9e394c5d805a495921fc5e38eedd849824e3b99a14a857d"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/Multi-Asset Investment Outlook 2027 - Technological tailwind, geopolitical headwind - Columbia Threadneedle Investments.pdf",
+        "bytes": 4626732,
+        "sha256": "20bc84a800b22b3c892dd8e552e7925f8b8e5562888c7f37b12ccb4a96220a9c",
+        "pages": 32
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-08",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/Q4-2026-ETF-Outlook.md",
+        "bytes": 27326,
+        "sha256": "82fac7c3c44d7829dab88dac45865d9d8fd157f02f00b4c85d6b584b9561f606"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/Q4-2026-ETF-Outlook - L&G.pdf",
+        "bytes": 1490983,
+        "sha256": "7d42810927a859a9af5c75500e68dc0f2ecf123c4795a308029890e7fe5b3ed2",
+        "pages": 8
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-09",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/Sector Market Perspectives_ Q4 2026 _ State Street.md",
+        "bytes": 24463,
+        "sha256": "17bf865bf34f239c8f024aec97d2caa5770a87f468725042605647589a1da60e"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/Sector Market Perspectives_ Q4 2026 _ State Street IM.pdf",
+        "bytes": 642064,
+        "sha256": "3d3b7cd1fcc7bc5beb746e79addbe38f933fed7eb177525fc897b1d87177dcc8",
+        "pages": 14
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-10",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/afi_outlook_q4_2024-c1c3 (1).md",
+        "bytes": 28868,
+        "sha256": "9a88e841ac0d2a54f8603030cb9634e0b103329f226e5374c0af3dbd478b26d3"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/afi_outlook_q4_2024-c1c3 (1) - L&GIM.pdf",
+        "bytes": 1126555,
+        "sha256": "7548b5d5e9d0f19ff8b453b4c4868c952704366f80e0750e5860f327ee26149f",
+        "pages": 9
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": [
+        "Q4 2024 appears inside both documents. Retain supplied edition; do not infer a 2026 date."
+      ]
+    },
+    {
+      "intake_id": "oct2026-11",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/docu-20261001-equity-outlook-parallel-worlds.md",
+        "bytes": 46901,
+        "sha256": "a01fb8ae64c87513b8b350d665542c125409a26dc3f57536d180e19871837073"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/docu-20261001-equity-outlook-parallel-worlds - Robeco.pdf",
+        "bytes": 5167141,
+        "sha256": "747352e692a4a685e4369f2fb45096aad08aa5fb4f5efe776ef1a351268f8158",
+        "pages": 16
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-12",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/en-cio-outlook-2027.md",
+        "bytes": 53495,
+        "sha256": "fe29f175ec30b905dd665449c0226050fe9ebe95a7ff09b9fc4baf5afc6b0faa"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/en-cio-outlook-2027 - Tikehau Capital.pdf",
+        "bytes": 472463,
+        "sha256": "a5446ffa5f841d414edb7b9ec10969d59e88630d75388051249993c2ff555688",
+        "pages": 23
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-13",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/equity-market-outlook.md",
+        "bytes": 44930,
+        "sha256": "44549f120cfbff133b7db98d764d3a3104852723e50ec26fe1114d68aaf4dbc0"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/equity-market-outlook - BlackRock.pdf",
+        "bytes": 726182,
+        "sha256": "0fba0622442afc39621d0649bcdbdcbe89ba3a3bae3b9ad4316f3346e55b345e",
+        "pages": 13
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    },
+    {
+      "intake_id": "oct2026-14",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/hedge-fund-strategy-outlook-fourth-quarter-2026 - Franklin Templeton.md",
+        "bytes": 45100,
+        "sha256": "394858096921847a1d92e2df5ad4c22551721edbb39f83fa3a7adf74a5ddca56"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/hedge-fund-strategy-outlook-fourth-quarter-2026 - Franklin Templeton.pdf",
+        "bytes": 3001499,
+        "sha256": "563f2a9774dde044e8ce578dc4b87f2195d7dc5209ca668c85309eea1c42bd29",
+        "pages": 15
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [
+        12
+      ],
+      "notes": [
+        "Visual inspection: Q3/Q4 conviction symbols are blank in Markdown; arrows and separate z-score table/legend survive."
+      ]
+    },
+    {
+      "intake_id": "oct2026-15",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/mim-relative-value-tactical-allocation_4Q-2026 - MetLife IM.md",
+        "bytes": 52915,
+        "sha256": "86821f40c8bebaf2ce6dd065a256ce330cc52d2c0ac6338be32f8cf251d3e371"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/mim-relative-value-tactical-allocation_4Q-2026 - MetLife IM.pdf",
+        "bytes": 2364891,
+        "sha256": "47933ca0019af2cec552e9f0172691dd7ff9fc7b413a4e59300ed8c5501638ce",
+        "pages": 17
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [
+        2
+      ],
+      "notes": [
+        "Visual inspection: radar-chart labels survive but positioning relative to benchmark is lost."
+      ]
+    },
+    {
+      "intake_id": "oct2026-16",
+      "markdown": {
+        "path": "client-inputs/2026-10-review/markdown/oct-26-emd-outlook-fi-insights (1).md",
+        "bytes": 19639,
+        "sha256": "a9e9c1089247ee55d991d84a0e5da02e4ae5bef3abbc5195dc36fb37e797e2cb"
+      },
+      "pdf": {
+        "path": "client-inputs/2026-10-review/pdfs/oct-26-emd-outlook-fi-insights (1) - State Street IM.pdf",
+        "bytes": 264074,
+        "sha256": "f6310d609c664dbc821a13bab5a65fbabfaf6e8ec0e79e895c63f16e576a0a48",
+        "pages": 5
+      },
+      "pairing_basis": "Filename correspondence and document opening inspection; not a full content comparison.",
+      "source_url": null,
+      "visual_pages_inspected": [],
+      "notes": []
+    }
+  ]
+}
