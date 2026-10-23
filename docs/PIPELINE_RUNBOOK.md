@@ -122,7 +122,7 @@ until every remaining row is fetch-safe and content-verified.
 ```bash
 .venv/bin/python -m src.scout \
   --sources "<batch>/<master>.csv" \
-  --out-dir <batch>/scout
+  --out <batch>/scout/group-notes.md
 ```
 
 Metadata-only (nothing is fetched): proposes which same-firm rows are parts of
