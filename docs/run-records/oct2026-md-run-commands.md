@@ -39,19 +39,47 @@ Outlook vs Asset Allocation Outlook) and State Street Investment Management
 (Sector Market Perspectives vs EM debt outlook) are different series, so they
 stay independent. No split takes `--group-notes`.
 
-## Split 1 (first checkpoint)
+## Model matrix for this batch (revamped defaults, 2026-10-23)
 
-`md-split1-sources.csv`: both Neuberger Berman documents, MetLife IM,
-Franklin Templeton (24 chunks). Bare model matrix.
+Set as the code defaults before any split ran, so every command below is bare
+(no model flags). Full IDs are pinned for every Claude stage.
+
+| Stage | Engine / model / effort |
+|---|---|
+| analyze | codex / gpt-6.1-sol / high |
+| tier-3 visual quote verifier | codex / gpt-6-luna / high |
+| checker | claude / claude-opus-5-5 / high |
+| conflict arbiter | claude / claude-haiku-5-5 / high |
+| group-notes resolver (not used: no groups) | codex / gpt-6-luna / high |
+| shared-evidence gate | claude / claude-opus-5-5 / medium |
+| reconcile scope gate (+ near-leaf) | claude / claude-opus-5-5 / medium |
+| datefill primary (dates stay empty this batch) | codex / gpt-6-luna / high |
+| crosscheck | claude / claude-sonnet-5-5 / medium |
+| summarize digest | claude / claude-sonnet-5-5 / medium |
+| summarize firmpages | claude / claude-sonnet-5-5 / high |
+| datefill cascade | claude / claude-sonnet-5-5 / medium |
+| scout (code default; this batch's scout already ran on claude-haiku-5-5) | codex / gpt-6-luna / medium |
+
+| preflight content check (skipped this batch: `--no-llm`) | claude / claude-sonnet-5-5 / low |
+
+## Splits (3 x 5, firm-whole)
+
+| Split | Sources | Chunks |
+|---|---|---|
+| `splits/split-1.csv` (first checkpoint) | Neuberger Berman x2, Allianz, Franklin Templeton, MetLife IM | 25 |
+| `splits/split-2.csv` | NYL Investment Management, Amova, L&G, State Street Investment Management x2 | 25 |
+| `splits/split-3.csv` | Lombard Odier, Columbia Threadneedle Investments, Robeco, Tikehau Capital, BlackRock | 37 |
+
+One command per split, bare:
 
 ```bash
 nohup .venv/bin/python -m src.run \
-  --sources client-runs/runs-23102026-16rows/md-split1-sources.csv \
-  --run-id oct26md-split1 \
+  --sources client-runs/runs-23102026-16rows/splits/split-N.csv \
+  --run-id oct26md-splitN \
   --out-root client-runs/runs-23102026-16rows \
-  > client-runs/runs-23102026-16rows/oct26md-split1.log 2>&1 &
+  > client-runs/runs-23102026-16rows/oct26md-splitN.log 2>&1 &
 ```
 
-Check before launching the remaining 11: ingestion, evidence validation, the
-client spreadsheet, and the shared-evidence gate's dropped rows and survivor
-notes (its first live run).
+Run split 1 alone first. Before launching splits 2 and 3, check ingestion,
+evidence validation, the client spreadsheet, and the shared-evidence gate's
+dropped rows and survivor notes (its first live run).
