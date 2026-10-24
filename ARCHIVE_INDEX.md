@@ -140,5 +140,6 @@ were taken. Four names are recoverable from the ROADMAP references removed in
 commit `c4a84d3`: `tmp/instructions-1-checker-context.md`,
 `tmp/instructions-2-scout-groups.md`, `tmp/instructions-3-firm-crosscheck.md`
 and `tmp/instructions-4-reader-summaries.md`; the other two names were not
-recorded. Their content is superseded by the committed builds and their
-ROADMAP / `prompts/REGISTRY.md` entries.
+recorded. Their content is believed superseded by the committed builds and
+their ROADMAP / `prompts/REGISTRY.md` entries; with no archive, that cannot be
+verified.

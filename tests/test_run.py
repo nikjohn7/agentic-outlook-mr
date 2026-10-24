@@ -1109,6 +1109,41 @@ class PairedPdfChunkTextTest(unittest.TestCase):
                 )
         page_texts.assert_not_called()
 
+    def test_provenance_is_captured_before_any_model_call(self) -> None:
+        source = _md_source("nb-aao", "Neuberger Berman", "Asset Allocation Outlook")
+        events: list[str] = []
+        recorded = {"commit": "abc123", "dirty": [], "implementation": "f" * 64, "files": {}}
+
+        def collect():
+            events.append("provenance")
+            return recorded
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            events.append("model")
+            out = json.dumps({"summary": "no views", "candidates": []})
+            return subprocess.CompletedProcess(command, 0, stdout=out, stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch(
+                "src.run.create_snapshot",
+                side_effect=lambda src, work: _ingested_md(src, work, "markdown body"),
+            ), patch("src.run.provenance.collect", side_effect=collect):
+                _, _, run_dir = run_pipeline(
+                    sources=[source],
+                    run_id="provenance-timing",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    evidence_gate=False,
+                    runner=runner,
+                    out_root=Path(temp_dir) / "out",
+                )
+            manifest = (run_dir / "manifest.md").read_text(encoding="utf-8")
+        self.assertEqual("provenance", events[0])
+        self.assertEqual(1, events.count("provenance"))
+        self.assertIn("model", events)
+        self.assertIn("- code commit: abc123", manifest)
+
 
 class QuoteVisualVerifierTest(unittest.TestCase):
     def test_malformed_llm_response_fails_closed_and_updates_stats(self) -> None:

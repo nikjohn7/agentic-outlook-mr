@@ -100,6 +100,9 @@ def run_pipeline(
     any analysis).
     """
     enforce_source_limit(sources)
+    # Captured before any model call, so a mid-run edit is not recorded as
+    # having produced the whole run.
+    run_provenance = provenance.collect()
     # A direct run_pipeline caller (e.g. a test) may leave a codex step's model
     # None; fill the default so run_config always states the model. The CLI has
     # already resolved these via resolve_engine_settings.
@@ -417,7 +420,7 @@ def run_pipeline(
         run_config=run_config,
         grouping=grouping,
         quote_visual_stats=quote_visual_stats,
-        provenance=provenance.collect(),
+        provenance=run_provenance,
     )
     return result, chunk_failures, run_dir
 

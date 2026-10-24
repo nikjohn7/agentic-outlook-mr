@@ -1097,7 +1097,10 @@ def _leaf_evidence_overlap(leaf_label: str, evidence_text: str) -> int:
     # 'pound' (weight, verb) does not name GBP. 'sterling' stays: in evidence
     # already shared with a GBP call it is the currency.
     aliases = {
-        "GBP": ("sterling", "british pound", "british pounds", "pound sterling", "pounds sterling"),
+        "GBP": (
+            "sterling", "british pound", "british pounds", "uk pound", "uk pounds",
+            "pound sterling", "pounds sterling",
+        ),
         "AUD": ("australian dollar", "australian dollars", "aussie", "aussie dollar", "aussie dollars"),
     }
     evidence_phrase = " " + " ".join(re.findall(r"[a-z0-9]+", normalize_quote_text(evidence_text).lower())) + " "

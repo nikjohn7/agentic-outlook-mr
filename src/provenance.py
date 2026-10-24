@@ -14,8 +14,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # The inputs that decide a run's calls: pipeline code, every prompt, the
-# locked taxonomy.
-TRACKED_GLOBS = ("src/*.py", "prompts/*.md", "excel-file/Asset Class List - Locked.csv")
+# locked taxonomy. REGISTRY.md is a catalog no code reads, so it is left out.
+TAXONOMY_FILE = "excel-file/Asset Class List - Locked.csv"
+TRACKED_GLOBS = ("src/*.py", "prompts/*.md", TAXONOMY_FILE)
+UNTRACKED_FILES = frozenset({"prompts/REGISTRY.md"})
 # Dirty paths listed in the manifest before it summarizes the rest.
 MAX_DIRTY_LISTED = 10
 
@@ -33,7 +35,10 @@ def _git(args: list[str], root: Path) -> str | None:
 def tracked_files(root: Path = PROJECT_ROOT) -> list[Path]:
     files: set[Path] = set()
     for pattern in TRACKED_GLOBS:
-        files.update(path for path in root.glob(pattern) if path.is_file())
+        files.update(
+            path for path in root.glob(pattern)
+            if path.is_file() and path.relative_to(root).as_posix() not in UNTRACKED_FILES
+        )
     return sorted(files, key=lambda path: path.relative_to(root).as_posix())
 
 
@@ -57,9 +62,12 @@ def implementation_hash(hashes: dict[str, str]) -> str:
 def collect(root: Path = PROJECT_ROOT) -> dict[str, object]:
     hashes = file_hashes(root)
     commit = (_git(["rev-parse", "HEAD"], root) or "").strip()
-    status = _git(["status", "--porcelain", "--", "src", "prompts", "excel-file"], root)
+    status = _git(["status", "--porcelain", "--", "src", "prompts", TAXONOMY_FILE], root)
     # Porcelain lines are `XY path`; the status columns may be spaces.
-    dirty = [line[3:] for line in (status or "").splitlines() if line.strip()]
+    dirty = [
+        line[3:] for line in (status or "").splitlines()
+        if line.strip() and line[3:] not in UNTRACKED_FILES
+    ]
     return {
         "commit": commit or "unknown",
         "dirty": dirty if status is not None else None,

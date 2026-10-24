@@ -27,7 +27,7 @@ else:
     print('WARNING: implementation differs from the validated controls:')
     for label,names in (('changed',changed),('removed',gone),('new',new)):
         for n in names: print(f'  {label}: {n}')
-    print('Launching anyway; the run manifest records its own provenance.')
+    print('Drift does not block; each run manifest records its own provenance.')
 PY
 }
 check_unused() {

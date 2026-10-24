@@ -15,6 +15,8 @@ def _tree(root: Path) -> None:
     (root / "src" / "run.py").write_text("print('run')\n", encoding="utf-8")
     (root / "prompts" / "analyze_chunk.md").write_text("Extract calls.\n", encoding="utf-8")
     (root / "excel-file" / "Asset Class List - Locked.csv").write_text("a,b\n", encoding="utf-8")
+    (root / "excel-file" / "Target Output.csv").write_text("x\n", encoding="utf-8")
+    (root / "prompts" / "REGISTRY.md").write_text("catalog\n", encoding="utf-8")
     (root / "notes.txt").write_text("not tracked\n", encoding="utf-8")
 
 
@@ -65,6 +67,9 @@ class ProvenanceTest(unittest.TestCase):
             clean = provenance.collect(root)
             (root / "prompts" / "analyze_chunk.md").write_text("Edited.\n", encoding="utf-8")
             (root / "notes.txt").write_text("edited\n", encoding="utf-8")  # not a run input
+            # Neither the prompt catalog nor another workbook sheet is a run input.
+            (root / "prompts" / "REGISTRY.md").write_text("catalog edit\n", encoding="utf-8")
+            (root / "excel-file" / "Target Output.csv").write_text("y\n", encoding="utf-8")
             dirty = provenance.collect(root)
         self.assertRegex(clean["commit"], r"^[0-9a-f]{40}$")
         self.assertEqual([], clean["dirty"])
