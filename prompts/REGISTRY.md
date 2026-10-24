@@ -168,11 +168,15 @@ disciplined to ~500–800 words (one printed page). Single-source firms pass thr
 the same call for a consistent voice. Parsed by `summarize.parse_firm_page` (requires
 the `# ` heading + a `## Sources` section). Default engine
 claude/claude-sonnet-5-5/high (pinned Sonnet 5.5 id for editorial prose, model revamp 2026-10-23; overridable);
-the digest stage uses its separate Sonnet 5 pin. The agreed
+the digest stage shares the same Sonnet 5.5 pin (at medium effort). The agreed
 escalation if a sample reads flat is claude/opus/medium. Inputs (appended JSON): firm, digests[], final_calls[] (with
 `unresolved`/`views`/`divergence` for unresolved keys), sources[].
 
 ### `crosscheck_conflicts.md` - v1 (2026-07-07)
+
+2026-10-25 integration clarification: published-level precedence applies only
+to house stances. Trend, valuation and economic indicators gain no precedence
+unless the source adopts them as its position or recommendation.
 
 The post-run firm cross-check's one agent step (`src/crosscheck.py`, v1 pre-37
 wave instruction set 3). Runs once, batched over ALL `conflicting_views` groups
@@ -190,7 +194,12 @@ sub_asset_leaf, and each row's view/source_title/date/full_commentary. No
 template vars. Deliberately NOT the v1.2 dual-confidence reconcile (ROADMAP.md
 v1.2 item 1) and does no fuzzy/near-leaf matching (v1.2 item 6).
 
-### `conventions.md` - v1.4 (2026-10-24)
+### `conventions.md` - v1.5 (2026-10-25)
+
+v1.5 separates forecast eligibility from basis: directional forecast prose
+without an allocation/preference is inferred; a numerical forecast delta needs
+an identified current baseline. Live validation found eligible prose forecasts
+incorrectly reaching High as stated. The extractor v1.8 repeats this boundary.
 
 v1.4 (October batch quality fix, allocation eligibility): a new first section,
 "A call is a position, not an analytical input". Calls are the house's own
@@ -273,7 +282,11 @@ convention, the convention-blind checker failed it as a sign mismatch.
 Checker independence is preserved: it still never sees the source and judges
 only the presented fields; it now judges them under the same law.
 
-### `analyze_chunk.md` - v1.7 (2026-10-24)
+### `analyze_chunk.md` - v1.8 (2026-10-25)
+
+v1.8 clarifies basis tagging for directional/flat/two-sided forecast prose and
+two-future-date comparisons, preserving eligible inferences when a current
+numeric baseline is unavailable. No source-specific examples or labels added.
 
 v1.7 (allocation eligibility, pairs with `conventions.md` v1.4): a new first
 rule, "Positions, not inputs": read a figure's caption, legend, axes and

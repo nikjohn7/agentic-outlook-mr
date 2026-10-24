@@ -36,9 +36,9 @@ deterministic steps:
 5. Precedence: stated full date > metadata > landing-page full date >
    month-year partial rendered `01/MM/YYYY`; quarter/season partials never fill.
 
-The engine step is a cascade (model revamp 2026-07-10): codex/gpt-5.6-luna/high
-sweeps first, then claude/sonnet/medium runs ONLY on sources still blank
-afterward. Both engines' flags are overridable.
+The engine step is a cascade (model revamp 2026-10-23): codex/gpt-6-luna/high
+sweeps first, then claude/claude-sonnet-5-5/medium runs ONLY on sources still
+blank afterward. Both engines' flags are overridable.
 """
 
 from __future__ import annotations

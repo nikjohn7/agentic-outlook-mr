@@ -21,6 +21,8 @@ from src.run import (
     _html_chunk_text,
     _make_arbiter,
     _make_quote_visual_verifier,
+    _pdf_chunk_text,
+    _pdf_page_spans,
     _resolve_groups,
 )
 from src.schemas import CandidateCall, SourceInfo
@@ -985,6 +987,93 @@ class RunPipelineEchoedIdentityTest(unittest.TestCase):
         self.assertIn("We favor US equities.", rows["US Equities"]["Verbatim Evidence"])
         self.assertEqual(set(rows), set(written))
         self.assertEqual("Neuberger Berman", written["US Equities"]["Firm"])
+
+
+class PairedPdfChunkTextTest(unittest.TestCase):
+    """A `pdf:` chunk validates against the text of its own pages only - the
+    pages the model was given - not the whole PDF."""
+
+    PAGES = [
+        "Page one: macro backdrop.",
+        "Positioning grid: EM equities overweight.",
+        "Japan equities are our top underweight.",
+    ]
+
+    def test_page_spans_recover_each_page_of_the_joined_snapshot(self) -> None:
+        pdf_text = "\n\n".join(self.PAGES)
+        spans = _pdf_page_spans(pdf_text, self.PAGES, frozenset())
+
+        self.assertEqual(self.PAGES, [pdf_text[a:b] for a, b in (spans[1], spans[2], spans[3])])
+        self.assertEqual(self.PAGES[1], _pdf_chunk_text(pdf_text, spans, (2,)))
+        self.assertEqual("\n\n".join(self.PAGES[1:]), _pdf_chunk_text(pdf_text, spans, (2, 3)))
+
+    def test_ocr_page_text_is_bounded_by_its_neighbours(self) -> None:
+        # Page 2 was OCR'd: the snapshot holds OCR text, not the text layer.
+        pdf_text = "\n\n".join([self.PAGES[0], "OCR: EM equities overweight.", self.PAGES[2]])
+        spans = _pdf_page_spans(pdf_text, [self.PAGES[0], "", self.PAGES[2]], frozenset({2}))
+
+        self.assertEqual("OCR: EM equities overweight.", _pdf_chunk_text(pdf_text, spans, (2,)))
+
+    def test_misaligned_snapshot_falls_back_to_the_whole_text(self) -> None:
+        pdf_text = "\n\n".join(self.PAGES)
+        self.assertIsNone(_pdf_page_spans(pdf_text, ["something else", *self.PAGES[1:]], frozenset()))
+        self.assertIsNone(_pdf_page_spans(pdf_text, None, frozenset()))
+        self.assertEqual(pdf_text, _pdf_chunk_text(pdf_text, None, (2,)))
+
+    def test_quote_only_on_an_unsupplied_page_fails_validation(self) -> None:
+        source = _md_source("nb-aao", "Neuberger Berman", "Asset Allocation Outlook")
+        pdf_text = "\n\n".join(self.PAGES)
+        filler = " " + "Grid legend and notes. " * 80  # _ingested_md appends this
+        page_texts = [self.PAGES[0], self.PAGES[1], self.PAGES[2] + filler]
+        calls = {
+            MD_CHUNK_ID: [],
+            PDF_CHUNK_ID: [
+                _echoed_candidate("nb-aao", PDF_CHUNK_ID, "Emerging Markets Equities",
+                                  self.PAGES[1], "p.2 - 'Positioning grid'"),
+                # Page 3's sentence, cited as page 2 of the chunk p2-2.
+                _echoed_candidate("nb-aao", PDF_CHUNK_ID, "Japan Equities",
+                                  self.PAGES[2], "p.2", view="U"),
+            ],
+        }
+        verified: list[str] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            if "Verify quote visually" in prompt:
+                verified.append(prompt)
+                return subprocess.CompletedProcess(
+                    command, 0, stdout='{"judgment": "absent"}', stderr=""
+                )
+            if "native_source_path" in prompt:  # the checker
+                return subprocess.CompletedProcess(command, 0, stdout=_passing_verdicts(2), stderr="")
+            chunk_id = PDF_CHUNK_ID if "pages 2-2 of the PDF" in prompt else MD_CHUNK_ID
+            out = json.dumps({"summary": "views", "candidates": calls[chunk_id]})
+            return subprocess.CompletedProcess(command, 0, stdout=out, stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch(
+                "src.run.create_snapshot",
+                side_effect=lambda src, work: _ingested_md(src, work, "markdown body", pdf_text),
+            ), patch("src.run._pdf_page_texts", return_value=page_texts):
+                result, chunk_failures, _ = run_pipeline(
+                    sources=[source],
+                    run_id="pdf-chunk-pages",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    evidence_gate=False,
+                    runner=runner,
+                    out_root=Path(temp_dir) / "out",
+                )
+
+        self.assertEqual([], chunk_failures)
+        self.assertEqual(
+            ["Emerging Markets Equities"], [row["Sub-Asset Class"] for row in result.output_rows]
+        )
+        self.assertEqual(
+            [("Japan Equities", "quote_not_found_visual")],
+            [(f.sub_asset_class, f.reason_code) for f in result.failures],
+        )
+        self.assertEqual(1, len(verified))  # the page image is the only rescue
 
 
 class QuoteVisualVerifierTest(unittest.TestCase):

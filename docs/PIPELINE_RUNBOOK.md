@@ -26,6 +26,15 @@ Prerequisites (already satisfied on the current machine):
   leaves). This file is the authority for every taxonomy field in the output;
   it is never edited.
 
+Headless Codex calls include `-c features.hooks=false` per process. Interactive
+lifecycle hooks can append a new question after a reader's JSON answer and
+replace the extracted candidates with the answer to that question. This does
+not edit global configuration or change the selected model/effort or sandbox.
+See the [October quality validation record](run-records/oct2026-quality-validation.md)
+for the observed failure and the revised split launch commands. A zero Python
+exit requires a manifest check: engine/chunk failures are audited and can still
+produce a completed run with no useful calls.
+
 Sanity check before a production batch:
 
 ```bash
@@ -49,7 +58,8 @@ deliberately deviate.
 | scout (pre-run grouping proposals) | codex | gpt-6-luna | medium |
 | preflight content-sanity call | claude | claude-sonnet-5-5 | low |
 | reconcile scope gate (+ near-leaf pass, inherited) | claude | claude-opus-5-5 | medium |
-| datefill primary → cascade | codex gpt-6-luna high → claude claude-sonnet-5-5 medium |
+| datefill primary | codex | gpt-6-luna | high |
+| datefill cascade (fallback) | claude | claude-sonnet-5-5 | medium |
 | crosscheck (report only) | claude | claude-sonnet-5-5 | medium |
 | summarize digest | claude | claude-sonnet-5-5 (pinned) | medium |
 | summarize firmpages | claude | claude-sonnet-5-5 (pinned) | high |
@@ -162,7 +172,7 @@ Preview the flagged pages before a run (no model calls):
 ```bash
 .venv/bin/python -m src.pdfinventory \
   --sources <batch>/splits/split-N.csv \
-  --out <batch>/pdf-inventory
+  --out <batch>/pdf-inventory/split-N
 ```
 
 It writes `pdf-inventory.csv` (one row per PDF page, with every measure) and
@@ -274,12 +284,15 @@ model calls; never edits the run):
   --out-dir <batch>/<run-id>/pagecheck
 ```
 
-Run the digest step (1 LLM call per source; feeds the firm pages later):
+Run the digest step (1 LLM call per source; feeds the firm pages later).
+Every run writes into the same flat `<batch>/digests` folder (one
+`<source_id>.json` per source; source ids are firm + title slugs, so runs do
+not collide), which is the folder `firmpages --digests` reads:
 
 ```bash
 .venv/bin/python -m src.summarize digest \
   --run <batch>/<run-id> \
-  --out-dir <batch>/digests/<run-id>
+  --out-dir <batch>/digests
 ```
 
 ---

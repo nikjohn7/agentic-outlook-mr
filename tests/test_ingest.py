@@ -31,6 +31,7 @@ from src.ingest import (
     markdown_to_text,
     is_visual_heavy,
     load_pilot_sources,
+    load_target_sources,
     resolve_url,
     strip_tracking_params,
 )
@@ -137,6 +138,55 @@ class LocalFileLoaderTest(unittest.TestCase):
                             self.assertEqual("md", source.source_type)
                             expected = root / "outlook.pdf" if value else None
                             self.assertEqual(expected, source.pdf_path)
+
+    def test_paired_pdf_on_a_non_markdown_row_is_rejected(self) -> None:
+        # pdf_file is read only for md rows; on pdf/txt/html it must fail loudly,
+        # not be validated and then silently ignored.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "outlook.pdf").write_bytes(b"%PDF-1.4\n")
+            (root / "talk.txt").write_text("transcript", encoding="utf-8")
+            csv_path = root / "sources.csv"
+            cases = {
+                "pdf": "Test Firm,Outlook,,outlook.pdf,outlook.pdf",
+                "txt": "Test Firm,Outlook,,talk.txt,outlook.pdf",
+                "html": "Test Firm,Outlook,https://example.test/a.html,,outlook.pdf",
+            }
+            with patch("src.ingest.PROJECT_ROOT", root):
+                for source_type, row in cases.items():
+                    with self.subTest(source_type=source_type):
+                        csv_path.write_text(
+                            "Firm,Source,URL,local_file,pdf_file\n" + row + "\n", encoding="utf-8"
+                        )
+                        with self.assertRaisesRegex(
+                            ValueError, rf"pdf_file.*Outlook.*Markdown.*'{source_type}'"
+                        ):
+                            load_pilot_sources(csv_path)
+
+    def test_target_loader_resolves_paired_pdf(self) -> None:
+        # preflight tries load_target_sources first, so a target-shaped CSV with
+        # a Markdown local_file + pdf_file must keep its paired PDF.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "outlook.md").write_text("# Outlook", encoding="utf-8")
+            (root / "outlook.pdf").write_bytes(b"%PDF-1.4\n")
+            csv_path = root / "sources.csv"
+            header = "Id,Firm,Title,Published At,Source Link,local_file,pdf_file\n"
+            with patch("src.ingest.PROJECT_ROOT", root):
+                csv_path.write_text(
+                    header + "7,Test Firm,Outlook,,https://example.test/a,outlook.md,outlook.pdf\n",
+                    encoding="utf-8",
+                )
+                [source] = load_target_sources(csv_path)
+                self.assertEqual("md", source.source_type)
+                self.assertEqual(root / "outlook.pdf", source.pdf_path)
+
+                csv_path.write_text(
+                    header + "7,Test Firm,Outlook,,https://example.test/a.html,,outlook.pdf\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(ValueError, "pdf_file.*Markdown"):
+                    load_target_sources(csv_path)
 
     def _write_csv(self, temp_dir: str, body: str) -> Path:
         path = Path(temp_dir) / "sources.csv"

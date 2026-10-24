@@ -345,8 +345,8 @@ class GateResult:
     outcomes: list[GroupOutcome] = field(default_factory=list)
     kept_notes: dict[int, str] = field(default_factory=dict)  # entry_id -> note
     dropped: dict[int, str] = field(default_factory=dict)  # entry_id -> failure message
-    # Survivors that must be reviewed: several calls kept on one passage, or a
-    # failed verdict. A clean single keep is noted but not a review item.
+    # Survivors that must be reviewed: only those of a failed verdict. A valid
+    # keep (one call, or several equally supported) is noted, not a review item.
     review_ids: set[int] = field(default_factory=set)
 
     @property
@@ -513,8 +513,8 @@ def render_summary(result: GateResult, input_rows: int, output_rows: int) -> str
         "",
         "One passage cited by several sub-asset classes: an LLM picked the most",
         "compelling call(s) per passage (categorical); deterministic code dropped the",
-        "rest to the failures file and flagged every survivor that still shares its",
-        "evidence. Any failed verdict keeps all rows for human review.",
+        "rest to the failures file and noted on every survivor that it shares its",
+        "evidence. Only a failed verdict flags rows for review: it keeps all of them.",
         "",
         f"- input rows: {input_rows}",
         f"- output rows: {output_rows}",

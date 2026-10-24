@@ -398,5 +398,28 @@ class RebuildDateTests(unittest.TestCase):
             self.assertEqual(["Firm", "Date", "Source", "URL", "View"], list(new_rows[0].keys()))
 
 
+# --------------------------------------------------------------------------- #
+# Document text extraction
+# --------------------------------------------------------------------------- #
+
+
+class ExtractTests(unittest.TestCase):
+    def test_markdown_source_is_rendered_to_text(self) -> None:
+        from src import ingest
+
+        raw = "# Outlook 2027\n\nPublished **17 June 2026** by [Firmco](http://example.com).\n\n- Equities: *overweight*\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            md = Path(tmp) / "doc.md"
+            md.write_text(raw, encoding="utf-8")
+            source = _source("Firmco", "Outlook", source_type="md", local=md)
+            doc = datefill._Extractor(Path(tmp)).extract(source)
+
+        expected = ingest.markdown_to_text(raw)
+        self.assertNotEqual(raw, expected)  # the fixture's markup is really stripped
+        self.assertEqual(expected, doc.text)
+        self.assertEqual("md", doc.source_type)
+        self.assertEqual(md, doc.native_path)
+
+
 if __name__ == "__main__":
     unittest.main()

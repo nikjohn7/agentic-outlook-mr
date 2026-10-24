@@ -66,6 +66,10 @@ NOT_FOUND = "not_found"
 NO_PDF = "no_pdf"
 PDF_READ = "pdf_read"
 OUTCOMES = (CONFIRMED, CORRECTED, ADDED, AMBIGUOUS, NOT_FOUND, PDF_READ, NO_PDF)
+# Outcomes whose page is grounded in the PDF: found in its text layer, or the
+# PDF page the quote was read from. NO_PDF keeps the model's page unchecked;
+# AMBIGUOUS and NOT_FOUND have their page removed.
+VERIFIED_OUTCOMES = (CONFIRMED, CORRECTED, ADDED, PDF_READ)
 
 AUDIT_COLUMNS = (
     "Firm", "Source", "Sub-Asset Class", "View", "outcome",
@@ -76,7 +80,15 @@ AUDIT_COLUMNS = (
 def _key(text: str) -> str:
     """Letters and digits only, after the quote matcher's normalization: the
     text layer and the Markdown differ in spacing, hyphenation and punctuation,
-    never in the words."""
+    never in the words.
+
+    Word boundaries are dropped on purpose, so a span may match inside a longer
+    word. Requiring token edges was measured on the October run (377 quotes
+    against their paired PDFs): it prevented no wrong page and lost 3 correct
+    ones, where the text layer glues words ("mortgageswhile") or the model cut
+    its quote mid-word ("...against the green" for "greenback"). Spans of at
+    least MIN_SPAN_CHARS letters keep an accidental in-word match negligible,
+    and a quote found on more than one page loses its page anyway."""
     return re.sub(r"[^a-z0-9]", "", normalize_quote_text(text).lower())
 
 
@@ -261,7 +273,12 @@ def rows_with_pdf(rows: list[dict[str, str]], pdf_for_title: dict[str, Path]) ->
 
 
 def verified_page_count(audit: list[dict[str, str]]) -> int:
-    return sum(1 for record in audit if cited_pages(record["locator_after"]))
+    """Quotes whose page after the check is grounded in the PDF: a NO_PDF
+    record keeps the model's page but was never checked, so it is not counted."""
+    return sum(
+        1 for record in audit
+        if record["outcome"] in VERIFIED_OUTCOMES and cited_pages(record["locator_after"])
+    )
 
 
 def render_summary(audit: list[dict[str, str]], rows_in: int) -> str:

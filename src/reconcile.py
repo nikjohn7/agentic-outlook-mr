@@ -1736,7 +1736,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--outputs", required=True, nargs="+", type=Path, help="one or more frozen run output.csv files")
     parser.add_argument("--out-dir", required=True, type=Path, help="directory for the reconciled output + audit + summary")
     parser.add_argument("--engine", default="claude", help="LLM engine for the scope gate (default: claude)")
-    parser.add_argument("--model", default="claude-opus-5-5", help="model for the scope gate (claude default: claude-opus-5-5; codex: allowlist member, default gpt-5.5)")
+    parser.add_argument("--model", default=None, help="model for the scope gate (claude default: claude-opus-5-5; codex: allowlist member, default gpt-5.5)")
     parser.add_argument("--effort", default="medium", help="reasoning effort (default: medium)")
     parser.add_argument("--no-llm", action="store_true", help="skip the scope gate; every multi-row key degrades to needs_human")
     parser.add_argument(

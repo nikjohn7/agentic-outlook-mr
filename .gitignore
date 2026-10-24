@@ -21,7 +21,9 @@ htmlcov/
 !.env.example
 *.local
 
-# Original client-supplied documents
+# Original client-supplied documents: never committed (client material).
+# Intake manifests hash these files so an operator holding the received
+# copies can verify them; a clean checkout cannot, by design.
 client-inputs/
 
 # Logs and temporary files

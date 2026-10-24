@@ -145,6 +145,14 @@ only; never emit or reason about numeric confidence.
 
 **Basis - tag how each call was derived.** Every candidate MUST carry a
 `basis`:
+Eligibility does not determine basis. A forecast can qualify as a call while
+its translation into O/N/U still requires one analyst step. "The house expects
+this asset's price to be supported" is not "we overweight/prefer this asset".
+Tag directional forecast prose, including flat-price and two-sided yield paths,
+`inferred` unless it actually states a position or preference. A numerical
+forecast is `forecast_delta` only against an identified current level; two
+future forecast dates do not supply a current baseline. Preserve legitimate
+directional prose inferences even when that numerical baseline is unavailable.
 - `basis: stated` - an explicit house dial/score/tier position, a current
   allocation against a stated neutral/benchmark, or explicit OW/N/UW or
   preference prose ("we are overweight X"; "we prefer X"; a printed Neutral

@@ -322,6 +322,30 @@ def _split_labeled(cell: str, titles: list[str]) -> list[tuple[str, str]]:
     return out
 
 
+def _align_locators_by_title(
+    locators: list[tuple[str, str]],
+    reasonings: list[tuple[str, str]],
+    evidences: list[tuple[str, str]],
+    count: int,
+) -> list[tuple[str, str]]:
+    """Place a short Locator cell's entries by title when no Full Commentary
+    can align them (client files have none). A locator goes to the one passage
+    with its title; when a title labels several passages, or a locator has no
+    title, the locators stay blank rather than land on the wrong passage."""
+    seg_titles = [
+        (reasonings[i][0] if i < len(reasonings) else "")
+        or (evidences[i][0] if i < len(evidences) else "")
+        for i in range(count)
+    ]
+    aligned = [("", "")] * count
+    for title, locator in locators:
+        matches = [i for i, seg_title in enumerate(seg_titles) if title and seg_title == title]
+        if len(matches) != 1:
+            return [("", "")] * count
+        aligned[matches[0]] = (title, locator)
+    return aligned
+
+
 def _commentary_from_structured(row: dict[str, str], titles: list[str]) -> Commentary:
     reasonings = _split_labeled(row.get("Reasoning", ""), titles)
     evidences = _split_labeled(row.get("Verbatim Evidence", ""), titles)
@@ -333,6 +357,8 @@ def _commentary_from_structured(row: dict[str, str], titles: list[str]) -> Comme
         rendered = parse_full_commentary(row.get("Full Commentary", ""), row.get("Source", ""))
         if len(rendered.segments) == count:
             locators = [(seg.title, seg.locator) for seg in rendered.segments]
+        else:
+            locators = _align_locators_by_title(locators, reasonings, evidences, count)
     segments: list[Segment] = []
     for index in range(count):
         title_r, reasoning = reasonings[index] if index < len(reasonings) else ("", "")

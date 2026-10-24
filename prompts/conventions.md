@@ -1,6 +1,6 @@
 # House conventions - normative extraction rules
 
-_Version: v1.4_
+_Version: v1.5_
 
 These rules bind every reader of an outlook source: the extractor when making
 a call, and any second reader when judging one. A call that follows these
@@ -46,6 +46,15 @@ input however precisely it can be read.
   yield/FX/price forecast follows the forecast rules below (and their
   materiality gate); a third-party or model reading the house does not
   endorse does not.
+- **Eligibility and basis are separate.** Owning a forecast does not make its
+  allocation consequence `stated`. Prose predicting price support, weaker
+  prices, currency moves or yield pressure without explicitly positioning or
+  preferring the asset requires an allocation bridge: use `inferred`. This
+  includes a forecast that an index stays flat and a two-sided yield path.
+  Use `forecast_delta` only for a numerical endpoint versus an identified
+  current level, with its magnitude and unit. Use `stated` for actual house
+  positions/ratings/allocations or explicit preference language. Keep an
+  eligible inference; do not suppress it to avoid tagging its basis.
 
 ## Translating the house's dialect into O / N / U
 

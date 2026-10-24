@@ -98,6 +98,26 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(["Quote one", "Quote two", "Quote three"], [s.evidence for s in back.segments])
         self.assertEqual("both", columns["evidence_origin"])
 
+    def test_short_locator_cell_without_full_commentary_aligns_by_title(self) -> None:
+        # Client files carry no Full Commentary: a pageless passage must not
+        # shift the other locators onto the wrong passage.
+        commentary = Commentary(
+            (Segment("Doc A", "", "R1.", "Q1"), Segment("Doc B", "p.7", "R2.", "Q2")),
+        )
+        columns = row_columns(commentary)
+        del columns["Full Commentary"]
+        back = commentary_from_row({"Source": "Doc A | Doc B", **columns})
+        self.assertEqual(["", "p.7"], [s.locator for s in back.segments])
+
+    def test_short_locator_cell_with_ambiguous_titles_stays_blank(self) -> None:
+        commentary = Commentary(
+            (Segment("Doc A", "", "R1.", "Q1"), Segment("Doc A", "p.4", "R2.", "Q2")),
+        )
+        columns = row_columns(commentary)
+        del columns["Full Commentary"]
+        back = commentary_from_row({"Source": "Doc A", **columns})
+        self.assertEqual(["", ""], [s.locator for s in back.segments])
+
     def test_merged_locator_blank_when_no_segment_has_one(self) -> None:
         commentary = Commentary(
             (Segment("Doc A", "", "R1.", "Q1"), Segment("Doc B", "", "R2.", "Q2")),

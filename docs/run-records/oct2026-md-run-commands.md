@@ -1,4 +1,75 @@
-# October 2026 Markdown batch commands (16-pair evaluation intake, 2026-10-23)
+# October 2026 Markdown batch commands (quality rerun plan, 2026-10-25)
+
+## Current plan: quality revision v3
+
+The quality-first instruction supersedes the earlier freeze-once plan. All
+commands below the historical heading are retained as evidence only: do not
+reuse their IDs, move folders, or run their combine/export/summary steps now.
+The baseline `oct26md-split1/2/3`, trial and smoke artifacts remain preserved.
+
+Validation evidence: [quality validation record](oct2026-quality-validation.md).
+Launch helper: [oct2026-quality-v3-rerun.sh](oct2026-quality-v3-rerun.sh).
+Read the acceptance decision in the record before launching. The helper checks
+the validated source/prompt fingerprint, unused tmux sessions, output, log,
+exit-status and work paths. This task does not launch full splits.
+
+From `poc/`, after reviewing the validation evidence:
+
+```bash
+bash -n docs/run-records/oct2026-quality-v3-rerun.sh
+bash docs/run-records/oct2026-quality-v3-rerun.sh preflight
+# Two runs maximum; launch sequentially from this terminal:
+bash docs/run-records/oct2026-quality-v3-rerun.sh launch 2
+bash docs/run-records/oct2026-quality-v3-rerun.sh launch 3
+bash docs/run-records/oct2026-quality-v3-rerun.sh status
+# Wait for BOTH to finish successfully, then launch recommended split 1:
+bash docs/run-records/oct2026-quality-v3-rerun.sh wait23 && \
+  bash docs/run-records/oct2026-quality-v3-rerun.sh launch 1
+bash docs/run-records/oct2026-quality-v3-rerun.sh status
+```
+
+Do not run these alongside focused model validations or unrelated batch runs.
+Each session is named `oct26md-qv3-splitN`; output is
+`client-runs/runs-23102026-16rows/oct26md-qv3-splitN/`, log is the adjacent
+`.log`, work is `work/oct26md-qv3-splitN/`, Python exit is the adjacent `.exit`.
+Worker commands use `caffeinate -i`, unbuffered Python, `tee`, and
+`PIPESTATUS[0]`; a Python exit of zero alone does not prove extraction success.
+The helper also requires a completed manifest, count reconciliation, zero chunk
+failures, and CSV/XLSX/audit files. Inspect semantic failures and review flags
+before acceptance. Empty logs while a model works do not imply failure.
+
+Defaults remain analyze codex/gpt-6.1-sol/high; checker
+claude/claude-opus-5-5/high; arbiter claude/claude-haiku-5-5/high; visual
+codex/gpt-6-luna/high; shared-evidence claude/claude-opus-5-5/medium.
+`--checker-context` is omitted (off), shared-evidence gate remains on, no group
+notes or inventory overrides. Exact expanded worker command (N=2, 3, then 1):
+
+The revised adapter disables lifecycle hooks only for its headless Codex
+subprocesses (`-c features.hooks=false`), following the demonstrated Stop-hook
+answer replacement in the validation record. Global configuration is untouched.
+
+```bash
+caffeinate -i .venv/bin/python -u -m src.run \
+  --sources client-runs/runs-23102026-16rows/splits/split-N.csv \
+  --run-id oct26md-qv3-splitN \
+  --out-root client-runs/runs-23102026-16rows
+```
+
+URLs remain blank; only dates found in the source may appear. State Street
+Sector Market Perspectives retains `06/10/2026`. No datefill. The L&G Q4 2024
+edition remains excluded; the Q4 2026 ETF outlook remains included.
+
+A future combine should consume only `oct26md-qv3-split1/output.csv`,
+`oct26md-qv3-split2/output.csv`, `oct26md-qv3-split3/output.csv` and their
+matching failures, after per-split review. It must not consume focused
+validations, old splits, smoke or trial output. Keep any future combined,
+reconciled or summary artifacts in new revision-specific destinations.
+Retaining old split 1 is a user choice that creates a mixed configuration:
+its old eligibility and echoed-source-ID defects remain, and the complete
+batch cannot then claim validation under the revised configuration.
+No combine, reconcile, final export, digest, firm page or binder is run here.
+
+## Historical commands and results (superseded; do not execute)
 
 _Batch folder: `client-runs/runs-23102026-16rows/`. Inputs: the client
 engine's Markdown conversions under `client-inputs/2026-10-review/markdown/`
@@ -24,8 +95,10 @@ the client supplied the documents themselves, so there is no link to verify.
 ## Scout - MODEL OVERRIDE for this batch
 
 **Off-matrix:** scout ran on `claude / claude-haiku-5-5 / high` instead of
-the matrix default `codex / gpt-5.6-luna / medium` (Nikhil's choice, this run
-only; the code default and `tests/test_model_matrix.py` are unchanged).
+the then matrix default `codex / gpt-5.6-luna / medium` (Nikhil's choice, this run
+only). `gpt-5.6-luna` was the pre-revamp default when scout ran; after the
+2026-10-23 model revamp the code default and `tests/test_model_matrix.py` use
+`codex / gpt-6-luna / medium`.
 
 ```bash
 .venv/bin/python -m src.scout \
@@ -98,12 +171,15 @@ High 92 / Medium 40. Shared-evidence gate (first live run): 5 calls dropped,
 each for a sound reason; every other shared passage kept as separate calls.
 
 Review found, and fixed before the final run (code after `bc731ff`):
-- Review flags were 48%: 44 rows were flagged only because the
-  shared-evidence gate kept several calls named in one passage, and same-view
-  merges across documents were flagged too. Neither is a judgment; both are
-  now noted but not flagged (only a failed gate verdict, or a conflict picked
-  by rule or left to a human, flags). Split 1 after the change: 41 of 123
-  (33%), mostly substantive checker objections and the sibling tripwire.
+- Review flags were 48% (64 of 132 internal rows; 68 of 123 client rows).
+  44 of the 64 flagged internal rows carried a shared-evidence multi-keep
+  note (the gate kept several calls named in one passage) or a cross-document
+  same-view merge note; many, but not all, had no other flag reason. Neither
+  note is a judgment; both are now noted but not flagged (only a failed gate
+  verdict, or a conflict picked by rule or left to a human, flags). Split 1
+  after the change: 41 of 123 client rows (33%; 68 -> 41), mostly
+  substantive checker objections and the sibling tripwire. The drop is
+  smaller than 44 because some of those rows stay flagged for another reason.
 - Merged rows did not split back into their passages when re-read (the CSV
   writer collapses the separator's double spaces); fixed in
   `src/commentary.py`.
@@ -206,13 +282,17 @@ After the gate: one export-only change (commit after `3e49267`): a merged
 row's Locator cell no longer prints `Title: -` for a passage without a page;
 it lists only the passages that have one (alignment on re-read comes from the
 Full Commentary labels). It does not touch extraction, validation or calls, so
-the gate stands and the final run uses that commit.
+the gate's call-level checks stand and the final run uses that commit. The gate
+did not exercise this Locator export: it sits outside the smoke-tested
+configuration, is covered by unit tests only, and the final run's merged
+Locator cells must be spot-checked at review.
 
 ### 2. The three splits
 
 The tmux commands under "Splits" above, with N = 1, 2, 3 (run ids
 `oct26md-split1` to `oct26md-split3`). At most two at a time. A run writes
-into an existing run folder without warning, so move the trial first:
+into an existing run folder without warning, so move the trial first (done
+2026-10-24: the trial is at `oct26md-split1-trial/`):
 
 ```bash
 mv $B/oct26md-split1 $B/oct26md-split1-trial
@@ -352,7 +432,11 @@ dated = Counter((r["Source"], r["Date"]) for r in rows if r["Date"].strip())
 print(f"rows: {len(rows)}; with a URL: {len(with_url)}")
 for (source, date), count in sorted(dated.items()):
     print(f"dated: {date} | {source} ({count} rows)")
-ok = not with_url and all(
+expected = any(
+    date == "06/10/2026" and "Sector Market Perspectives: Q4 2026" in source
+    for source, date in dated
+)
+ok = not with_url and expected and all(
     date == "06/10/2026" and "Sector Market Perspectives: Q4 2026" in source
     for source, date in dated
 )

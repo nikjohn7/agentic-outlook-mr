@@ -220,5 +220,32 @@ class LoadSourcesTest(unittest.TestCase):
         self.assertEqual("BlackRock", sources[0].firm)
 
 
+class PreflightModelDefaultTest(unittest.TestCase):
+    """The --model default must be engine-aware: the claude default name is off
+    the codex allowlist, so `--engine codex` without `--model` must not get it."""
+
+    def _resolve(self, argv: list[str]) -> tuple[str, str]:
+        from src import preflight
+        from src.run import resolve_engine_settings
+
+        args = preflight.build_parser().parse_args(["--sources", "s.csv", "--out-dir", "d", *argv])
+        return resolve_engine_settings(
+            args.engine, preflight._resolve_model(args.engine, args.model), args.effort
+        )
+
+    def test_bare_invocation_keeps_claude_sonnet(self) -> None:
+        self.assertEqual(("claude-sonnet-5-5", "low"), self._resolve([]))
+
+    def test_engine_codex_without_model_uses_codex_default(self) -> None:
+        from src.llm import DEFAULT_CODEX_MODEL
+
+        model, _ = self._resolve(["--engine", "codex"])
+        self.assertEqual(DEFAULT_CODEX_MODEL, model)
+
+    def test_explicit_model_passes_through(self) -> None:
+        model, _ = self._resolve(["--engine", "claude", "--model", "opus"])
+        self.assertEqual("opus", model)
+
+
 if __name__ == "__main__":
     unittest.main()

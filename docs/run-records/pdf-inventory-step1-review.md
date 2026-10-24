@@ -117,7 +117,8 @@ reviewed by the later PDF reader before the final batch is generated.
 
 ## Validation and reproduction
 
-- `.venv/bin/python -m unittest discover -s tests`: 506 tests, OK, 1 skipped.
+- `.venv/bin/python -m unittest discover -s tests`: 506 tests, OK, 1 skipped (at the Step 1 commit; later
+  steps raised the count to 517).
 - Exactly two new basic tests: optional PDF pairing and a synthetic graphics
   page retained with 100% text coverage, with a prose-page control.
 - All 30 source files matched the SHA-256 hashes in `intake-manifest.json`.

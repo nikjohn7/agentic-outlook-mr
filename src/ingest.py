@@ -47,7 +47,8 @@ FETCH_BROWSER_FALLBACK_STATUSES = frozenset({401, 403, 406, 429})
 # export using e.g. `Entity Name` / `Title` / `External link` loads without
 # editing. `firm`, `source`, and `url` are required; `date` and `local_file`
 # and pdf_file are optional (a missing date is "", a missing local_file
-# fetches the URL; pdf_file only records the paired PDF).
+# fetches the URL; pdf_file pairs a PDF with a Markdown local_file and is
+# rejected on any other row).
 _COLUMN_ALIASES = {
     "firm": ("firm", "entity name", "entity", "manager", "asset manager", "company", "provider"),
     "date": ("date", "published at", "published", "publish date"),
@@ -225,7 +226,8 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
     plain-text transcript (video sources ship as transcripts); `md` when it is a
     Markdown document; otherwise `html`.
     An optional `pdf_file` resolves to `pdf_path` for later PDF assistance;
-    it never changes the primary source type or snapshot.
+    it never changes the primary source type or snapshot, and is only valid on
+    a Markdown (`md`) row - see `_resolve_paired_pdf`.
     See `_resolve_local_file` for the local_file contract. Any second test set is
     a CSV of this family - pointing `--sources <path>` at it needs no code change.
     """
@@ -240,8 +242,11 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
         local_raw = row[header["local_file"]] if "local_file" in header else ""
         local_path = _resolve_local_file(local_raw, firm=firm, title=title)
         pdf_raw = row[header["pdf_file"]] if "pdf_file" in header else ""
-        pdf_path = _resolve_pdf_file(pdf_raw, firm=firm, title=title)
         resolved_url = resolve_url(url)
+        source_type = (
+            _local_source_type(local_path) if local_path else detect_source_type(resolved_url)
+        )
+        pdf_path = _resolve_paired_pdf(pdf_raw, source_type=source_type, firm=firm, title=title)
         sources.append(
             SourceRecord(
                 source_id=slugify(f"{firm} {title}"),
@@ -250,11 +255,7 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
                 source=title,
                 url=url,
                 resolved_url=resolved_url,
-                source_type=(
-                    _local_source_type(local_path)
-                    if local_path
-                    else detect_source_type(resolved_url)
-                ),
+                source_type=source_type,
                 local_path=local_path,
                 pdf_path=pdf_path,
             )
@@ -296,8 +297,10 @@ def _match_header_alias(header: str | None) -> str | None:
 def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRecord]:
     """Load the target-batch CSV (`Id`, `Firm`, `Title`, `Published At`,
     `Source Link`). It carries no `local_file` column, which resolves as empty
-    for every row (all URLs fetched) - loading is unchanged; the optional column
-    is honoured if a future target CSV adds it."""
+    for every row (all URLs fetched) - loading is unchanged; the optional
+    `local_file` and `pdf_file` columns are honoured if a future target CSV adds
+    them (same contracts as `load_pilot_sources`; preflight tries this loader
+    first, so a paired PDF must not be dropped here)."""
     rows = _read_csv(path)
     sources: list[SourceRecord] = []
     for index, row in enumerate(rows, start=1):
@@ -306,6 +309,12 @@ def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRec
         local_path = _resolve_local_file(row.get("local_file"), firm=firm, title=title)
         source_id = row["Id"] or slugify(f"{index} {firm} {title}")
         resolved_url = resolve_url(raw_url)
+        source_type = (
+            _local_source_type(local_path) if local_path else detect_source_type(resolved_url)
+        )
+        pdf_path = _resolve_paired_pdf(
+            row.get("pdf_file"), source_type=source_type, firm=firm, title=title
+        )
         sources.append(
             SourceRecord(
                 source_id=str(source_id),
@@ -314,12 +323,9 @@ def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRec
                 source=title,
                 url=raw_url,
                 resolved_url=resolved_url,
-                source_type=(
-                    _local_source_type(local_path)
-                    if local_path
-                    else detect_source_type(resolved_url)
-                ),
+                source_type=source_type,
                 local_path=local_path,
+                pdf_path=pdf_path,
             )
         )
     return sources
@@ -731,6 +737,26 @@ def _resolve_pdf_file(pdf_file: str | None, *, firm: str, title: str) -> Path | 
     if path.suffix.lower() != ".pdf":
         raise ValueError(f"pdf_file '{raw}' for source '{firm} - {title}' must be a .pdf")
     return path
+
+
+def _resolve_paired_pdf(
+    pdf_file: str | None, *, source_type: str, firm: str, title: str
+) -> Path | None:
+    """Resolve `pdf_file` for a row whose primary source type is known.
+
+    Only the Markdown + PDF mode reads a paired PDF (`create_snapshot` reads it
+    for `md` rows alone), so a `pdf_file` on a pdf/txt/html row is a hard error
+    rather than a path that is validated, never read, and yet still handed to
+    the page check."""
+    pdf_path = _resolve_pdf_file(pdf_file, firm=firm, title=title)
+    if pdf_path is not None and source_type != "md":
+        raise ValueError(
+            f"pdf_file '{(pdf_file or '').strip()}' for source '{firm} - {title}' "
+            f"is only supported with a Markdown (.md) local_file; this row's "
+            f"source type is '{source_type}'. Clear pdf_file or point local_file "
+            f"at the Markdown document"
+        )
+    return pdf_path
 
 
 def _copy_pdf(source: SourceRecord, output_dir: Path, *, downloader=None) -> Path:
