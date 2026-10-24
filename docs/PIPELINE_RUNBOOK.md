@@ -221,6 +221,21 @@ Operational rules (learned on the 98-row batch):
 
 ### 2.4 After each split finishes
 
+**Markdown batches: page check** (no model calls). A Markdown conversion has no
+pages; the model works them out from the converter's kept page footers. Check
+every quote against the paired PDF (the split CSV's `pdf_file` column) and keep
+a page only when the quote is found on exactly one page of the PDF text;
+otherwise the page is removed (chart/table names kept) with a reviewer note.
+Writes new files, so the Markdown baseline stays untouched; the page-checked
+`output.csv` in `pagecheck/` is what combine/reconcile should read.
+
+```bash
+.venv/bin/python -m src.pagecheck \
+  --output <batch>/<run-id>/output.csv \
+  --sources <batch>/splits/split-N.csv \
+  --out-dir <batch>/<run-id>/pagecheck
+```
+
 Run the digest step (1 LLM call per source; feeds the firm pages later):
 
 ```bash
