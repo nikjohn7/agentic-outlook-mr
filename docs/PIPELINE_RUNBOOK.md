@@ -73,8 +73,8 @@ the rubric in `src/confidence.py`) and no model ever invents a taxonomy label
   accepted, case-insensitive): **Firm** (`Firm`/`Entity Name`/`Manager`/…),
   **Title** (`Title`/`Source`/`Document Title`), **URL**
   (`Source Link`/`URL`/`Link`/`External link`). Optional: `Date` (ignored —
-  dates come only from the documents themselves, client decision 11) and
-  `local_file`.
+  dates come only from the documents themselves, client decision 11),
+  `local_file` and `pdf_file` (section 1.7).
 - Drop the file, under the client's original name, into `excel-file/`
   (canonical received copy — never edited).
 
@@ -96,8 +96,8 @@ Copy the received CSV into the batch folder and add a `local_file` column:
 
 - For any source that cannot be fetched (paywalled, bot-blocked, link-rot) or
   that the client supplied as a file, place the file under
-  `<batch>/manual-sources/` and put its path in `local_file`. PDFs and `.txt`
-  transcripts are both supported. When `local_file` is set the URL is kept for
+  `<batch>/manual-sources/` and put its path in `local_file`. PDFs, `.txt`
+  transcripts and Markdown (`.md`) are supported. When `local_file` is set the URL is kept for
   the output row but never fetched.
 - The wired copy is named `<original name> (with local_file).csv` and is the
   single source of truth for the batch.
@@ -143,6 +143,32 @@ Hard cap: **≤20 sources per run**; production practice is 10. Split
 the arbiter see the whole firm) into `<batch>/splits/split-N.csv`, keeping
 grouped companions together.
 
+### 1.7 Markdown + PDF sources
+
+When the client supplies each document as Markdown plus the original PDF, the
+source CSV needs both columns on every row: `local_file` (the `.md`, read as
+the document) and `pdf_file` (the paired `.pdf`). Paths are relative to the
+repo root; a missing file or a `pdf_file` that is not a `.pdf` stops the load.
+
+In a run, each such source is read as its Markdown text plus only the PDF
+pages flagged by a deterministic inventory (graphics-heavy pages, or pages
+whose words are under 90% covered by the Markdown). Those pages are read as
+rendered pages in `pdf:` chunks after the Markdown chunks, and their quotes
+are validated against the PDF only (Markdown quotes against the Markdown
+only). A call read from the PDF ends its Locator with `(read from PDF)`.
+
+Preview the flagged pages before a run (no model calls):
+
+```bash
+.venv/bin/python -m src.pdfinventory \
+  --sources <batch>/splits/split-N.csv \
+  --out <batch>/pdf-inventory
+```
+
+It writes `pdf-inventory.csv` (one row per PDF page, with every measure) and
+`pdf-inventory-summary.md` (flagged pages per document). Every row must have a
+Markdown `local_file` and a `pdf_file`.
+
 ---
 
 ## 2. DURING the run
@@ -177,13 +203,15 @@ Operational rules (learned on the 98-row batch):
 
 ### 2.2 What one run does internally (per source)
 
-1. **Ingest** (`src/ingest.py`) — detect type (PDF / HTML / txt); fetch with
+1. **Ingest** (`src/ingest.py`) — detect type (PDF / HTML / txt / md); fetch with
    retries and a browser fallback for blocked pages; visual-heavy HTML is
    printed to PDF headlessly so charts are readable; image-only PDF pages are
    OCR'd; scrambled text layers detected; per-page snapshots + chunking;
    document date extracted (HTML via htmldate; PDF first-page worded-date
    scan; strict DD/MM/YYYY or blank — CSV dates and PDF metadata never used).
    An ingest failure becomes an `ingest_error` failure row; the run continues.
+   A Markdown source with a `pdf_file` also gets `pdf:` chunks for its flagged
+   PDF pages (section 1.7).
 2. **Analyze** (per chunk, rolling `memory.md`) — the extraction model
    proposes candidate calls: taxonomy leaf, view (O/N/U/UNCERTAIN), basis
    (stated / forecast_delta / inferred), multi-span evidence quotes, page.
@@ -207,27 +235,37 @@ Operational rules (learned on the 98-row batch):
    `review_flag`. Never an LLM self-score.
 8. **Assemble** (`src/assemble.py`) — cross-leaf dedup; same-view dedup folds
    the losing citation into the kept row (`" |||| "`-separated labeled
-   segments); O-vs-U sibling tripwire; writes the four run files.
+   segments); O-vs-U sibling tripwire; page check (rows whose source has a
+   `pdf_file`: each Markdown quote keeps a page only when it is found on
+   exactly one page of the PDF text, otherwise the page is removed with a
+   reviewer note; a `(read from PDF)` passage keeps its page); writes the run
+   files.
 
 ### 2.3 Per-run outputs (in `<batch>/<run-id>/`)
 
 - `output.csv` — kept calls: the 10 workbook columns + `confidence`, `band`,
-  `review_flag`, `basis`, `checker_strength`, `call_language`, `quote_match`.
+  `review_flag`, `basis`, `checker_strength`, `call_language`, `quote_match`,
+  `evidence_origin` (`markdown` | `pdf` | `both`, from the row's retained
+  passages; internal only).
 - `failures.csv` — internal: every dropped candidate with reason codes.
 - `failures-client.csv` — the client-facing subset, plain-language "What
   happened" labels, grouped and sorted most-important-first.
+- `output-client.csv/.xlsx`: the client twin (section 3.4).
 - `manifest.md` — per-source counts, tier counts, run config (the manifest
-  records exactly which models ran).
+  records exactly which models ran). With paired PDFs it also lists PDF chunks
+  and flagged pages per source, kept rows by evidence origin, and a
+  `## Page check (paired PDFs)` section.
+- `pagecheck-audit.csv`: paired-PDF runs only: one row per checked quote
+  with its outcome (`confirmed`, `corrected`, `added`, `ambiguous`,
+  `not_found`, `pdf_read`, `no_pdf`).
 
 ### 2.4 After each split finishes
 
-**Markdown batches: page check** (no model calls). A Markdown conversion has no
-pages; the model works them out from the converter's kept page footers. Check
-every quote against the paired PDF (the split CSV's `pdf_file` column) and keep
-a page only when the quote is found on exactly one page of the PDF text;
-otherwise the page is removed (chart/table names kept) with a reviewer note.
-Writes new files, so the Markdown baseline stays untouched; the page-checked
-`output.csv` in `pagecheck/` is what combine/reconcile should read.
+The page check for Markdown + PDF sources runs inside every run (section 2.2,
+step 8), so the run's own `output.csv` is what combine reads. For a Markdown
+run made before the check was built in (code before `c9fb437`, e.g. the
+October split 1 trial), the standalone CLI writes a page-checked copy (no
+model calls; never edits the run):
 
 ```bash
 .venv/bin/python -m src.pagecheck \
@@ -380,10 +418,19 @@ the export with that folded file:
 ### 3.5 Optional reader deliverable — firm pages + Word binder
 
 ```bash
-.venv/bin/python -m src.summarize firmpages --digests <batch>/digests --out-dir <batch>/firmpages   # 1 call per firm
-.venv/bin/python -m src.summarize bind --firmpages <batch>/firmpages --out <combined>/firm-summaries.docx
+# 1 call per firm; --digests is one flat folder of every split's digest JSONs.
+.venv/bin/python -m src.summarize firmpages --digests <batch>/digests \
+  --outputs <combined>/output.csv \
+  --crosscheck <combined>/firmpages-crosscheck-empty.csv \
+  --out-dir <batch>/firmpages
+.venv/bin/python -m src.summarize bind --pages <batch>/firmpages --out <combined>/firm-summaries.docx
 ```
 
+`firmpages` refuses a firm with several digests unless `--crosscheck` is
+given. Reconcile has already settled each firm and asset, so pass a
+header-only file (the July master precedent):
+`printf 'Firm,Sub-Asset Class,bucket,agent_verdict,note,needs_human\n' > <combined>/firmpages-crosscheck-empty.csv`.
+Any pair reconcile kept both of shows on the firm page as a divergence note.
 (Digests per split must exist first; rebuild firm pages if reconcile changed
 the combined output.)
 

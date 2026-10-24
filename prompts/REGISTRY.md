@@ -241,6 +241,28 @@ convention, the convention-blind checker failed it as a sign mismatch.
 Checker independence is preserved: it still never sees the source and judges
 only the presented fields; it now judges them under the same law.
 
+### `analyze_chunk.md` input - Markdown + PDF chunks (2026-10-23/24)
+
+The prompt file is unchanged (still v1.6); the chunk content appended to it
+(`src/run.py` `_chunk_content`, code-built) changed twice:
+
+- 2026-10-23: a Markdown chunk is introduced as a plain-text rendering of a
+  Markdown conversion whose charts, grids, dots and arrows may be missing and
+  whose multi-column pages may be interleaved, with "Never infer a view from a
+  visual you cannot see in the text."
+- 2026-10-24 (PDF pass Step 2): a Markdown source with a paired PDF also gets
+  `pdf:` chunks for its flagged pages. Each is given as PDF pages to open and
+  read as rendered pages (the same wording as a native PDF chunk), with the
+  note that these pages were flagged because the Markdown may have lost their
+  graphics: report what the charts, grids and tables show; calls already taken
+  from the text are merged downstream. Candidates keep the id of the chunk
+  actually read, not the model's echo.
+
+The checker's input changed with it (`check_candidates.md` unchanged): for such
+a source `native_source_path` is the paired PDF, and only `pdf:` candidates get
+its page image and PDF-text routing; Markdown candidates are routed on the
+Markdown text with no page image.
+
 ### `analyze_chunk.md` - v1.6 (2026-07-06)
 
 v1.6 (post-pilot-06, country-granularity inference): adds a granularity rule to
