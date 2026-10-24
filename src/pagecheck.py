@@ -49,8 +49,24 @@ from src.ingest import PROJECT_ROOT
 
 NOTE_PREFIX = "Page check:"
 
-# A cited page or page range anywhere in a locator: "p.12", "p. 4-5", "pp.3-4".
-_PAGE_TOKEN = re.compile(r"\bpp?\.\s*(\d+)(?:\s*[-–]\s*(\d+))?")
+# A page marker, any case: "p.12", "pp. 4", "P.3", "page 3", "pages 3", "p3".
+# Not after a letter, digit or "&", so "S&P 500" and "up 5" cite nothing.
+_PAGE_MARK = r"(?<![\w&])(?:pages?\s*|pp?\.\s*|pp?(?=\d))"
+# A cited page or page range: "p.12", "p. 4-5", "pp.3-4", "p.3-p.4", "p.3 - p.9".
+# A range end needs an unspaced dash or its own marker, so the number in
+# "p.3 - 5 year yields" is title text, not page 5.
+_PAGE_TOKEN = re.compile(
+    rf"{_PAGE_MARK}(\d+)(?:[-–—](?:{_PAGE_MARK})?(\d+)|\s+[-–—]\s+{_PAGE_MARK}(\d+))?",
+    re.IGNORECASE,
+)
+# Quoted title text ("p.3 - 'Q3 p.7 recap'") never cites a page. A single
+# quote opens only after a non-word character and closes only before one, so
+# apostrophes ("Investors' outlook", "Asia's growth") are not quote marks.
+_QUOTED = re.compile(r"(?<!\w)'.*?'(?!\w)|\"[^\"]*\"|‘[^’]*’|“[^”]*”")
+# Separators left behind inside or after the locator once page tokens go.
+_TRAILING_SEP = re.compile(r"[\s,;:\-–]+$")
+# A range end past this is a year or a figure ("p.2-2026"), not a page.
+_MAX_PAGE = 999
 # Separators left dangling once the page token is removed: "p.12 - 'Table'".
 _LEADING_SEP = re.compile(r"^[\s,;:\-–]+")
 # A quote's spans: the model joins non-adjacent passages with an ellipsis.
@@ -97,13 +113,29 @@ def load_pdf_pages(path: Path) -> list[str]:
         return [_key(page.extract_text() or "") for page in pdf.pages]
 
 
+def _page_matches(locator: str) -> list[re.Match[str]]:
+    """Page tokens outside quoted title text, in order."""
+    locator = locator or ""
+    quoted = [m.span() for m in _QUOTED.finditer(locator)]
+    return [
+        m for m in _PAGE_TOKEN.finditer(locator)
+        if not any(start <= m.start() < end for start, end in quoted)
+    ]
+
+
 def cited_pages(locator: str) -> tuple[int, ...]:
-    match = _PAGE_TOKEN.search(locator or "")
-    if not match:
-        return ()
-    start = int(match.group(1))
-    end = int(match.group(2)) if match.group(2) else start
-    return tuple(range(start, end + 1)) if end >= start else (start,)
+    """Every page a locator cites, ranges expanded, in order: "p.3-5" ->
+    (3, 4, 5); "p.4; p.7" -> (4, 7). Shared by the page check and assembly's
+    `pdf:` chunk page guard, so both read a locator the same way."""
+    pages: list[int] = []
+    for match in _page_matches(locator):
+        start = int(match.group(1))
+        end_text = match.group(2) or match.group(3)
+        end = int(end_text) if end_text else start
+        if end < start or end > _MAX_PAGE:
+            end = start
+        pages.extend(range(start, end + 1))
+    return tuple(dict.fromkeys(pages))
 
 
 def found_pages(evidence: str, pages: list[str]) -> tuple[int, ...]:
@@ -116,10 +148,20 @@ def found_pages(evidence: str, pages: list[str]) -> tuple[int, ...]:
 
 
 def strip_page(locator: str) -> str:
-    """The locator without its page token: "p.12 - 'Rankings' table" ->
-    "'Rankings' table"; a bare "p.12" -> ""."""
-    text = _PAGE_TOKEN.sub("", locator or "", count=1)
-    return _LEADING_SEP.sub("", text).strip()
+    """The locator without its page tokens (every unquoted one, so a corrected
+    page never sits beside a stale one): "p.12 - 'Rankings' table" ->
+    "'Rankings' table"; "p.7; p.8 - 'Table'" -> "'Table'"; "p.12" -> ""."""
+    locator = locator or ""
+    matches = _page_matches(locator)
+    if not matches:
+        return locator.strip()
+    text, cursor = "", 0
+    for match in matches:
+        text += locator[cursor : match.start()]
+        cursor = match.end()
+    text += locator[cursor:]
+    text = _TRAILING_SEP.sub("", _LEADING_SEP.sub("", text))
+    return re.sub(r"\s{2,}", " ", text).strip()
 
 
 def with_page(locator: str, page: int) -> str:

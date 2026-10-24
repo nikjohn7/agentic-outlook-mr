@@ -122,7 +122,7 @@ def run_scout(
     *,
     sources_label: str = "",
     engine: str = DEFAULT_ENGINE,
-    model: str | None = DEFAULT_MODEL,
+    model: str | None = None,
     effort: str = DEFAULT_EFFORT,
     runner=None,
 ) -> ScoutOutcome:
@@ -131,7 +131,11 @@ def run_scout(
     Returns the notes-file text, the report text, the accepted groups, and any
     guard warnings. Firms with a single source are filtered out; if none remain,
     no LLM call is made and an empty notes file (comment only) is returned.
+
+    The model default is engine-aware (`_resolve_model`); claude needs an
+    explicit model and raises ValueError without one.
     """
+    model, effort = resolve_engine_settings(engine, _resolve_model(engine, model), effort)
     firms = multi_source_firms(sources)
     if not firms:
         notes = _empty_notes("no firm in this source list has two or more sources")

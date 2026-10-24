@@ -1075,6 +1075,35 @@ class PairedPdfChunkTextTest(unittest.TestCase):
         )
         self.assertEqual(1, len(verified))  # the page image is the only rescue
 
+    def test_pdf_pages_are_not_reread_without_a_pdf_chunk(self) -> None:
+        # A paired PDF with no flagged pages has no `pdf:` chunk to slice for.
+        source = _md_source("nb-aao", "Neuberger Berman", "Asset Allocation Outlook")
+
+        def ingested(src, work):
+            item = _ingested_md(src, work, "markdown body", "pdf body")
+            item.chunks[:] = [c for c in item.chunks if c.chunk_id == MD_CHUNK_ID]
+            return item
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            out = json.dumps({"summary": "no views", "candidates": []})
+            return subprocess.CompletedProcess(command, 0, stdout=out, stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.run.create_snapshot", side_effect=ingested), patch(
+                "src.run._pdf_page_texts"
+            ) as page_texts:
+                run_pipeline(
+                    sources=[source],
+                    run_id="no-pdf-chunk",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    evidence_gate=False,
+                    runner=runner,
+                    out_root=Path(temp_dir) / "out",
+                )
+        page_texts.assert_not_called()
+
 
 class QuoteVisualVerifierTest(unittest.TestCase):
     def test_malformed_llm_response_fails_closed_and_updates_stats(self) -> None:
