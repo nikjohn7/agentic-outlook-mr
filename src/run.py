@@ -5,9 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 
-from src.assemble import FailureRecord, assemble_candidates, write_run_outputs
+from src.assemble import (
+    FailureRecord,
+    assemble_candidates,
+    pdf_chunk_pages,
+    validation_key,
+    write_run_outputs,
+)
 from src.confidence import evidence_context, evidence_passes
 from src.ingest import (
     IngestedSource,
@@ -191,8 +198,27 @@ def run_pipeline(
             )
             continue
         snapshot_text = ingested.snapshot_text_path.read_text(encoding="utf-8")
+        pdf_text = (
+            ingested.pdf_snapshot_text_path.read_text(encoding="utf-8")
+            if ingested.pdf_snapshot_text_path is not None
+            else ""
+        )
         for chunk in ingested.chunks:
-            snapshots[(source.source_id, chunk.chunk_id)] = snapshot_text
+            chunk_pages = pdf_chunk_pages(chunk.chunk_id)
+            if not chunk_pages:
+                snapshots[(source.source_id, chunk.chunk_id)] = snapshot_text
+                continue
+            # A paired-PDF chunk validates against the PDF only, keyed per chunk
+            # (assemble.validation_key): its text, pages, page count and path.
+            key = (source.source_id, chunk.chunk_id)
+            snapshots[key] = pdf_text
+            page_counts[key] = ingested.pdf_page_count
+            native_source_paths[key] = Path(ingested.pdf_native_path)
+            visual_pages[key] = set(chunk_pages)
+            if ingested.pdf_scrambled_pages:
+                scrambled_pages[key] = set(ingested.pdf_scrambled_pages)
+            if ingested.pdf_ocr_pages:
+                ocr_pages[key] = set(ingested.pdf_ocr_pages)
         if ingested.page_count is not None:
             page_counts[source.source_id] = ingested.page_count
         native_source_paths[source.source_id] = Path(ingested.native_source_path)
@@ -250,6 +276,16 @@ def run_pipeline(
                 snapshot_text=snapshot_text,
                 visual_pages=source_visual_pages,
             )
+            pdf_context = None
+            if ingested.pdf_native_path is not None:
+                visual_unverified |= _pdf_visual_unverified_candidate_indexes(
+                    candidates, snapshot_text=pdf_text, visual_pages=visual_pages
+                )
+                pdf_context = (
+                    pdf_text,
+                    frozenset(ingested.pdf_scrambled_pages),
+                    frozenset(ingested.pdf_ocr_pages),
+                )
             source_verdicts, checker_failure = _check_candidates(
                 source,
                 candidates,
@@ -259,12 +295,15 @@ def run_pipeline(
                 model=checker_model,
                 effort=checker_effort,
                 runner=runner,
-                native_source_path=ingested.native_source_path,
+                # A paired PDF is the page image the checker can open; only
+                # `pdf:` candidates are routed to it (pdf_context).
+                native_source_path=ingested.pdf_native_path or ingested.native_source_path,
                 visual_unverified=visual_unverified,
                 checker_context=checker_context,
                 snapshot_text=snapshot_text,
                 scrambled_pages=frozenset(scrambled_pages.get(source.source_id, set())),
                 ocr_pages=frozenset(ocr_pages.get(source.source_id, set())),
+                pdf_context=pdf_context,
             )
             verdicts.update(
                 {offset + local_index: verdict for local_index, verdict in source_verdicts.items()}
@@ -283,6 +322,10 @@ def run_pipeline(
                 "scrambled_pages": list(ingested.scrambled_pages),
                 "ocr_pages": list(ingested.ocr_pages),
                 "ocr_note": ingested.ocr_note,
+                "pdf_chunk_count": sum(
+                    bool(pdf_chunk_pages(chunk.chunk_id)) for chunk in ingested.chunks
+                ),
+                "flagged_pages": list(ingested.flagged_pages),
             }
         )
 
@@ -419,8 +462,13 @@ def analyze_source(
             _append_memory(memory_path, chunk.chunk_id, f"({reason}; chunk skipped)", [])
             continue
 
-        candidates.extend(call_result.candidates)
-        _append_memory(memory_path, chunk.chunk_id, call_result.summary, call_result.candidates)
+        # The chunk id routes validation (Markdown vs paired PDF), so it is the
+        # chunk actually read, never the id the model echoed.
+        chunk_candidates = [
+            replace(candidate, chunk_id=chunk.chunk_id) for candidate in call_result.candidates
+        ]
+        candidates.extend(chunk_candidates)
+        _append_memory(memory_path, chunk.chunk_id, call_result.summary, chunk_candidates)
 
     return candidates, failures
 
@@ -441,6 +489,7 @@ def _check_candidates(
     snapshot_text: str = "",
     scrambled_pages: frozenset[int] = frozenset(),
     ocr_pages: frozenset[int] = frozenset(),
+    pdf_context: tuple[str, frozenset[int], frozenset[int]] | None = None,
 ) -> tuple[dict[int, CheckVerdict], FailureRecord | None]:
     """One second-reader call for all of a source's candidates.
 
@@ -458,6 +507,10 @@ def _check_candidates(
     (`evidence_context`) or a visual fallback (`context_unreliable: true`,
     reusing native_source_path + the cited page). Routing never fails a run or
     blocks a candidate.
+
+    pdf_context is (PDF text, scrambled pages, OCR pages) for a Markdown source
+    with a paired PDF: `pdf:` candidates are routed on it with the PDF page
+    image, Markdown candidates on the Markdown text with no page image.
     """
     native_pdf = _native_pdf_path(native_source_path)
     inputs = {
@@ -478,13 +531,14 @@ def _check_candidates(
                 "reasoning": candidate.reasoning,
                 "basis": candidate.basis,
                 "text_unverifiable_visual": index in (visual_unverified or set()),
-                **_context_fields(
+                **_candidate_context_fields(
                     candidate,
                     enabled=checker_context,
                     snapshot_text=snapshot_text,
                     scrambled_pages=scrambled_pages,
                     ocr_pages=ocr_pages,
                     native_pdf_available=native_pdf is not None,
+                    pdf_context=pdf_context,
                 ),
             }
             for index, candidate in enumerate(candidates)
@@ -529,6 +583,43 @@ def _visual_unverified_candidate_indexes(
         if check.visual_unverified_by_text:
             indexes.add(index)
     return indexes
+
+
+def _pdf_visual_unverified_candidate_indexes(
+    candidates: list[CandidateCall],
+    *,
+    snapshot_text: str,
+    visual_pages: dict,
+) -> set[int]:
+    """Indexes of `pdf:` candidates whose table/visual evidence only the page
+    image can verify (their chunk's pages, against the PDF text)."""
+    indexes: set[int] = set()
+    for index, candidate in enumerate(candidates):
+        if not pdf_chunk_pages(candidate.chunk_id):
+            continue
+        pages = set(visual_pages.get(validation_key(candidate), ()))
+        if _visual_unverified_candidate_indexes(
+            [candidate], snapshot_text=snapshot_text, visual_pages=pages
+        ):
+            indexes.add(index)
+    return indexes
+
+
+def _candidate_context_fields(
+    candidate: CandidateCall,
+    *,
+    pdf_context: tuple[str, frozenset[int], frozenset[int]] | None,
+    native_pdf_available: bool,
+    **fields,
+) -> dict[str, object]:
+    """_context_fields on the candidate's own route when a paired PDF is in play."""
+    if pdf_context is None:
+        return _context_fields(candidate, native_pdf_available=native_pdf_available, **fields)
+    if pdf_chunk_pages(candidate.chunk_id):
+        text, scrambled, ocr = pdf_context
+        fields.update(snapshot_text=text, scrambled_pages=scrambled, ocr_pages=ocr)
+        return _context_fields(candidate, native_pdf_available=native_pdf_available, **fields)
+    return _context_fields(candidate, native_pdf_available=False, **fields)
 
 
 def _native_pdf_path(native_source_path: str | Path | None) -> Path | None:
@@ -748,7 +839,8 @@ def _resolve_groups(
 
 def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
     """Render the chunk the model must read: native PDF pages, or HTML text."""
-    if ingested.source.source_type == "pdf" or ingested.printed_pdf:
+    paired_pdf = bool(pdf_chunk_pages(chunk.chunk_id))
+    if ingested.source.source_type == "pdf" or ingested.printed_pdf or paired_pdf:
         pages = chunk.locator.replace("p.", "")
         capture_note = (
             f"(This PDF is a print-to-PDF capture of the web page at "
@@ -756,6 +848,13 @@ def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
             if ingested.printed_pdf
             else ""
         )
+        if paired_pdf:
+            capture_note = (
+                "(These pages were flagged because the Markdown conversion of this "
+                "document may have lost their graphics: report what the charts, "
+                "grids and tables show. Calls already taken from the text are "
+                "merged downstream.)\n\n"
+            )
         return (
             f"This chunk is pages {pages} of the PDF file at:\n"
             f"`{chunk.source_path}`\n\n"

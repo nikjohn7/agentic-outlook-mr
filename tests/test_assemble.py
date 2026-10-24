@@ -1210,6 +1210,87 @@ class StatedBeatsImpliedTest(unittest.TestCase):
         )
 
 
+class PairedPdfValidationTest(unittest.TestCase):
+    """A Markdown source with a paired PDF: Markdown candidates validate on the
+    Markdown only, `pdf:` candidates on the PDF and their chunk's pages."""
+
+    MD_KEY = ("source-1", "char:0-8000")
+    PDF_KEY = ("source-1", "pdf:p3-4")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1", firm="Allianz Global Investors", date="",
+                source="House View Q4 2026", url="",
+            )
+        }
+
+    def _assemble(self, candidates, calls):
+        def verifier(candidate, source, native_path):
+            calls.append(native_path)
+            return "present_verbatim" if native_path and native_path.suffix == ".pdf" else "absent"
+
+        return assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={
+                self.MD_KEY: _long_snapshot("EM equities are favored in the outlook."),
+                self.PDF_KEY: _long_snapshot("Emerging markets equities: overweight grid."),
+            },
+            page_counts={self.PDF_KEY: 12},
+            visual_pages={self.PDF_KEY: {3, 4}},
+            quote_visual_verifier=verifier,
+            native_source_paths={
+                "source-1": Path("/tmp/house-view.md"),
+                self.PDF_KEY: Path("/tmp/house-view.pdf"),
+            },
+        )
+
+    def test_markdown_quote_failing_text_check_is_not_rescued_by_pdf(self) -> None:
+        calls: list[Path | None] = []
+        result = self._assemble(
+            [_candidate(chunk_id="char:0-8000", locator="p.3", evidence_quote="only on the PDF page")],
+            calls,
+        )
+
+        self.assertEqual([], result.output_rows)
+        self.assertEqual([Path("/tmp/house-view.md")], calls)
+        self.assertEqual(["quote_not_found_visual"], [f.reason_code for f in result.failures])
+
+    def test_pdf_candidate_citing_page_outside_its_chunk_fails(self) -> None:
+        calls: list[Path | None] = []
+        result = self._assemble(
+            [_candidate(chunk_id="pdf:p3-4", locator="p.9",
+                        evidence_quote="Emerging markets equities: overweight grid.")],
+            calls,
+        )
+
+        self.assertEqual([], result.output_rows)
+        self.assertEqual([], calls)
+        self.assertEqual(["quote_not_found"], [f.reason_code for f in result.failures])
+        self.assertIn("p.3-4", result.failures[0].message)
+
+    def test_matching_markdown_and_pdf_calls_merge_into_one_row(self) -> None:
+        calls: list[Path | None] = []
+        result = self._assemble(
+            [
+                _candidate(chunk_id="char:0-8000", locator="char:0-8000"),
+                _candidate(chunk_id="pdf:p3-4", locator="p.3",
+                           evidence_quote="Emerging markets equities: overweight grid."),
+            ],
+            calls,
+        )
+
+        self.assertEqual(1, len(result.output_rows))
+        commentary = result.output_rows[0]["Full Commentary"]
+        self.assertIn("EM equities are favored in the outlook.", commentary)
+        self.assertIn("Emerging markets equities: overweight grid.", commentary)
+        self.assertEqual(["duplicate_same_view"], [f.reason_code for f in result.failures])
+
+
 def _verdict(**overrides: object) -> CheckVerdict:
     values = {
         "index": 0,

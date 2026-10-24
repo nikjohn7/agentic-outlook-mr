@@ -25,6 +25,8 @@ PILOT_CSV = PROJECT_ROOT / "prev-excel" / "pilot.csv"
 TARGET_SOURCES_CSV = PROJECT_ROOT / "excel-file" / "Target Ingestion List.csv"
 
 PDF_PAGE_CHUNK_SIZE = 5
+# Chunk-id prefix for a Markdown source's paired-PDF pages (flagged pages only).
+PDF_CHUNK_PREFIX = "pdf:"
 HTML_CHAR_CHUNK_SIZE = 8000
 MAX_SOURCES_PER_RUN = 20
 
@@ -195,6 +197,15 @@ class IngestedSource:
     scrambled_pages: tuple[int, ...] = ()  # 1-indexed pages whose text layer is column-interleaved
     ocr_pages: tuple[int, ...] = ()  # 1-indexed pages detected as image-only / low text layer
     ocr_note: str = ""  # empty when no OCR issue; otherwise applied/skipped details
+    # Markdown source with a paired PDF: the copied PDF, its extracted text and
+    # the pages read as `pdf:` chunks. The PDF page sets stay separate from the
+    # source-level fields above, which describe the Markdown read.
+    pdf_native_path: Path | None = None
+    pdf_snapshot_text_path: Path | None = None
+    pdf_page_count: int | None = None
+    flagged_pages: tuple[int, ...] = ()
+    pdf_scrambled_pages: tuple[int, ...] = ()
+    pdf_ocr_pages: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -438,6 +449,13 @@ def create_snapshot(
     ocr_note = ""
     fetched_via = ""
     document_date = ""
+    pdf_native_path: Path | None = None
+    pdf_snapshot_path: Path | None = None
+    pdf_page_count: int | None = None
+    flagged: tuple[int, ...] = ()
+    pdf_scrambled: tuple[int, ...] = ()
+    pdf_ocr: tuple[int, ...] = ()
+    pdf_ocr_note = ""
     if source.source_type in ("txt", "md"):
         # A local text document - a plain-text transcript (video sources) or a
         # Markdown conversion: the text IS the document, so it doubles as the
@@ -452,6 +470,21 @@ def create_snapshot(
         snapshot_path.write_text(snapshot_text, encoding="utf-8")
         chunks = _html_chunks(snapshot_path, len(snapshot_text))
         document_date = extract_pdf_text_date(snapshot_text)
+        if source.source_type == "md" and source.pdf_path is not None:
+            # The paired PDF's flagged pages are read as rendered pages after
+            # the Markdown chunks, so the rolling memory already holds the
+            # text's calls. Imported here: pdfinventory imports this module.
+            from src.pdfinventory import flagged_pages
+
+            pdf_native_path = output_dir / source.pdf_path.name
+            shutil.copy2(source.pdf_path, pdf_native_path)
+            pdf_text, pdf_page_count, pdf_scrambled, pdf_ocr, pdf_ocr_note = _extract_pdf_text(
+                pdf_native_path, ocr_runner=ocr_runner
+            )
+            pdf_snapshot_path = output_dir / "pdf_snapshot.txt"
+            pdf_snapshot_path.write_text(pdf_text, encoding="utf-8")
+            flagged = flagged_pages(native_path, pdf_native_path)
+            chunks += _flagged_pdf_chunks(pdf_native_path, flagged)
     elif source.source_type == "pdf":
         native_path = _copy_pdf(source, output_dir, downloader=downloader)
         snapshot_text, page_count, scrambled_pages, ocr_pages, ocr_note = _extract_pdf_text(
@@ -514,6 +547,12 @@ def create_snapshot(
                 "ocr_pages": list(ocr_pages),
                 "ocr_note": ocr_note,
                 "fetched_via": fetched_via,
+                "pdf_file": str(pdf_native_path) if pdf_native_path else "",
+                "pdf_page_count": pdf_page_count,
+                "flagged_pages": list(flagged),
+                "pdf_scrambled_pages": list(pdf_scrambled),
+                "pdf_ocr_pages": list(pdf_ocr),
+                "pdf_ocr_note": pdf_ocr_note,
             },
             indent=2,
         ),
@@ -531,6 +570,12 @@ def create_snapshot(
         scrambled_pages=scrambled_pages,
         ocr_pages=ocr_pages,
         ocr_note=ocr_note,
+        pdf_native_path=pdf_native_path,
+        pdf_snapshot_text_path=pdf_snapshot_path,
+        pdf_page_count=pdf_page_count,
+        flagged_pages=flagged,
+        pdf_scrambled_pages=pdf_scrambled,
+        pdf_ocr_pages=pdf_ocr,
     )
 
 
@@ -880,6 +925,30 @@ def _pdf_chunks(
         chunk_id = f"p{start}-{end}"
         chunks.append(Chunk(chunk_id=chunk_id, locator=f"p.{start}-{end}", source_path=path))
     return chunks
+
+
+def _flagged_pdf_chunks(
+    path: Path,
+    pages: tuple[int, ...],
+    *,
+    page_chunk_size: int = PDF_PAGE_CHUNK_SIZE,
+) -> list[Chunk]:
+    """`pdf:` chunks over consecutive runs of flagged pages, at most
+    page_chunk_size pages each."""
+    runs: list[list[int]] = []
+    for page in pages:
+        if runs and page == runs[-1][-1] + 1 and len(runs[-1]) < page_chunk_size:
+            runs[-1].append(page)
+        else:
+            runs.append([page])
+    return [
+        Chunk(
+            chunk_id=f"{PDF_CHUNK_PREFIX}p{run[0]}-{run[-1]}",
+            locator=f"p.{run[0]}-{run[-1]}",
+            source_path=path,
+        )
+        for run in runs
+    ]
 
 
 def _html_chunks(

@@ -904,6 +904,39 @@ class MarkdownIngestTest(unittest.TestCase):
         self.assertEqual("md", meta["source_type"])
         self.assertEqual(("08/10/2026", "md_text"), (ingested.source.date, meta["date_from"]))
 
+    def test_paired_pdf_adds_chunks_for_flagged_pages_after_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc = Path(temp_dir) / "house-view.md"
+            doc.write_text(self.BODY, encoding="utf-8")
+            pdf = Path(temp_dir) / "house-view.pdf"
+            pdf.write_bytes(b"%PDF-1.4 stub")
+            source = SourceRecord(
+                source_id="allianz-house-view", firm="Allianz Global Investors", date="",
+                source="House View Q4 2026", url="", resolved_url="", source_type="md",
+                local_path=doc, pdf_path=pdf,
+            )
+            work_dir = Path(temp_dir) / "work"
+            pdf_text = ("page text", 12, (5,), (12,), "")
+            with patch("src.ingest._extract_pdf_text", return_value=pdf_text), patch(
+                "src.pdfinventory.flagged_pages", return_value=(2, 4, 5, 6, 7, 8, 9, 12)
+            ):
+                ingested = create_snapshot(source, work_dir)
+            meta = json.loads((work_dir / source.source_id / "ingest_meta.json").read_text(encoding="utf-8"))
+            pdf_snapshot = ingested.pdf_snapshot_text_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            ["char:0-75", "pdf:p2-2", "pdf:p4-8", "pdf:p9-9", "pdf:p12-12"],
+            [c.chunk_id for c in ingested.chunks],
+        )
+        self.assertEqual("p.4-8", ingested.chunks[2].locator)
+        self.assertEqual(work_dir / source.source_id / "house-view.pdf", ingested.chunks[1].source_path)
+        self.assertEqual("page text", pdf_snapshot)
+        # PDF page issues stay off the source-level (Markdown) fields.
+        self.assertEqual(((), ()), (ingested.scrambled_pages, ingested.ocr_pages))
+        self.assertEqual(((5,), (12,)), (ingested.pdf_scrambled_pages, ingested.pdf_ocr_pages))
+        self.assertEqual(12, meta["pdf_page_count"])
+        self.assertEqual([2, 4, 5, 6, 7, 8, 9, 12], meta["flagged_pages"])
+
 
 if __name__ == "__main__":
     unittest.main()

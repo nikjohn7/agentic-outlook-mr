@@ -468,6 +468,27 @@ class _Selected:
     challenge_note: str = ""
 
 
+_PDF_CHUNK_ID = re.compile(r"pdf:p(\d+)-(\d+)")
+
+
+def pdf_chunk_pages(chunk_id: str) -> tuple[int, ...]:
+    """Pages of a Markdown source's paired-PDF chunk (`pdf:p4-5`); () otherwise."""
+    match = _PDF_CHUNK_ID.fullmatch(chunk_id)
+    if not match:
+        return ()
+    return tuple(range(int(match.group(1)), int(match.group(2)) + 1))
+
+
+def validation_key(candidate: CandidateCall) -> str | tuple[str, str]:
+    """Key into the per-source validation inputs (page count, scrambled / OCR /
+    visual pages, native path). A paired-PDF chunk is keyed per chunk, so a
+    Markdown candidate never sees the PDF's pages or path and a PDF candidate
+    never sees the Markdown's."""
+    if pdf_chunk_pages(candidate.chunk_id):
+        return (candidate.source_id, candidate.chunk_id)
+    return candidate.source_id
+
+
 def assemble_candidates(
     candidates: list[CandidateCall],
     *,
@@ -501,6 +522,9 @@ def assemble_candidates(
     visual_pages maps source_id -> pages from print-captured / visual-heavy
     sources where table/visual token misses should route to checker visual
     review instead of hard-failing on snapshot text.
+    A Markdown source's paired-PDF chunk keys all of these, and
+    native_source_paths, by (source_id, chunk_id) instead (validation_key); a
+    `pdf:` candidate citing a page outside its chunk fails.
 
     verdicts maps candidate list index -> checker verdict; None means the
     checker step is not in play (no caps), while a dict with a missing index
@@ -517,11 +541,24 @@ def assemble_candidates(
 
     for index, candidate in enumerate(candidates):
         snapshot_text = snapshots.get((candidate.source_id, candidate.chunk_id), "")
-        page_count = (page_counts or {}).get(candidate.source_id)
-        source_scrambled = frozenset((scrambled_pages or {}).get(candidate.source_id, ()))
-        source_ocr = frozenset((ocr_pages or {}).get(candidate.source_id, ()))
-        source_visual_pages = frozenset((visual_pages or {}).get(candidate.source_id, ()))
+        key = validation_key(candidate)
+        page_count = (page_counts or {}).get(key)
+        source_scrambled = frozenset((scrambled_pages or {}).get(key, ()))
+        source_ocr = frozenset((ocr_pages or {}).get(key, ()))
+        source_visual_pages = frozenset((visual_pages or {}).get(key, ()))
         verdict = (verdicts or {}).get(index)
+        chunk_pages = pdf_chunk_pages(candidate.chunk_id)
+        if chunk_pages and _cited_page(candidate.locator) not in chunk_pages:
+            # Checked before scoring, so the visual verifier never rescues it.
+            failures.append(
+                FailureRecord.from_candidate(
+                    HARD_FAILURE_QUOTE,
+                    f"cited page is outside the PDF pages this chunk was given "
+                    f"(p.{chunk_pages[0]}-{chunk_pages[-1]})",
+                    candidate,
+                )
+            )
+            continue
         try:
             scored.append(
                 score_candidate(
@@ -543,7 +580,7 @@ def assemble_candidates(
             message = getattr(exc, "message", reason)
             if reason == HARD_FAILURE_QUOTE and quote_visual_verifier is not None:
                 source_info = sources.get(candidate.source_id)
-                native_path = (native_source_paths or {}).get(candidate.source_id)
+                native_path = (native_source_paths or {}).get(key)
                 if source_info is not None:
                     visual_check = _visual_quote_check(
                         candidate,
@@ -1372,6 +1409,12 @@ def _manifest_text(
                 flag_text += f" [OCR pages: {', '.join(f'p.{n}' for n in ocr_pages)}]"
             if summary.get("ocr_note"):
                 flag_text += f" [OCR note: {summary.get('ocr_note')}]"
+            if summary.get("pdf_chunk_count"):
+                flagged = ", ".join(f"p.{n}" for n in summary.get("flagged_pages") or [])
+                flag_text += (
+                    f" [paired PDF: {summary.get('pdf_chunk_count')} PDF chunks, "
+                    f"flagged pages: {flagged}]"
+                )
             pages = summary.get("page_count")
             chunk_count = summary.get("chunk_count", 0)
             size = f"{pages}p / {chunk_count} chunks" if pages else f"{chunk_count} chunks"
