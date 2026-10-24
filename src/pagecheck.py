@@ -49,14 +49,22 @@ from src.ingest import PROJECT_ROOT
 
 NOTE_PREFIX = "Page check:"
 
+# A page marker, any case: "p.12", "pp. 4", "P.3", "page 3", "pages 3", "p3".
+# Not after a letter, digit or "&", so "S&P 500" and "up 5" cite nothing.
+_PAGE_MARK = r"(?<![\w&])(?:pages?\s*|pp?\.\s*|pp?(?=\d))"
 # A cited page or page range: "p.12", "p. 4-5", "pp.3-4", "p.3-p.4", "p.3 - p.9".
-# A range end needs an unspaced dash or its own p./pp. marker, so the number in
+# A range end needs an unspaced dash or its own marker, so the number in
 # "p.3 - 5 year yields" is title text, not page 5.
 _PAGE_TOKEN = re.compile(
-    r"\bpp?\.\s*(\d+)(?:[-–—](?:pp?\.\s*)?(\d+)|\s+[-–—]\s+pp?\.\s*(\d+))?"
+    rf"{_PAGE_MARK}(\d+)(?:[-–—](?:{_PAGE_MARK})?(\d+)|\s+[-–—]\s+{_PAGE_MARK}(\d+))?",
+    re.IGNORECASE,
 )
-# Quoted title text ("p.3 - 'Q3 p.7 recap'") never cites a page.
-_QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"|‘[^’]*’|“[^”]*”")
+# Quoted title text ("p.3 - 'Q3 p.7 recap'") never cites a page. A single
+# quote opens only after a non-word character and closes only before one, so
+# apostrophes ("Investors' outlook", "Asia's growth") are not quote marks.
+_QUOTED = re.compile(r"(?<!\w)'.*?'(?!\w)|\"[^\"]*\"|‘[^’]*’|“[^”]*”")
+# Separators left behind inside or after the locator once page tokens go.
+_TRAILING_SEP = re.compile(r"[\s,;:\-–]+$")
 # A range end past this is a year or a figure ("p.2-2026"), not a page.
 _MAX_PAGE = 999
 # Separators left dangling once the page token is removed: "p.12 - 'Table'".
@@ -140,14 +148,20 @@ def found_pages(evidence: str, pages: list[str]) -> tuple[int, ...]:
 
 
 def strip_page(locator: str) -> str:
-    """The locator without its page token: "p.12 - 'Rankings' table" ->
-    "'Rankings' table"; a bare "p.12" -> ""."""
+    """The locator without its page tokens (every unquoted one, so a corrected
+    page never sits beside a stale one): "p.12 - 'Rankings' table" ->
+    "'Rankings' table"; "p.7; p.8 - 'Table'" -> "'Table'"; "p.12" -> ""."""
     locator = locator or ""
     matches = _page_matches(locator)
     if not matches:
         return locator.strip()
-    text = locator[: matches[0].start()] + locator[matches[0].end():]
-    return _LEADING_SEP.sub("", text).strip()
+    text, cursor = "", 0
+    for match in matches:
+        text += locator[cursor : match.start()]
+        cursor = match.end()
+    text += locator[cursor:]
+    text = _TRAILING_SEP.sub("", _LEADING_SEP.sub("", text))
+    return re.sub(r"\s{2,}", " ", text).strip()
 
 
 def with_page(locator: str, page: int) -> str:

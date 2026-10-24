@@ -1299,6 +1299,9 @@ class PairedPdfValidationTest(unittest.TestCase):
             "p.4 - 2026 outlook grid",
             "p.3 - 5 year yields",
             "p.4 - 'Rates p.9 recap'",
+            "P.3 - 'Grid'",
+            "Page 4",
+            "p3",
         ):
             with self.subTest(locator=locator):
                 result = self._assemble(

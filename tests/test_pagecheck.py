@@ -19,6 +19,7 @@ from src.pagecheck import (
     found_pages,
     render_summary,
     strip_page,
+    with_page,
     verified_page_count,
 )
 
@@ -54,6 +55,25 @@ class LocatorHelpersTest(unittest.TestCase):
         self.assertEqual((), cited_pages("'See p.7' table"))
         self.assertEqual("'See p.7' table", strip_page("'See p.7' table"))
         self.assertEqual("5 year yields", strip_page("p.3 - 5 year yields"))
+
+    def test_cited_pages_accepts_every_page_marker_form(self) -> None:
+        self.assertEqual((3,), cited_pages("P.3 - 'Grid'"))
+        self.assertEqual((3,), cited_pages("Page 3"))
+        self.assertEqual((3, 4, 5), cited_pages("pages 3-5"))
+        self.assertEqual((3,), cited_pages("p3"))
+        self.assertEqual((), cited_pages("S&P 500 grid"))
+        self.assertEqual((), cited_pages("up 5"))
+
+    def test_apostrophes_are_not_quote_marks(self) -> None:
+        self.assertEqual((3, 7), cited_pages("p.3 - Investors' p.7 outlook's"))
+        self.assertEqual("Investors' outlook's", strip_page("p.3 - Investors' p.7 outlook's"))
+        # A quoted title holding an apostrophe is still one quoted span.
+        self.assertEqual((3,), cited_pages("p.3 - 'Asia's p.9 growth'"))
+
+    def test_strip_page_removes_every_page_reference(self) -> None:
+        self.assertEqual("'Table'", strip_page("p.7; p.8 - 'Table'"))
+        self.assertEqual("p.5 - 'Table'", with_page("p.7; p.8 - 'Table'", 5))
+        self.assertEqual("'Grid'", strip_page("'Grid', p.9"))
 
     def test_found_pages_ignores_spacing_hyphens_and_punctuation(self) -> None:
         self.assertEqual((1,), found_pages("underweight German-Bunds,JGBs and cash", PAGES))
