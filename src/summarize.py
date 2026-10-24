@@ -50,11 +50,11 @@ FIRM_PAGE_PROMPT = PROJECT_ROOT / "prompts" / "summarize_firm_page.md"
 # Both reader-summary stages produce client-facing prose, so each is pinned to an
 # exact model id rather than the `sonnet` alias: the alias re-points over time and
 # the client's approved voice must not silently drift. Stage 1 (digest) reads
-# documents; stage 2 (firmpages) synthesizes prose - both at high effort.
+# documents at medium effort; stage 2 (firmpages) synthesizes prose at high effort.
 # Overridable by flags on every command, like every pipeline step.
-PINNED_DIGEST_SONNET_ID = "claude-sonnet-5"
-PINNED_FIRMPAGE_SONNET_ID = "claude-sonnet-5"
-DIGEST_ENGINE, DIGEST_MODEL, DIGEST_EFFORT = "claude", PINNED_DIGEST_SONNET_ID, "high"
+PINNED_DIGEST_SONNET_ID = "claude-sonnet-5-5"
+PINNED_FIRMPAGE_SONNET_ID = "claude-sonnet-5-5"
+DIGEST_ENGINE, DIGEST_MODEL, DIGEST_EFFORT = "claude", PINNED_DIGEST_SONNET_ID, "medium"
 FIRMPAGE_ENGINE, FIRMPAGE_MODEL, FIRMPAGE_EFFORT = "claude", PINNED_FIRMPAGE_SONNET_ID, "high"
 
 Runner = Callable[[list[str], str], object]

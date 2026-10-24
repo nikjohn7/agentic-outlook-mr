@@ -32,10 +32,11 @@ import argparse
 import re
 import sys
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
 from src.commentary import append_note, commentary_from_row, row_columns
-from src.csvio import read_csv, write_csv_and_xlsx
+from src.csvio import clean_cell, read_csv, write_csv_and_xlsx
 
 CLIENT_COLUMNS = (
     "Firm",
@@ -77,19 +78,30 @@ JUDGMENT_MARKERS = (
     "Implied-call challenge",
     "Checker: unconfirmed",
     "Checker: not run",
-    "Shared evidence: this passage equally supports",
     "could not be ranked",
-    SHARED_KEY_MARKER,
+    # A same-firm, same-asset pair is a judgment only when the views conflict:
+    # a rule picked one ("this row kept by ...") or none could ("a human should
+    # decide"). A same-view merge ("Also held by this firm: the same view in
+    # ...") decides nothing and is not flagged.
+    "this row kept by",
     "Merged from related assets:",
     "a human should decide",
 )
+
+
+# Rows written before 2026-10-24 asked for review on every multi-keep
+# shared-evidence note; the policy no longer flags those, so the wording goes.
+_LEGACY_SHARED_KEEP = " (kept as separate calls; review recommended)."
 
 
 def normalize_row(row: dict[str, str]) -> dict[str, str]:
     """A copy of the row with the structured columns present and current
     (rendered from the row's commentary) and reader-facing locators."""
     out = dict(row)
-    out.update(row_columns(commentary_from_row(row)))
+    commentary = commentary_from_row(row)
+    if _LEGACY_SHARED_KEEP in commentary.notes:
+        commentary = replace(commentary, notes=commentary.notes.replace(_LEGACY_SHARED_KEEP, " (kept as separate calls)."))
+    out.update(row_columns(commentary))
     return out
 
 
@@ -260,11 +272,26 @@ def _label_rank() -> dict[str, int]:
     return ranks
 
 
+def _failure_key(row: dict[str, str]) -> tuple[tuple[str, str], ...]:
+    # Compared as written to disk (single-line cells), so a row read back from
+    # a failures file matches the same row built in memory.
+    return tuple(sorted((k, clean_cell(v or "")) for k, v in row.items()))
+
+
 def merge_failure_rows(existing: list[dict[str, str]], added: list[dict[str, str]]) -> list[dict[str, str]]:
     """Append new client failure rows in label-block order (stable within a
-    label), matching the pipeline's importance sort."""
+    label), matching the pipeline's importance sort. Exact repeats are listed
+    once: the same candidate proposed in several chunks reads identically in
+    the client columns, and re-exporting a run whose failures file already
+    holds its shared-key losers must not list them twice."""
     ranks = _label_rank()
-    rows = [*existing, *added]
+    seen: set[tuple[tuple[str, str], ...]] = set()
+    rows: list[dict[str, str]] = []
+    for row in [*existing, *added]:
+        key = _failure_key(row)
+        if key not in seen:
+            seen.add(key)
+            rows.append(row)
     return sorted(rows, key=lambda r: ranks.get(r.get("What happened", ""), -1))
 
 

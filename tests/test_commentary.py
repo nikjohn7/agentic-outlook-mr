@@ -76,15 +76,76 @@ class RenderTest(unittest.TestCase):
         columns = structured_columns(commentary)
         self.assertEqual("Doc A: Reason one." + SEGMENT_SEP + "Doc B: Reason two.", columns["Reasoning"])
         self.assertEqual("Doc A: Quote one" + SEGMENT_SEP + "Doc B: Quote two", columns["Verbatim Evidence"])
-        self.assertEqual("Doc A: p.3" + SEGMENT_SEP + "Doc B: -", columns["Locator"])
+        self.assertEqual("Doc A: p.3", columns["Locator"])
         self.assertEqual("Arbiter: kept A.", columns["Reviewer Notes"])
+
+    def test_merged_locator_omits_pageless_segments_and_round_trips(self) -> None:
+        # Same-title segments, the pageless one first: the Locator cell shows
+        # only real locators, and re-reading the row keeps each locator on its
+        # own segment (aligned through Full Commentary, not by position).
+        commentary = Commentary(
+            (
+                Segment("Doc A", "", "Reason one.", "Quote one"),
+                Segment("Doc A", "p.4", "Reason two.", "Quote two"),
+                Segment("Doc A", "p.10 (read from PDF)", "Reason three.", "Quote three"),
+            ),
+        )
+        columns = row_columns(commentary)
+        self.assertEqual("Doc A: p.4" + SEGMENT_SEP + "Doc A: p.10 (read from PDF)", columns["Locator"])
+        row = {"Source": "Doc A", **columns}
+        back = commentary_from_row(row)
+        self.assertEqual(["", "p.4", "p.10 (read from PDF)"], [s.locator for s in back.segments])
+        self.assertEqual(["Quote one", "Quote two", "Quote three"], [s.evidence for s in back.segments])
+        self.assertEqual("both", columns["evidence_origin"])
+
+    def test_short_locator_cell_without_full_commentary_aligns_by_title(self) -> None:
+        # Client files carry no Full Commentary: a pageless passage must not
+        # shift the other locators onto the wrong passage.
+        commentary = Commentary(
+            (Segment("Doc A", "", "R1.", "Q1"), Segment("Doc B", "p.7", "R2.", "Q2")),
+        )
+        columns = row_columns(commentary)
+        del columns["Full Commentary"]
+        back = commentary_from_row({"Source": "Doc A | Doc B", **columns})
+        self.assertEqual(["", "p.7"], [s.locator for s in back.segments])
+
+    def test_short_locator_cell_with_ambiguous_titles_stays_blank(self) -> None:
+        commentary = Commentary(
+            (Segment("Doc A", "", "R1.", "Q1"), Segment("Doc A", "p.4", "R2.", "Q2")),
+        )
+        columns = row_columns(commentary)
+        del columns["Full Commentary"]
+        back = commentary_from_row({"Source": "Doc A", **columns})
+        self.assertEqual(["", ""], [s.locator for s in back.segments])
+
+    def test_merged_locator_blank_when_no_segment_has_one(self) -> None:
+        commentary = Commentary(
+            (Segment("Doc A", "", "R1.", "Q1"), Segment("Doc B", "", "R2.", "Q2")),
+        )
+        columns = row_columns(commentary)
+        self.assertEqual("", columns["Locator"])
+        back = commentary_from_row({"Source": "Doc A | Doc B", **columns})
+        self.assertEqual(["", ""], [s.locator for s in back.segments])
+        self.assertEqual(["Doc A", "Doc B"], [s.title for s in back.segments])
+
+    def test_legacy_dash_placeholder_still_reads_as_blank(self) -> None:
+        row = {
+            "Source": "Doc A | Doc B",
+            "Reasoning": "Doc A: R1." + SEGMENT_SEP + "Doc B: R2.",
+            "Verbatim Evidence": "Doc A: Q1" + SEGMENT_SEP + "Doc B: Q2",
+            "Locator": "Doc A: p.3" + SEGMENT_SEP + "Doc B: -",
+            "Reviewer Notes": "",
+        }
+        self.assertEqual(["p.3", ""], [s.locator for s in commentary_from_row(row).segments])
 
     def test_row_columns_carries_full_commentary_and_the_four(self) -> None:
         columns = row_columns(Commentary((Segment("T", "p.1", "R.", "Q"),)))
         self.assertEqual(
-            {"Full Commentary", "Reasoning", "Verbatim Evidence", "Locator", "Reviewer Notes"},
+            {"Full Commentary", "Reasoning", "Verbatim Evidence", "Locator", "Reviewer Notes",
+             "evidence_origin"},
             set(columns),
         )
+        self.assertEqual("markdown", columns["evidence_origin"])
 
 
 class MergeAndNoteTest(unittest.TestCase):
@@ -182,6 +243,26 @@ class ParseLegacyTest(unittest.TestCase):
         row = {"Source": "Doc A | Doc B", **row_columns(original)}
         rebuilt = commentary_from_row(row)
         self.assertEqual(original, rebuilt)
+
+    def test_merged_row_from_one_document_round_trips_through_the_csv_writer(self) -> None:
+        # The CSV writer collapses space runs, so "  ||||  " is " |||| " on disk;
+        # a same-document merge (one title) must still split into its segments.
+        import tempfile
+        from pathlib import Path
+
+        from src.csvio import read_csv, write_csv
+
+        original = Commentary(
+            (Segment("Doc A", "p.3", "Reason one.", "Quote one"), Segment("Doc A", "p.9", "Reason two.", "Quote two")),
+            "Checker: not run.",
+        )
+        row = {"Source": "Doc A", **row_columns(original)}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "out.csv"
+            write_csv(path, tuple(row), [row])
+            _, [read_back] = read_csv(path)
+        self.assertIn(" |||| ", read_back["Verbatim Evidence"])
+        self.assertEqual(original, commentary_from_row(read_back))
 
     def test_commentary_from_row_falls_back_to_full_commentary(self) -> None:
         row = {"Source": "Doc A", "Full Commentary": "R. Evidence: Q. Locator: p.4."}

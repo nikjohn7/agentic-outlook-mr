@@ -47,11 +47,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONTENT_CHECK_PROMPT = PROJECT_ROOT / "prompts" / "preflight_content_check.md"
 
 # The content check is a short batched triage over ~400-char snippets. Model
-# revamp 2026-07-10: codex/gpt-5.6-luna at high effort (was codex/gpt-5.5/medium).
-# Override with --model from the allowlist.
-DEFAULT_ENGINE = "codex"
-DEFAULT_MODEL = "gpt-5.6-luna"
-DEFAULT_EFFORT = "high"
+# revamp 2026-10-23: claude/claude-sonnet-5-5 at low effort (was
+# codex/gpt-5.6-luna/high, before that codex/gpt-5.5/medium). Overridable via
+# the CLI flags; DEFAULT_MODEL applies only to the claude engine (with --engine
+# codex and no --model, the adapter's codex default is used).
+DEFAULT_ENGINE = "claude"
+DEFAULT_MODEL = "claude-sonnet-5-5"
+DEFAULT_EFFORT = "low"
 
 # How much of each snapshot's opening text the content check sees per source.
 SNAPSHOT_HEAD_CHARS = 400
@@ -75,7 +77,7 @@ class PreflightRecord:
     visual_heavy: bool = False
     printed_pdf: bool = False
     date: str = ""
-    date_from: str = ""  # "" | "html" | "pdf_text"
+    date_from: str = ""  # "" | "html" | "pdf_text" | "txt_text" | "md_text"
     content_check: str = ""  # "" (not run) | looks_right | suspect | unchecked
     content_reason: str = ""
     error: str = ""
@@ -318,11 +320,13 @@ def render_report(records: list[PreflightRecord]) -> str:
     pdf_ok = [r for r in ok if r.source_type == "pdf"]
     html_ok = [r for r in ok if r.source_type == "html"]
     txt_ok = [r for r in ok if r.source_type == "txt"]
+    md_ok = [r for r in ok if r.source_type == "md"]
     printed = [r for r in ok if r.printed_pdf]
     dated = [r for r in ok if r.date]
     from_html = [r for r in dated if r.date_from == "html"]
     from_pdf = [r for r in dated if r.date_from == "pdf_text"]
     from_txt = [r for r in dated if r.date_from == "txt_text"]
+    from_md = [r for r in dated if r.date_from == "md_text"]
     blank_dates = [r for r in ok if not r.date]
 
     lines: list[str] = ["# Link preflight report", ""]
@@ -331,7 +335,7 @@ def render_report(records: list[PreflightRecord]) -> str:
     lines.append(f"- FAILED: {len(failed)}")
     lines.append(f"- OK by type: {len(pdf_ok)} PDF, {len(html_ok)} HTML "
                  f"({len(printed)} print-captured visual-heavy), "
-                 f"{len(txt_ok)} transcript (txt)")
+                 f"{len(txt_ok)} transcript (txt), {len(md_ok)} Markdown (md)")
     lines.append(f"- Content check: {len(suspects)} suspect, "
                  f"{len(unchecked)} unchecked, {len(ok) - len(suspects) - len(unchecked)} looks_right")
     lines.append("")
@@ -365,7 +369,7 @@ def render_report(records: list[PreflightRecord]) -> str:
     lines.append("")
     lines.append(f"- OK sources with a document date: {len(dated)} of {len(ok)} "
                  f"({len(from_html)} from HTML, {len(from_pdf)} from PDF text, "
-                 f"{len(from_txt)} from transcript text)")
+                 f"{len(from_txt)} from transcript text, {len(from_md)} from Markdown text)")
     lines.append(f"- Blank (no document date found): {len(blank_dates)}")
     lines.append("")
     lines.append("| Firm | Title | Type | Date | From |")
@@ -379,7 +383,21 @@ def render_report(records: list[PreflightRecord]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
+def _resolve_model(engine: str, model: str | None) -> str | None:
+    """Engine-aware ``--model`` default (the ``crosscheck._resolve_model`` idiom).
+
+    claude requires an explicit model; supply ``DEFAULT_MODEL`` when omitted.
+    codex passes the model through unchanged - None → the adapter's default codex
+    model, a named codex model validated downstream (never silently dropped).
+    """
+    if engine == "claude" and model is None:
+        return DEFAULT_MODEL
+    return model
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """The preflight CLI parser. Extracted so the no-flags defaults (and the
+    engine-aware model default) are testable."""
     parser = argparse.ArgumentParser(
         description="Link preflight: fetch every source in a list, flag broken or "
         "wrong-looking links (no run cap; not a pipeline run)."
@@ -392,17 +410,29 @@ def main() -> int:
         "holding downloaded PDFs / print-captured pages",
     )
     parser.add_argument("--engine", choices=("claude", "codex"), default=DEFAULT_ENGINE)
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"model (codex allowlist member, default {DEFAULT_MODEL})")
+    parser.add_argument(
+        "--model",
+        default=None,
+        help=f"model (claude default: {DEFAULT_MODEL}; codex: allowlist member, "
+        "default the adapter's codex default)",
+    )
     parser.add_argument("--effort", default=DEFAULT_EFFORT)
     parser.add_argument(
         "--no-llm",
         action="store_true",
         help="skip the content-sanity LLM pass (deterministic sweep only)",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     try:
-        model, effort = resolve_engine_settings(args.engine, args.model, args.effort)
+        model, effort = resolve_engine_settings(
+            args.engine, _resolve_model(args.engine, args.model), args.effort
+        )
     except ValueError as exc:
         parser.error(str(exc))
 

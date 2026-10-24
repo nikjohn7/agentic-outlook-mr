@@ -74,6 +74,13 @@ class SharedKeyTest(unittest.TestCase):
         self.assertIn("merged to keep one row per asset", merged["Reviewer Notes"])
         self.assertEqual("Merged - same view stated in several documents", failures[0]["What happened"])
 
+    def test_same_view_merge_is_not_a_review_item(self) -> None:
+        clean = {"Full Commentary": "Wellington favours Asia. Evidence: We favour Asia ex Japan. Locator: p.2."}
+        rows = [normalize_row(_legacy_row(**clean)), normalize_row(_legacy_row(Source="Mid-Year Outlook", confidence="70", **clean))]
+        resolved, _ = resolve_shared_keys(rows)
+        recompute_review_flags(resolved)
+        self.assertEqual("none", resolved[0]["review_flag"])
+
     def test_tie_keeps_both_flagged_and_noted(self) -> None:
         rows = [normalize_row(_legacy_row()), normalize_row(_legacy_row(View="U", Source="Other", Date="29/06/2026"))]
         resolved, failures = resolve_shared_keys(rows)
@@ -101,6 +108,17 @@ class ReviewFlagPolicyTest(unittest.TestCase):
         changed = recompute_review_flags(rows)
         self.assertEqual(["none", "review", "review", "strong_review", "none"], [r["review_flag"] for r in rows])
         self.assertEqual(4, changed)
+
+    def test_multi_keep_shared_evidence_is_noted_not_flagged(self) -> None:
+        legacy = "Shared evidence: this passage equally supports 'Taiwan Equities' (kept as separate calls; review recommended)."
+        row = normalize_row(_legacy_row(review_flag="review", **{"Full Commentary": f"R. Evidence: Q. Locator: p.1. {legacy}"}))
+        recompute_review_flags([row])
+        self.assertEqual("none", row["review_flag"])
+        self.assertIn("'Taiwan Equities' (kept as separate calls).", row["Reviewer Notes"])
+        self.assertNotIn("review recommended", row["Reviewer Notes"])
+        failed = normalize_row(_legacy_row(**{"Full Commentary": "R. Evidence: Q. Locator: p.1. Shared evidence: this passage also supports 'X'; the calls could not be ranked (no verdict); all kept for review."}))
+        recompute_review_flags([failed])
+        self.assertEqual("review", failed["review_flag"])
 
 
 class NearLeafAnnotationTest(unittest.TestCase):
@@ -138,6 +156,12 @@ class ClientRowsTest(unittest.TestCase):
             ["Document could not be ingested", "Superseded - a newer document from this firm updated this view", "Duplicate - already covered"],
             [r["What happened"] for r in merged],
         )
+
+    def test_merge_failure_rows_lists_exact_repeats_once(self) -> None:
+        loser = {"What happened": "Superseded - a newer document from this firm updated this view", "Evidence / notes": "a  b"}
+        existing = [{"What happened": "Superseded - a newer document from this firm updated this view", "Evidence / notes": "a b"}]
+        self.assertEqual(1, len(merge_failure_rows(existing, [loser])))
+        self.assertEqual(1, len(merge_failure_rows([*existing, *existing], [])))
 
     def test_export_writes_csv_xlsx_and_report_and_folds_in_losers(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

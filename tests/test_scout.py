@@ -245,5 +245,66 @@ class AliasCsvLoadingTest(unittest.TestCase):
         self.assertIn('"Q2 Markets Outlook"', outcome.notes_text)
 
 
+class ScoutModelDefaultTest(unittest.TestCase):
+    """DEFAULT_MODEL is a codex model; `--engine claude` without `--model` must
+    not send it to the claude CLI (it must fail fast instead)."""
+
+    def _args(self, argv: list[str]):
+        from src import scout
+
+        return scout.build_parser().parse_args(["--sources", "s.csv", "--out", "o.md", *argv])
+
+    def test_bare_invocation_keeps_codex_luna(self) -> None:
+        from src import scout
+        from src.run import resolve_engine_settings
+
+        args = self._args([])
+        resolved = resolve_engine_settings(
+            args.engine, scout._resolve_model(args.engine, args.model), args.effort
+        )
+        self.assertEqual(("codex", "gpt-6-luna", "medium"), (args.engine, *resolved))
+
+    def test_engine_claude_without_model_is_rejected(self) -> None:
+        from src import scout
+        from src.run import resolve_engine_settings
+
+        args = self._args(["--engine", "claude"])
+        self.assertIsNone(scout._resolve_model(args.engine, args.model))
+        with self.assertRaisesRegex(ValueError, "--model is required"):
+            resolve_engine_settings(
+                args.engine, scout._resolve_model(args.engine, args.model), args.effort
+            )
+
+    def test_engine_claude_without_model_exits_via_parser_error(self) -> None:
+        from src import scout
+
+        with self.assertRaises(SystemExit):
+            scout.main(["--sources", "s.csv", "--out", "o.md", "--engine", "claude"])
+
+    def test_run_scout_with_claude_and_no_model_is_rejected(self) -> None:
+        # The programmatic entry point shares the CLI's engine-aware default.
+        sources = [_record("a1", "Acme", "Review"), _record("a2", "Acme", "Outlook")]
+        commands: list[list[str]] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout="{}", stderr="")
+
+        with self.assertRaisesRegex(ValueError, "--model is required"):
+            run_scout(sources, engine="claude", runner=runner)
+        self.assertEqual([], commands)
+        run_scout(sources, engine="claude", model="sonnet", runner=runner)
+        self.assertTrue(commands and all("sonnet" in c and "gpt-6-luna" not in c for c in commands))
+        commands.clear()
+        run_scout(sources, runner=runner)
+        self.assertTrue(commands and all("gpt-6-luna" in c for c in commands))
+
+    def test_engine_claude_with_model_passes_through(self) -> None:
+        from src import scout
+
+        args = self._args(["--engine", "claude", "--model", "sonnet"])
+        self.assertEqual("sonnet", scout._resolve_model(args.engine, args.model))
+
+
 if __name__ == "__main__":
     unittest.main()

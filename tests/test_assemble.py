@@ -60,6 +60,7 @@ class AssembleTest(unittest.TestCase):
                 "checker_strength",
                 "call_language",
                 "quote_match",
+                "evidence_origin",
             ),
             OUTPUT_COLUMNS,
         )
@@ -1208,6 +1209,227 @@ class StatedBeatsImpliedTest(unittest.TestCase):
         self.assertEqual(
             [], [f for f in result.failures if f.reason_code == "implied_challenges_stated"]
         )
+
+
+class PairedPdfValidationTest(unittest.TestCase):
+    """A Markdown source with a paired PDF: Markdown candidates validate on the
+    Markdown only, `pdf:` candidates on the PDF and their chunk's pages."""
+
+    MD_KEY = ("source-1", "char:0-8000")
+    PDF_KEY = ("source-1", "pdf:p3-4")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.taxonomy = Taxonomy.from_csv()
+        cls.sources = {
+            "source-1": SourceInfo(
+                source_id="source-1", firm="Allianz Global Investors", date="",
+                source="House View Q4 2026", url="",
+            )
+        }
+
+    def _assemble(self, candidates, calls, *, md_text=None, pdf_text=None):
+        def verifier(candidate, source, native_path):
+            calls.append(native_path)
+            return "present_verbatim" if native_path and native_path.suffix == ".pdf" else "absent"
+
+        return assemble_candidates(
+            candidates,
+            sources=self.sources,
+            taxonomy=self.taxonomy,
+            snapshots={
+                self.MD_KEY: _long_snapshot(md_text or "EM equities are favored in the outlook."),
+                self.PDF_KEY: _long_snapshot(
+                    pdf_text or "Emerging markets equities: overweight grid."
+                ),
+            },
+            page_counts={self.PDF_KEY: 12},
+            visual_pages={self.PDF_KEY: {3, 4}},
+            quote_visual_verifier=verifier,
+            native_source_paths={
+                "source-1": Path("/tmp/house-view.md"),
+                self.PDF_KEY: Path("/tmp/house-view.pdf"),
+            },
+        )
+
+    def test_markdown_quote_failing_text_check_is_not_rescued_by_pdf(self) -> None:
+        calls: list[Path | None] = []
+        result = self._assemble(
+            [_candidate(chunk_id="char:0-8000", locator="p.3", evidence_quote="only on the PDF page")],
+            calls,
+        )
+
+        self.assertEqual([], result.output_rows)
+        self.assertEqual([Path("/tmp/house-view.md")], calls)
+        self.assertEqual(["quote_not_found_visual"], [f.reason_code for f in result.failures])
+
+    def test_pdf_candidate_citing_page_outside_its_chunk_fails(self) -> None:
+        calls: list[Path | None] = []
+        result = self._assemble(
+            [_candidate(chunk_id="pdf:p3-4", locator="p.9",
+                        evidence_quote="Emerging markets equities: overweight grid.")],
+            calls,
+        )
+
+        self.assertEqual([], result.output_rows)
+        self.assertEqual([], calls)
+        self.assertEqual(["quote_not_found"], [f.reason_code for f in result.failures])
+        self.assertIn("p.3-4", result.failures[0].message)
+
+    def test_pdf_candidate_citing_a_range_past_its_chunk_fails(self) -> None:
+        # The first cited page is in the chunk; pages 5-9 were never given.
+        for locator in ("p.3-9", "pp. 3-5 - 'Positioning grid'", "p.4; p.7"):
+            with self.subTest(locator=locator):
+                calls: list[Path | None] = []
+                result = self._assemble(
+                    [_candidate(chunk_id="pdf:p3-4", locator=locator,
+                                evidence_quote="Emerging markets equities: overweight grid.")],
+                    calls,
+                )
+
+                self.assertEqual([], result.output_rows)
+                self.assertEqual([], calls)
+                self.assertEqual(["quote_not_found"], [f.reason_code for f in result.failures])
+                self.assertIn("p.3-4", result.failures[0].message)
+
+    def test_pdf_candidate_citing_a_range_inside_its_chunk_passes(self) -> None:
+        for locator in (
+            "p.3-4",
+            "pp. 3-4 - 'Positioning grid'",
+            "p.4 - 2026 outlook grid",
+            "p.3 - 5 year yields",
+            "p.4 - 'Rates p.9 recap'",
+            "P.3 - 'Grid'",
+            "Page 4",
+            "p3",
+        ):
+            with self.subTest(locator=locator):
+                result = self._assemble(
+                    [_candidate(chunk_id="pdf:p3-4", locator=locator,
+                                evidence_quote="Emerging markets equities: overweight grid.")],
+                    [],
+                )
+
+                self.assertEqual([], [(f.reason_code, f.message) for f in result.failures])
+                self.assertEqual(1, len(result.output_rows))
+
+    def test_matching_markdown_and_pdf_calls_merge_into_one_row(self) -> None:
+        # The PDF quote is absent from the PDF text, so the PDF candidate is
+        # kept only through the visual verifier - which must be handed the
+        # paired PDF (keyed by (source, chunk)), not the Markdown file.
+        pdf_quote = "Emerging markets equities: overweight grid."
+        calls: list[Path | None] = []
+        result = self._assemble(
+            [
+                _candidate(chunk_id="char:0-8000", locator="char:0-8000"),
+                _candidate(chunk_id="pdf:p3-4", locator="p.3", evidence_quote=pdf_quote),
+            ],
+            calls,
+            pdf_text="The positioning grid is shown as an image.",
+        )
+
+        self.assertEqual([Path("/tmp/house-view.pdf")], calls)
+        self.assertEqual(1, len(result.output_rows))
+        self.assertEqual("both", result.output_rows[0]["evidence_origin"])
+        commentary = result.output_rows[0]["Full Commentary"]
+        self.assertIn("EM equities are favored in the outlook.", commentary)
+        self.assertIn(pdf_quote, commentary)
+        self.assertEqual(["duplicate_same_view"], [f.reason_code for f in result.failures])
+
+    def test_pdf_candidate_locator_carries_the_read_from_pdf_marker(self) -> None:
+        result = self._assemble(
+            [_candidate(chunk_id="pdf:p3-4", locator="p.3 - 'Positioning grid'",
+                        evidence_quote="Emerging markets equities: overweight grid.")],
+            [],
+        )
+
+        row = result.output_rows[0]
+        self.assertEqual("p.3 - 'Positioning grid' (read from PDF)", row["Locator"])
+        self.assertEqual("pdf", row["evidence_origin"])
+
+    def test_mixed_origin_row_keeps_marker_through_reconcile_and_export(self) -> None:
+        from src import export, reconcile
+
+        result = self._assemble(
+            [
+                _candidate(chunk_id="pdf:p3-4", locator="p.3",
+                           evidence_quote="Emerging markets equities: overweight grid."),
+                _candidate(chunk_id="char:0-8000", locator="char:0-8000"),
+            ],
+            [],
+        )
+        self.assertEqual("both", result.output_rows[0]["evidence_origin"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir, sources=self.sources)
+            client = _read_csv(Path(temp_dir) / "output-client.csv")
+            raw = _read_csv(Path(temp_dir) / "output.csv")[0]
+
+        # A same-view reconcile merge with another document's Markdown row.
+        other = dict(raw, Source="Outlook 2027", **{
+            "Reasoning": "The manager favors it.", "Verbatim Evidence": "EM favored.",
+            "Locator": "", "Reviewer Notes": "", "Full Commentary": "",
+            "evidence_origin": "markdown"})
+        merged, _, _ = reconcile.merge_same_view(
+            [reconcile.row_from_raw(raw, "a", 0), reconcile.row_from_raw(other, "b", 1)]
+        )
+        exported = export.normalize_row(merged)
+
+        self.assertEqual("both", merged["evidence_origin"])
+        self.assertEqual("both", exported["evidence_origin"])
+        self.assertIn("p.3 (read from PDF)", exported["Locator"])
+        self.assertIn("p.3 (read from PDF)", client[0]["Locator"])
+        self.assertNotIn("evidence_origin", client[0])
+        self.assertNotIn("evidence_origin", export.CLIENT_COLUMNS)
+
+    def test_manifest_counts_mixed_origin_conflicts(self) -> None:
+        result = self._assemble(
+            [
+                _candidate(chunk_id="pdf:p3-4", locator="p.3", view="U",
+                           evidence_quote="Emerging markets equities: overweight grid."),
+                _candidate(chunk_id="char:0-8000", locator="char:0-8000"),
+            ],
+            [],
+        )
+        # No arbiter: the conflicting pair is discarded, so no row is kept.
+        self.assertEqual([], result.output_rows)
+        self.assertEqual(1, result.mixed_origin_conflicts)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir)
+            manifest = (Path(temp_dir) / "manifest.md").read_text(encoding="utf-8")
+        self.assertIn("view conflicts between a PDF-read and a Markdown-read candidate: 1", manifest)
+
+    def test_manifest_counts_kept_row_origins(self) -> None:
+        result = self._assemble(
+            [
+                # Same view from both reads: one kept row of origin `both`.
+                _candidate(chunk_id="pdf:p3-4", locator="p.3",
+                           evidence_quote="Emerging markets equities: overweight grid."),
+                _candidate(chunk_id="char:0-8000", locator="char:0-8000"),
+                # PDF-only and Markdown-only rows on other leaves.
+                _candidate(chunk_id="pdf:p3-4", locator="p.4", sub_asset_raw="US equities",
+                           sub_asset_class="US Equities",
+                           evidence_quote="US equities: underweight grid.", view="U"),
+                _candidate(chunk_id="char:0-8000", locator="char:0-8000",
+                           sub_asset_raw="Japan equities", sub_asset_class="Japan Equities",
+                           evidence_quote="Japan equities look attractive.", view="O"),
+            ],
+            [],
+            md_text="EM equities are favored in the outlook. Japan equities look attractive.",
+            pdf_text="Emerging markets equities: overweight grid. US equities: underweight grid.",
+        )
+        self.assertEqual(
+            {"Emerging Markets Equities": "both", "US Equities": "pdf", "Japan Equities": "markdown"},
+            {row["Sub-Asset Class"]: row["evidence_origin"] for row in result.output_rows},
+        )
+        self.assertEqual(0, result.mixed_origin_conflicts)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir)
+            manifest = (Path(temp_dir) / "manifest.md").read_text(encoding="utf-8")
+        self.assertIn("## Evidence origin (kept rows)", manifest)
+        self.assertIn("- both: 1", manifest)
+        self.assertIn("- pdf: 1", manifest)
+        self.assertIn("- markdown: 1", manifest)
+        self.assertIn("view conflicts between a PDF-read and a Markdown-read candidate: 0", manifest)
 
 
 def _verdict(**overrides: object) -> CheckVerdict:

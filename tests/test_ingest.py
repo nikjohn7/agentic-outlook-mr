@@ -28,8 +28,10 @@ from src.ingest import (
     enforce_source_limit,
     extract_html_date,
     extract_pdf_text_date,
+    markdown_to_text,
     is_visual_heavy,
     load_pilot_sources,
+    load_target_sources,
     resolve_url,
     strip_tracking_params,
 )
@@ -110,6 +112,82 @@ class LocalFileLoaderTest(unittest.TestCase):
 
     HEADER = "Firm,Date,Source,MR Link,local_file\n"
 
+    def test_optional_paired_pdf_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "outlook.md").write_text("# Outlook", encoding="utf-8")
+            (root / "outlook.pdf").write_bytes(b"%PDF-1.4\n")
+            csv_path = root / "sources.csv"
+            with patch("src.ingest.PROJECT_ROOT", root):
+                for value in ("outlook.pdf", "", None, "missing.pdf", "outlook.md"):
+                    with self.subTest(pdf_file=value):
+                        header = "Firm,Source,URL,local_file"
+                        row = "Test Firm,Outlook,,outlook.md"
+                        if value is not None:
+                            header += ",pdf_file"
+                            row += f",{value}"
+                        csv_path.write_text(header + "\n" + row + "\n", encoding="utf-8")
+                        if value == "missing.pdf":
+                            with self.assertRaisesRegex(FileNotFoundError, "pdf_file.*Outlook"):
+                                load_pilot_sources(csv_path)
+                        elif value == "outlook.md":
+                            with self.assertRaisesRegex(ValueError, r"pdf_file.*must be a \.pdf"):
+                                load_pilot_sources(csv_path)
+                        else:
+                            [source] = load_pilot_sources(csv_path)
+                            self.assertEqual("md", source.source_type)
+                            expected = root / "outlook.pdf" if value else None
+                            self.assertEqual(expected, source.pdf_path)
+
+    def test_paired_pdf_on_a_non_markdown_row_is_rejected(self) -> None:
+        # pdf_file is read only for md rows; on pdf/txt/html it must fail loudly,
+        # not be validated and then silently ignored.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "outlook.pdf").write_bytes(b"%PDF-1.4\n")
+            (root / "talk.txt").write_text("transcript", encoding="utf-8")
+            csv_path = root / "sources.csv"
+            cases = {
+                "pdf": "Test Firm,Outlook,,outlook.pdf,outlook.pdf",
+                "txt": "Test Firm,Outlook,,talk.txt,outlook.pdf",
+                "html": "Test Firm,Outlook,https://example.test/a.html,,outlook.pdf",
+            }
+            with patch("src.ingest.PROJECT_ROOT", root):
+                for source_type, row in cases.items():
+                    with self.subTest(source_type=source_type):
+                        csv_path.write_text(
+                            "Firm,Source,URL,local_file,pdf_file\n" + row + "\n", encoding="utf-8"
+                        )
+                        with self.assertRaisesRegex(
+                            ValueError, rf"pdf_file.*Outlook.*Markdown.*'{source_type}'"
+                        ):
+                            load_pilot_sources(csv_path)
+
+    def test_target_loader_resolves_paired_pdf(self) -> None:
+        # preflight tries load_target_sources first, so a target-shaped CSV with
+        # a Markdown local_file + pdf_file must keep its paired PDF.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "outlook.md").write_text("# Outlook", encoding="utf-8")
+            (root / "outlook.pdf").write_bytes(b"%PDF-1.4\n")
+            csv_path = root / "sources.csv"
+            header = "Id,Firm,Title,Published At,Source Link,local_file,pdf_file\n"
+            with patch("src.ingest.PROJECT_ROOT", root):
+                csv_path.write_text(
+                    header + "7,Test Firm,Outlook,,https://example.test/a,outlook.md,outlook.pdf\n",
+                    encoding="utf-8",
+                )
+                [source] = load_target_sources(csv_path)
+                self.assertEqual("md", source.source_type)
+                self.assertEqual(root / "outlook.pdf", source.pdf_path)
+
+                csv_path.write_text(
+                    header + "7,Test Firm,Outlook,,https://example.test/a.html,,outlook.pdf\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(ValueError, "pdf_file.*Markdown"):
+                    load_target_sources(csv_path)
+
     def _write_csv(self, temp_dir: str, body: str) -> Path:
         path = Path(temp_dir) / "sources.csv"
         path.write_text(self.HEADER + body, encoding="utf-8")
@@ -174,6 +252,16 @@ class LocalFileLoaderTest(unittest.TestCase):
         self.assertEqual("txt", source.source_type)
         self.assertEqual("vanguard-update.txt", source.local_path.name)
         self.assertEqual("https://example.test/video", source.url)  # URL kept as metadata
+
+    def test_md_local_file_loads_as_markdown_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc = Path(temp_dir) / "AAO_4Q2026.md"
+            doc.write_text("# Outlook", encoding="utf-8")
+            csv_path = self._write_csv(temp_dir, f"Neuberger Berman,,Asset Allocation Outlook,,{doc}\n")
+            [source] = load_pilot_sources(csv_path)
+
+        self.assertEqual("md", source.source_type)
+        self.assertEqual("AAO_4Q2026.md", source.local_path.name)
 
     def test_unsupported_local_file_extension_hard_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -807,6 +895,97 @@ class TxtTranscriptIngestTest(unittest.TestCase):
 
         self.assertEqual("", ingested.source.date)
         self.assertEqual("", meta["date_from"])
+
+
+class MarkdownToTextTest(unittest.TestCase):
+    """The Markdown snapshot drops presentation markup only: every word and
+    number survives in order, so a quote from it is a quote from the document."""
+
+    def test_markup_is_removed_and_words_kept(self) -> None:
+        markdown = (
+            "## **Market Views Executive Summary**Based on Outlook\n"
+            "- **Equities.** We are *overweight* [EM equities](https://x.test).\n"
+            "Housing &amp; credit\\* remain <u>underweight</u>.\n"
+        )
+        self.assertEqual(
+            "Market Views Executive Summary Based on Outlook\n"
+            "- Equities. We are overweight EM equities.\n"
+            "Housing & credit* remain underweight.\n",
+            markdown_to_text(markdown),
+        )
+
+    def test_table_rows_stay_on_one_line(self) -> None:
+        markdown = "|Asset|View|\n|---|---|\n|US<br>Treasuries|Underweight|\n"
+        self.assertIn("|US Treasuries|Underweight|", markdown_to_text(markdown))
+
+    def test_footnote_marker_is_dropped_not_glued_to_a_number(self) -> None:
+        text = markdown_to_text("Growth slows in 2027<sup>2</sup> as rates rise.")
+        self.assertEqual("Growth slows in 2027 as rates rise.\n", text)
+
+    def test_picture_text_boundaries_stay_visible(self) -> None:
+        text = markdown_to_text("<!-- Start of picture text -->\nOW UW N<br><!-- End of picture text -->")
+        self.assertEqual("[Start of picture text]\nOW UW N [End of picture text]\n", text)
+
+
+class MarkdownIngestTest(unittest.TestCase):
+    """Local `.md` documents: the received file is copied byte-for-byte, the
+    snapshot is its plain-text rendering, chunked by char ranges."""
+
+    BODY = "# House View\n\nPublished 8 October 2026. We are **overweight** European equities.\n"
+
+    def test_native_copy_is_verbatim_and_snapshot_is_rendered(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc = Path(temp_dir) / "house-view.md"
+            doc.write_text(self.BODY, encoding="utf-8")
+            source = SourceRecord(
+                source_id="allianz-house-view", firm="Allianz Global Investors", date="",
+                source="House View Q4 2026", url="", resolved_url="", source_type="md",
+                local_path=doc,
+            )
+            work_dir = Path(temp_dir) / "work"
+            ingested = create_snapshot(source, work_dir)
+            native = ingested.native_source_path.read_bytes()
+            snapshot_text = ingested.snapshot_text_path.read_text(encoding="utf-8")
+            meta = json.loads((work_dir / source.source_id / "ingest_meta.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(self.BODY.encode("utf-8"), native)
+        self.assertEqual("House View\n\nPublished 8 October 2026. We are overweight European equities.\n", snapshot_text)
+        self.assertEqual([f"char:0-{len(snapshot_text)}"], [c.locator for c in ingested.chunks])
+        self.assertEqual("md", meta["source_type"])
+        self.assertEqual(("08/10/2026", "md_text"), (ingested.source.date, meta["date_from"]))
+
+    def test_paired_pdf_adds_chunks_for_flagged_pages_after_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            doc = Path(temp_dir) / "house-view.md"
+            doc.write_text(self.BODY, encoding="utf-8")
+            pdf = Path(temp_dir) / "house-view.pdf"
+            pdf.write_bytes(b"%PDF-1.4 stub")
+            source = SourceRecord(
+                source_id="allianz-house-view", firm="Allianz Global Investors", date="",
+                source="House View Q4 2026", url="", resolved_url="", source_type="md",
+                local_path=doc, pdf_path=pdf,
+            )
+            work_dir = Path(temp_dir) / "work"
+            pdf_text = ("page text", 12, (5,), (12,), "")
+            with patch("src.ingest._extract_pdf_text", return_value=pdf_text), patch(
+                "src.pdfinventory.flagged_pages", return_value=(2, 4, 5, 6, 7, 8, 9, 12)
+            ):
+                ingested = create_snapshot(source, work_dir)
+            meta = json.loads((work_dir / source.source_id / "ingest_meta.json").read_text(encoding="utf-8"))
+            pdf_snapshot = ingested.pdf_snapshot_text_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            ["char:0-75", "pdf:p2-2", "pdf:p4-8", "pdf:p9-9", "pdf:p12-12"],
+            [c.chunk_id for c in ingested.chunks],
+        )
+        self.assertEqual("p.4-8", ingested.chunks[2].locator)
+        self.assertEqual(work_dir / source.source_id / "house-view.pdf", ingested.chunks[1].source_path)
+        self.assertEqual("page text", pdf_snapshot)
+        # PDF page issues stay off the source-level (Markdown) fields.
+        self.assertEqual(((), ()), (ingested.scrambled_pages, ingested.ocr_pages))
+        self.assertEqual(((5,), (12,)), (ingested.pdf_scrambled_pages, ingested.pdf_ocr_pages))
+        self.assertEqual(12, meta["pdf_page_count"])
+        self.assertEqual([2, 4, 5, 6, 7, 8, 9, 12], meta["flagged_pages"])
 
 
 if __name__ == "__main__":

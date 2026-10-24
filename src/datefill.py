@@ -8,7 +8,7 @@ generator + separate apply; injectable LLM runner; mock-runner tests).
 
     .venv/bin/python -m src.datefill \\
         --output <path/to/output.csv> --sources <master source csv> \\
-        --out-dir <dir> [--engine codex --model gpt-5.6-luna --effort high]
+        --out-dir <dir> [--engine codex --model gpt-6-luna --effort high]
 
     .venv/bin/python -m src.datefill --apply \\
         --output <path/to/output.csv> --patch <dir>/datefill.csv \\
@@ -36,9 +36,9 @@ deterministic steps:
 5. Precedence: stated full date > metadata > landing-page full date >
    month-year partial rendered `01/MM/YYYY`; quarter/season partials never fill.
 
-The engine step is a cascade (model revamp 2026-07-10): codex/gpt-5.6-luna/high
-sweeps first, then claude/sonnet/medium runs ONLY on sources still blank
-afterward. Both engines' flags are overridable.
+The engine step is a cascade (model revamp 2026-10-23): codex/gpt-6-luna/high
+sweeps first, then claude/claude-sonnet-5-5/medium runs ONLY on sources still
+blank afterward. Both engines' flags are overridable.
 """
 
 from __future__ import annotations
@@ -108,14 +108,14 @@ FROM_HTML_META = "html_metadata"
 FROM_LANDING = "landing_page"
 FROM_PARTIAL = "partial_month"
 
-# Engine cascade defaults (model revamp 2026-07-10). Primary sweep is
-# codex/gpt-5.6-luna/high (was codex/gpt-5.5/low); the cascade over still-blank
-# sources is claude/sonnet/medium (was claude/sonnet/low).
+# Engine cascade defaults (model revamp 2026-10-23). Primary sweep is
+# codex/gpt-6-luna/high (was gpt-5.6-luna); the cascade over still-blank
+# sources is claude/claude-sonnet-5-5/medium (was the `sonnet` alias).
 DEFAULT_PRIMARY_ENGINE = "codex"
-DEFAULT_PRIMARY_MODEL = "gpt-5.6-luna"
+DEFAULT_PRIMARY_MODEL = "gpt-6-luna"
 DEFAULT_PRIMARY_EFFORT = "high"
 DEFAULT_CASCADE_ENGINE = "claude"
-DEFAULT_CASCADE_MODEL = "sonnet"
+DEFAULT_CASCADE_MODEL = "claude-sonnet-5-5"
 DEFAULT_CASCADE_EFFORT = "medium"
 
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess[str]]
@@ -781,9 +781,11 @@ class _Extractor:
         return self._pdf_cache[url]
 
     def extract(self, source: ingest.SourceRecord) -> ExtractedDoc:
-        if source.source_type == "txt" and source.local_path:
+        if source.source_type in ("txt", "md") and source.local_path:
             text = Path(source.local_path).read_text(encoding="utf-8", errors="replace")
-            return ExtractedDoc(text, None, source.local_path, "txt")
+            if source.source_type == "md":
+                text = ingest.markdown_to_text(text)
+            return ExtractedDoc(text, None, source.local_path, source.source_type)
         if source.source_type == "pdf":
             path = source.local_path or self._download_pdf(source.resolved_url)
             text = ""

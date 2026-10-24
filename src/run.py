@@ -5,9 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 
-from src.assemble import FailureRecord, assemble_candidates, write_run_outputs
+from src.assemble import (
+    FailureRecord,
+    assemble_candidates,
+    pdf_chunk_pages,
+    validation_key,
+    write_run_outputs,
+)
 from src.confidence import evidence_context, evidence_passes
 from src.ingest import (
     IngestedSource,
@@ -59,19 +66,19 @@ def run_pipeline(
     model: str | None = None,
     effort: str | None = None,
     checker_engine: str = "claude",
-    checker_model: str | None = "opus",
-    checker_effort: str = "medium",
+    checker_model: str | None = "claude-opus-5-5",
+    checker_effort: str = "high",
     checker_context: bool = False,
-    arbiter_engine: str = "codex",
-    arbiter_model: str | None = "gpt-5.6-luna",
+    arbiter_engine: str = "claude",
+    arbiter_model: str | None = "claude-haiku-5-5",
     arbiter_effort: str = "high",
     group_notes_text: str | None = None,
     group_notes_path: str | None = None,
-    grouper_engine: str = "claude",
-    grouper_model: str | None = "haiku",
+    grouper_engine: str = "codex",
+    grouper_model: str | None = "gpt-6-luna",
     grouper_effort: str = "high",
     quote_visual_engine: str = "codex",
-    quote_visual_model: str | None = "gpt-5.6-luna",
+    quote_visual_model: str | None = "gpt-6-luna",
     quote_visual_effort: str = "high",
     evidence_gate: bool = True,
     evidence_engine: str = sharedevidence.DEFAULT_ENGINE,
@@ -163,6 +170,7 @@ def run_pipeline(
             date=source.date,
             source=source.source,
             url=source.url,
+            pdf_path=str(source.pdf_path) if source.pdf_path else "",
         )
         try:
             ingested = create_snapshot(source, work_dir)
@@ -190,8 +198,43 @@ def run_pipeline(
             )
             continue
         snapshot_text = ingested.snapshot_text_path.read_text(encoding="utf-8")
+        pdf_text = (
+            ingested.pdf_snapshot_text_path.read_text(encoding="utf-8")
+            if ingested.pdf_snapshot_text_path is not None
+            else ""
+        )
+        pdf_page_spans = (
+            _pdf_page_spans(
+                pdf_text,
+                _pdf_page_texts(ingested.pdf_native_path),
+                frozenset(ingested.pdf_ocr_pages),
+            )
+            if ingested.pdf_native_path is not None
+            and any(pdf_chunk_pages(chunk.chunk_id) for chunk in ingested.chunks)
+            else None
+        )
+        pdf_chunk_texts: dict[str, str] = {}
         for chunk in ingested.chunks:
-            snapshots[(source.source_id, chunk.chunk_id)] = snapshot_text
+            chunk_pages = pdf_chunk_pages(chunk.chunk_id)
+            if not chunk_pages:
+                snapshots[(source.source_id, chunk.chunk_id)] = snapshot_text
+                continue
+            # A paired-PDF chunk validates against the PDF only, keyed per chunk
+            # (assemble.validation_key): its text, pages, page count and path.
+            # The text is only the chunk's own pages - the pages the model was
+            # given - so a quote found only on another page cannot pass.
+            key = (source.source_id, chunk.chunk_id)
+            pdf_chunk_texts[chunk.chunk_id] = _pdf_chunk_text(
+                pdf_text, pdf_page_spans, chunk_pages
+            )
+            snapshots[key] = pdf_chunk_texts[chunk.chunk_id]
+            page_counts[key] = ingested.pdf_page_count
+            native_source_paths[key] = Path(ingested.pdf_native_path)
+            visual_pages[key] = set(chunk_pages)
+            if ingested.pdf_scrambled_pages:
+                scrambled_pages[key] = set(ingested.pdf_scrambled_pages)
+            if ingested.pdf_ocr_pages:
+                ocr_pages[key] = set(ingested.pdf_ocr_pages)
         if ingested.page_count is not None:
             page_counts[source.source_id] = ingested.page_count
         native_source_paths[source.source_id] = Path(ingested.native_source_path)
@@ -211,6 +254,7 @@ def run_pipeline(
             date=ingested.source.date,
             source=source.source,
             url=source.url,
+            pdf_path=str(source.pdf_path) if source.pdf_path else "",
         )
 
         group_id = group_map.get(source.source_id)
@@ -248,6 +292,16 @@ def run_pipeline(
                 snapshot_text=snapshot_text,
                 visual_pages=source_visual_pages,
             )
+            pdf_context = None
+            if ingested.pdf_native_path is not None:
+                visual_unverified |= _pdf_visual_unverified_candidate_indexes(
+                    candidates, chunk_texts=pdf_chunk_texts, visual_pages=visual_pages
+                )
+                pdf_context = (
+                    pdf_chunk_texts,
+                    frozenset(ingested.pdf_scrambled_pages),
+                    frozenset(ingested.pdf_ocr_pages),
+                )
             source_verdicts, checker_failure = _check_candidates(
                 source,
                 candidates,
@@ -257,12 +311,15 @@ def run_pipeline(
                 model=checker_model,
                 effort=checker_effort,
                 runner=runner,
-                native_source_path=ingested.native_source_path,
+                # A paired PDF is the page image the checker can open; only
+                # `pdf:` candidates are routed to it (pdf_context).
+                native_source_path=ingested.pdf_native_path or ingested.native_source_path,
                 visual_unverified=visual_unverified,
                 checker_context=checker_context,
                 snapshot_text=snapshot_text,
                 scrambled_pages=frozenset(scrambled_pages.get(source.source_id, set())),
                 ocr_pages=frozenset(ocr_pages.get(source.source_id, set())),
+                pdf_context=pdf_context,
             )
             verdicts.update(
                 {offset + local_index: verdict for local_index, verdict in source_verdicts.items()}
@@ -281,6 +338,10 @@ def run_pipeline(
                 "scrambled_pages": list(ingested.scrambled_pages),
                 "ocr_pages": list(ingested.ocr_pages),
                 "ocr_note": ingested.ocr_note,
+                "pdf_chunk_count": sum(
+                    bool(pdf_chunk_pages(chunk.chunk_id)) for chunk in ingested.chunks
+                ),
+                "flagged_pages": list(ingested.flagged_pages),
             }
         )
 
@@ -417,8 +478,13 @@ def analyze_source(
             _append_memory(memory_path, chunk.chunk_id, f"({reason}; chunk skipped)", [])
             continue
 
-        candidates.extend(call_result.candidates)
-        _append_memory(memory_path, chunk.chunk_id, call_result.summary, call_result.candidates)
+        # The chunk id routes validation (Markdown vs paired PDF), so it is the
+        # chunk actually read, never the id the model echoed.
+        chunk_candidates = [
+            replace(candidate, chunk_id=chunk.chunk_id) for candidate in call_result.candidates
+        ]
+        candidates.extend(chunk_candidates)
+        _append_memory(memory_path, chunk.chunk_id, call_result.summary, chunk_candidates)
 
     return candidates, failures
 
@@ -439,6 +505,7 @@ def _check_candidates(
     snapshot_text: str = "",
     scrambled_pages: frozenset[int] = frozenset(),
     ocr_pages: frozenset[int] = frozenset(),
+    pdf_context: tuple[dict[str, str], frozenset[int], frozenset[int]] | None = None,
 ) -> tuple[dict[int, CheckVerdict], FailureRecord | None]:
     """One second-reader call for all of a source's candidates.
 
@@ -456,6 +523,11 @@ def _check_candidates(
     (`evidence_context`) or a visual fallback (`context_unreliable: true`,
     reusing native_source_path + the cited page). Routing never fails a run or
     blocks a candidate.
+
+    pdf_context is ({`pdf:` chunk id: that chunk's PDF page text}, scrambled
+    pages, OCR pages) for a Markdown source
+    with a paired PDF: `pdf:` candidates are routed on it with the PDF page
+    image, Markdown candidates on the Markdown text with no page image.
     """
     native_pdf = _native_pdf_path(native_source_path)
     inputs = {
@@ -476,13 +548,14 @@ def _check_candidates(
                 "reasoning": candidate.reasoning,
                 "basis": candidate.basis,
                 "text_unverifiable_visual": index in (visual_unverified or set()),
-                **_context_fields(
+                **_candidate_context_fields(
                     candidate,
                     enabled=checker_context,
                     snapshot_text=snapshot_text,
                     scrambled_pages=scrambled_pages,
                     ocr_pages=ocr_pages,
                     native_pdf_available=native_pdf is not None,
+                    pdf_context=pdf_context,
                 ),
             }
             for index, candidate in enumerate(candidates)
@@ -527,6 +600,123 @@ def _visual_unverified_candidate_indexes(
         if check.visual_unverified_by_text:
             indexes.add(index)
     return indexes
+
+
+def _pdf_visual_unverified_candidate_indexes(
+    candidates: list[CandidateCall],
+    *,
+    chunk_texts: dict[str, str],
+    visual_pages: dict,
+) -> set[int]:
+    """Indexes of `pdf:` candidates whose table/visual evidence only the page
+    image can verify (their chunk's pages, against that chunk's PDF text)."""
+    indexes: set[int] = set()
+    for index, candidate in enumerate(candidates):
+        if not pdf_chunk_pages(candidate.chunk_id):
+            continue
+        pages = set(visual_pages.get(validation_key(candidate), ()))
+        if _visual_unverified_candidate_indexes(
+            [candidate],
+            snapshot_text=chunk_texts.get(candidate.chunk_id, ""),
+            visual_pages=pages,
+        ):
+            indexes.add(index)
+    return indexes
+
+
+def _pdf_page_texts(pdf_path: str | Path | None) -> list[str] | None:
+    """Per-page pdfplumber text of a paired PDF (the same extraction ingest
+    joins into the PDF snapshot), or None when the file cannot be read."""
+    if pdf_path is None:
+        return None
+    try:
+        import pdfplumber
+
+        with pdfplumber.open(pdf_path) as pdf:
+            return [page.extract_text() or "" for page in pdf.pages]
+    except Exception:
+        return None
+
+
+_PDF_PAGE_JOIN = "\n\n"  # ingest._extract_pdf_text joins page texts with this
+
+
+def _pdf_page_spans(
+    pdf_text: str,
+    page_texts: list[str] | None,
+    ocr_pages: frozenset[int],
+) -> dict[int, tuple[int, int]] | None:
+    """Map page number -> (start, end) offsets of that page in the PDF snapshot.
+
+    The snapshot is the page texts joined by _PDF_PAGE_JOIN, except that an
+    OCR page may carry its OCR text instead; a run of consecutive OCR pages is
+    therefore bounded by its non-OCR neighbours and every page in the run gets
+    the run's whole span. None when the snapshot does not line up with the
+    page texts (callers then fall back to the whole PDF text).
+    """
+    if not page_texts:
+        return None
+    spans: dict[int, tuple[int, int]] = {}
+    cursor = 0
+    pending: list[int] = []
+    pending_start = 0
+    for page_number, page_text in enumerate(page_texts, start=1):
+        if page_number in ocr_pages:
+            if not pending:
+                pending_start = cursor
+            pending.append(page_number)
+            continue
+        if pending:
+            boundary = pdf_text.find(_PDF_PAGE_JOIN + page_text, pending_start)
+            if boundary < 0:
+                return None
+            spans.update((page, (pending_start, boundary)) for page in pending)
+            pending = []
+            cursor = boundary + len(_PDF_PAGE_JOIN)
+        if not pdf_text.startswith(page_text, cursor):
+            return None
+        spans[page_number] = (cursor, cursor + len(page_text))
+        cursor += len(page_text) + len(_PDF_PAGE_JOIN)
+    if pending:
+        spans.update((page, (pending_start, len(pdf_text))) for page in pending)
+    elif cursor - len(_PDF_PAGE_JOIN) != len(pdf_text):
+        return None
+    return spans
+
+
+def _pdf_chunk_text(
+    pdf_text: str,
+    page_spans: dict[int, tuple[int, int]] | None,
+    chunk_pages: tuple[int, ...],
+) -> str:
+    """The PDF snapshot text of a `pdf:` chunk's own pages. Falls back to the
+    whole PDF text only when the page boundaries cannot be recovered."""
+    if page_spans is None or any(page not in page_spans for page in chunk_pages):
+        return pdf_text
+    start = min(page_spans[page][0] for page in chunk_pages)
+    end = max(page_spans[page][1] for page in chunk_pages)
+    return pdf_text[start:end]
+
+
+def _candidate_context_fields(
+    candidate: CandidateCall,
+    *,
+    pdf_context: tuple[dict[str, str], frozenset[int], frozenset[int]] | None,
+    native_pdf_available: bool,
+    **fields,
+) -> dict[str, object]:
+    """_context_fields on the candidate's own route when a paired PDF is in play."""
+    if pdf_context is None:
+        return _context_fields(candidate, native_pdf_available=native_pdf_available, **fields)
+    if pdf_chunk_pages(candidate.chunk_id):
+        chunk_texts, scrambled, ocr = pdf_context
+        fields.update(
+            snapshot_text=chunk_texts.get(candidate.chunk_id, ""),
+            scrambled_pages=scrambled,
+            ocr_pages=ocr,
+        )
+        return _context_fields(candidate, native_pdf_available=native_pdf_available, **fields)
+    return _context_fields(candidate, native_pdf_available=False, **fields)
 
 
 def _native_pdf_path(native_source_path: str | Path | None) -> Path | None:
@@ -746,7 +936,8 @@ def _resolve_groups(
 
 def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
     """Render the chunk the model must read: native PDF pages, or HTML text."""
-    if ingested.source.source_type == "pdf" or ingested.printed_pdf:
+    paired_pdf = bool(pdf_chunk_pages(chunk.chunk_id))
+    if ingested.source.source_type == "pdf" or ingested.printed_pdf or paired_pdf:
         pages = chunk.locator.replace("p.", "")
         capture_note = (
             f"(This PDF is a print-to-PDF capture of the web page at "
@@ -754,6 +945,13 @@ def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
             if ingested.printed_pdf
             else ""
         )
+        if paired_pdf:
+            capture_note = (
+                "(These pages were flagged because the Markdown conversion of this "
+                "document may have lost their graphics: report what the charts, "
+                "grids and tables show. Calls already taken from the text are "
+                "merged downstream.)\n\n"
+            )
         return (
             f"This chunk is pages {pages} of the PDF file at:\n"
             f"`{chunk.source_path}`\n\n"
@@ -763,9 +961,19 @@ def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
             "only the extracted text. Cite what you actually see on the page."
         )
     text = _html_chunk_text(chunk)
+    origin = ingested.source.resolved_url or ingested.native_source_path.name
+    conversion_note = (
+        "This text is a Markdown conversion of the document, rendered to plain "
+        "text: charts, positioning grids, dots, arrows and other graphics may be "
+        "missing, and multi-column pages may be interleaved. Never infer a view "
+        "from a visual you cannot see in the text.\n"
+        if ingested.source.source_type == "md"
+        else ""
+    )
     return (
         f"This chunk is the extracted text below "
-        f"(locator {chunk.locator}, from {ingested.source.resolved_url}).\n"
+        f"(locator {chunk.locator}, from {origin}).\n"
+        f"{conversion_note}"
         "If the text references a chart, figure, or infographic you cannot see, "
         "say so in your summary rather than guessing its contents.\n\n"
         "-----\n"
@@ -866,14 +1074,14 @@ def build_parser() -> argparse.ArgumentParser:
         "read as a PDF; any other URL takes the HTML path. <=20 sources.",
     )
     parser.add_argument("--run-id", required=True)
-    # Defaults below are the model matrix (revamp 2026-07-10); a bare
+    # Defaults below are the model matrix (revamp 2026-10-23); a bare
     # `python -m src.run --run-id X --sources ...` resolves to it fully.
     parser.add_argument("--engine", choices=("claude", "codex"), default="codex")
     parser.add_argument(
         "--model",
-        default="gpt-5.6-sol",
+        default="gpt-6.1-sol",
         help="model for the analyze run: with --engine codex one of "
-        f"{', '.join(CODEX_MODELS)} (default gpt-5.6-sol); required with --engine claude",
+        f"{', '.join(CODEX_MODELS)} (default gpt-6.1-sol); required with --engine claude",
     )
     parser.add_argument(
         "--effort",
@@ -889,13 +1097,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--checker-model",
-        default="opus",
-        help="model for the checker step (default opus; required with --checker-engine claude)",
+        default="claude-opus-5-5",
+        help="model for the checker step (default claude-opus-5-5; required with --checker-engine claude)",
     )
     parser.add_argument(
         "--checker-effort",
-        default="medium",
-        help="reasoning effort for the checker step (default medium)",
+        default="high",
+        help="reasoning effort for the checker step (default high)",
     )
     parser.add_argument(
         "--checker-context",
@@ -908,13 +1116,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--arbiter-engine",
         choices=("claude", "codex"),
-        default="codex",
-        help="engine for the conflict-arbiter step (default codex)",
+        default="claude",
+        help="engine for the conflict-arbiter step (default claude)",
     )
     parser.add_argument(
         "--arbiter-model",
-        default="gpt-5.6-luna",
-        help="model for the arbiter step (default gpt-5.6-luna; required with --arbiter-engine claude)",
+        default="claude-haiku-5-5",
+        help="model for the arbiter step (default claude-haiku-5-5; required with --arbiter-engine claude)",
     )
     parser.add_argument(
         "--arbiter-effort",
@@ -929,13 +1137,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--grouper-engine",
         choices=("claude", "codex"),
-        default="claude",
-        help="engine for the group-notes resolver step (default claude)",
+        default="codex",
+        help="engine for the group-notes resolver step (default codex)",
     )
     parser.add_argument(
         "--grouper-model",
-        default="haiku",
-        help="model for the group-notes resolver (default haiku; required with --grouper-engine claude)",
+        default="gpt-6-luna",
+        help="model for the group-notes resolver (default gpt-6-luna; required with --grouper-engine claude)",
     )
     parser.add_argument(
         "--grouper-effort",
@@ -950,8 +1158,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--quote-visual-model",
-        default="gpt-5.6-luna",
-        help="model for tier-3 visual quote verification (default gpt-5.6-luna)",
+        default="gpt-6-luna",
+        help="model for tier-3 visual quote verification (default gpt-6-luna)",
     )
     parser.add_argument(
         "--quote-visual-effort",

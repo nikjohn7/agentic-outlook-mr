@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from src.commentary import (
+    PDF_READ_MARKER,
     SEGMENT_SEP,
     STRUCTURED_COLUMNS,
     Commentary,
@@ -30,6 +31,7 @@ from src.confidence import (
     score_candidate,
 )
 from src.csvio import write_csv
+from src.pagecheck import cited_pages
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.sharedevidence import Entry as EvidenceEntry
 from src.sharedevidence import Judge as EvidenceJudge
@@ -55,10 +57,14 @@ def _candidate_segment(candidate: CandidateCall, title: str, *, locator_source: 
     """One structured segment for a candidate: reader-facing locator (page for
     PDF; `char:` chunk offsets of HTML/transcript sources render blank), the
     model's reasoning, and the verbatim quote. A grouped-source row suffixes
-    the member title to the locator so the reader knows which document p.N is in."""
+    the member title to the locator so the reader knows which document p.N is in.
+    A candidate read from a paired-PDF chunk (`pdf:`) ends with PDF_READ_MARKER,
+    which `evidence_origin` reads back after any merge."""
     locator = display_locator(candidate.locator)
     if locator and locator_source:
         locator = f"{locator} ({locator_source})"
+    if candidate.chunk_id.startswith("pdf:"):
+        locator = f"{locator} {PDF_READ_MARKER}".strip()
     return Segment(
         title=title,
         locator=locator,
@@ -84,7 +90,9 @@ TARGET_OUTPUT_COLUMNS = (
 # workbook shape; `Full Commentary` is rendered from them for internal
 # consumers. `basis`, `checker_strength`, `call_language` and `quote_match`
 # are internal diagnostics for analysts (stated vs inferred, checker grade,
-# quote-verification tier); the client file (src/export.py) never carries them.
+# quote-verification tier); `evidence_origin` (markdown | pdf | both) is derived
+# from the Locator's PDF_READ_MARKER by src.commentary.row_columns. The client
+# file (src/export.py) never carries them.
 OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + STRUCTURED_COLUMNS + (
     "confidence",
     "band",
@@ -93,6 +101,7 @@ OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + STRUCTURED_COLUMNS + (
     "checker_strength",
     "call_language",
     "quote_match",
+    "evidence_origin",
 )
 
 FAILURE_COLUMNS = (
@@ -227,8 +236,8 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
     ),
     "arbitrated_out": (
         "Conflicting views - other call kept",
-        "Two documents disagreed; the more current or more specific call was "
-        "kept. Review if the kept call looks wrong.",
+        "The document(s) in this group took conflicting views on this asset; the call "
+        "they hold most clearly was kept. Review if the kept call looks wrong.",
     ),
     "quote_not_found": (
         "Evidence could not be verified",
@@ -446,6 +455,9 @@ class AssemblyResult:
     output_rows: list[dict[str, str]]
     failures: list[FailureRecord]
     candidate_count: int
+    # Same source/leaf view conflicts whose candidates came from both a `pdf:`
+    # and a Markdown chunk (counted on the conflict groups themselves).
+    mixed_origin_conflicts: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -466,6 +478,27 @@ class _Selected:
     # (deterministic stated-beats-implied resolution). Rendered on the kept row
     # and forces a review flag so a human sees the recommendation.
     challenge_note: str = ""
+
+
+_PDF_CHUNK_ID = re.compile(r"pdf:p(\d+)-(\d+)")
+
+
+def pdf_chunk_pages(chunk_id: str) -> tuple[int, ...]:
+    """Pages of a Markdown source's paired-PDF chunk (`pdf:p4-5`); () otherwise."""
+    match = _PDF_CHUNK_ID.fullmatch(chunk_id)
+    if not match:
+        return ()
+    return tuple(range(int(match.group(1)), int(match.group(2)) + 1))
+
+
+def validation_key(candidate: CandidateCall) -> str | tuple[str, str]:
+    """Key into the per-source validation inputs (page count, scrambled / OCR /
+    visual pages, native path). A paired-PDF chunk is keyed per chunk, so a
+    Markdown candidate never sees the PDF's pages or path and a PDF candidate
+    never sees the Markdown's."""
+    if pdf_chunk_pages(candidate.chunk_id):
+        return (candidate.source_id, candidate.chunk_id)
+    return candidate.source_id
 
 
 def assemble_candidates(
@@ -501,6 +534,9 @@ def assemble_candidates(
     visual_pages maps source_id -> pages from print-captured / visual-heavy
     sources where table/visual token misses should route to checker visual
     review instead of hard-failing on snapshot text.
+    A Markdown source's paired-PDF chunk keys all of these, and
+    native_source_paths, by (source_id, chunk_id) instead (validation_key); a
+    `pdf:` candidate citing a page outside its chunk fails.
 
     verdicts maps candidate list index -> checker verdict; None means the
     checker step is not in play (no caps), while a dict with a missing index
@@ -517,11 +553,27 @@ def assemble_candidates(
 
     for index, candidate in enumerate(candidates):
         snapshot_text = snapshots.get((candidate.source_id, candidate.chunk_id), "")
-        page_count = (page_counts or {}).get(candidate.source_id)
-        source_scrambled = frozenset((scrambled_pages or {}).get(candidate.source_id, ()))
-        source_ocr = frozenset((ocr_pages or {}).get(candidate.source_id, ()))
-        source_visual_pages = frozenset((visual_pages or {}).get(candidate.source_id, ()))
+        key = validation_key(candidate)
+        page_count = (page_counts or {}).get(key)
+        source_scrambled = frozenset((scrambled_pages or {}).get(key, ()))
+        source_ocr = frozenset((ocr_pages or {}).get(key, ()))
+        source_visual_pages = frozenset((visual_pages or {}).get(key, ()))
         verdict = (verdicts or {}).get(index)
+        chunk_pages = pdf_chunk_pages(candidate.chunk_id)
+        cited = cited_pages(candidate.locator) if chunk_pages else ()
+        if chunk_pages and (not cited or not set(cited) <= set(chunk_pages)):
+            # Every cited page (a range `p.3-9` included) must be one the chunk
+            # was given. Checked before scoring, so the visual verifier never
+            # rescues it.
+            failures.append(
+                FailureRecord.from_candidate(
+                    HARD_FAILURE_QUOTE,
+                    f"cited page is outside the PDF pages this chunk was given "
+                    f"(p.{chunk_pages[0]}-{chunk_pages[-1]})",
+                    candidate,
+                )
+            )
+            continue
         try:
             scored.append(
                 score_candidate(
@@ -543,7 +595,7 @@ def assemble_candidates(
             message = getattr(exc, "message", reason)
             if reason == HARD_FAILURE_QUOTE and quote_visual_verifier is not None:
                 source_info = sources.get(candidate.source_id)
-                native_path = (native_source_paths or {}).get(candidate.source_id)
+                native_path = (native_source_paths or {}).get(key)
                 if source_info is not None:
                     visual_check = _visual_quote_check(
                         candidate,
@@ -600,12 +652,15 @@ def assemble_candidates(
             )
 
     selected_entries: list[_Selected] = []
+    mixed_origin_conflicts = 0
     for group in _group_scored(scored, group_map).values():
         views = {item.candidate.view for item in group}
         arbiter_note = ""
         merged_segments: list[tuple[str, str, str]] = []
         challenge_note = ""
         if len(views) > 1:
+            if len({item.candidate.chunk_id.startswith("pdf:") for item in group}) > 1:
+                mixed_origin_conflicts += 1
             stated_resolution = _resolve_stated_vs_implied(group)
             if stated_resolution is not None:
                 # A clean stated-vs-implied split on one leaf: stated wins
@@ -713,6 +768,7 @@ def assemble_candidates(
         output_rows=output_rows,
         failures=failures,
         candidate_count=len(candidates),
+        mixed_origin_conflicts=mixed_origin_conflicts,
     )
 
 
@@ -1079,7 +1135,21 @@ def write_run_outputs(
     run_dir = Path(output_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     all_failures = [*result.failures, *chunk_failures]
-    write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
+    # Page check (src/pagecheck.py, no model calls): rows naming a source with a
+    # paired PDF get their Markdown quotes' pages checked against the PDF text
+    # before anything is written. Other rows are written exactly as assembled.
+    from src import pagecheck
+
+    output_rows = list(result.output_rows)
+    pdf_for_title = pagecheck.pdf_map_from_infos(sources or {})
+    page_audit: list[dict[str, str]] | None = None
+    if pdf_for_title:
+        indexes = pagecheck.rows_with_pdf(output_rows, pdf_for_title)
+        checked, page_audit = pagecheck.page_check([output_rows[i] for i in indexes], pdf_for_title)
+        for index, row in zip(indexes, checked):
+            output_rows[index] = row
+        write_csv(run_dir / "pagecheck-audit.csv", pagecheck.AUDIT_COLUMNS, page_audit)
+    write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, output_rows)
     write_csv(
         run_dir / "failures.csv",
         FAILURE_COLUMNS,
@@ -1099,7 +1169,7 @@ def write_run_outputs(
     # forgotten at hand-off time. Late import: export reads these columns.
     from src.export import write_client_files
 
-    write_client_files(run_dir, result.output_rows, client_failure_rows)
+    write_client_files(run_dir, output_rows, client_failure_rows)
     manifest = _manifest_text(
         result,
         source_summaries or [],
@@ -1107,6 +1177,7 @@ def write_run_outputs(
         run_config,
         grouping,
         quote_visual_stats,
+        page_audit,
     )
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
 
@@ -1278,6 +1349,7 @@ def _manifest_text(
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
     quote_visual_stats: dict[str, int] | None = None,
+    page_audit: list[dict[str, str]] | None = None,
 ) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
@@ -1330,6 +1402,19 @@ def _manifest_text(
             for language, count in sorted(call_language_counts.items())
         )
         lines.append("")
+    origin_counts = Counter(
+        row.get("evidence_origin") or "(none)" for row in result.output_rows
+    )
+    if "pdf" in origin_counts or "both" in origin_counts or result.mixed_origin_conflicts:
+        lines.append("## Evidence origin (kept rows)")
+        lines.extend(
+            f"- {origin}: {count}" for origin, count in sorted(origin_counts.items())
+        )
+        lines.append(
+            "- view conflicts between a PDF-read and a Markdown-read candidate: "
+            f"{result.mixed_origin_conflicts}"
+        )
+        lines.append("")
     quote_match_counts = Counter(
         row.get("quote_match") or "(none)" for row in result.output_rows
     )
@@ -1344,6 +1429,15 @@ def _manifest_text(
         lines.extend(
             f"- {key}: {count}" for key, count in sorted(quote_visual_stats.items())
         )
+        lines.append("")
+    if page_audit is not None:
+        from src.pagecheck import OUTCOMES, verified_page_count
+
+        page_counts = Counter(record["outcome"] for record in page_audit)
+        lines.append("## Page check (paired PDFs)")
+        lines.append(f"- quotes checked: {len(page_audit)}")
+        lines.append(f"- quotes with a verified page after the check: {verified_page_count(page_audit)}")
+        lines.extend(f"- {outcome}: {page_counts.get(outcome, 0)}" for outcome in OUTCOMES)
         lines.append("")
     reason_counts = Counter(
         failure.reason_code for failure in [*result.failures, *chunk_failures]
@@ -1372,6 +1466,12 @@ def _manifest_text(
                 flag_text += f" [OCR pages: {', '.join(f'p.{n}' for n in ocr_pages)}]"
             if summary.get("ocr_note"):
                 flag_text += f" [OCR note: {summary.get('ocr_note')}]"
+            if summary.get("pdf_chunk_count"):
+                flagged = ", ".join(f"p.{n}" for n in summary.get("flagged_pages") or [])
+                flag_text += (
+                    f" [paired PDF: {summary.get('pdf_chunk_count')} PDF chunks, "
+                    f"flagged pages: {flagged}]"
+                )
             pages = summary.get("page_count")
             chunk_count = summary.get("chunk_count", 0)
             size = f"{pages}p / {chunk_count} chunks" if pages else f"{chunk_count} chunks"

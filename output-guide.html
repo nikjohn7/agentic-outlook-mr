@@ -112,7 +112,7 @@
       <tr><td class="col">View</td><td>The call: <code>O</code> overweight, <code>N</code> neutral, <code>U</code> underweight, <code>UNCERTAIN</code> when the document does not take a clear position.</td></tr>
       <tr><td class="col">Reasoning</td><td>Why the view was read that way, in one or two sentences.</td></tr>
       <tr><td class="col">Verbatim Evidence</td><td>The exact supporting text, copied from the document and nothing else, so you can check it against the source.</td></tr>
-      <tr><td class="col">Locator</td><td>Where the evidence is: the page number for a PDF (plus the chart or table name when the call was read from one). Blank for web pages and transcripts, which have no page numbers - search for the Verbatim Evidence instead.</td></tr>
+      <tr><td class="col">Locator</td><td>Where the evidence is: the page number for a PDF (plus the chart or table name when the call was read from one). For a document supplied as Markdown with its PDF, every page shown is verified: either the quote was found on exactly that one page of the PDF, or the evidence was read directly from that PDF page. <code>(read from PDF)</code> at the end of a locator means the evidence was read from the PDF page itself, usually a chart, grid or table; it says where the evidence was read, not that the Markdown lacked it. When a row lists several passages, the marker applies to the passage it follows. When a page cannot be verified it is left out and the Reviewer Notes say why. Blank for web pages and transcripts, which have no page numbers - search for the Verbatim Evidence instead.</td></tr>
       <tr><td class="col">Reviewer Notes</td><td>Notes about the call rather than from the document: what the second reader found, how a conflict between two passages was resolved, why the confidence was capped, and whether another document from the same firm holds a different view on the same asset.</td></tr>
       <tr><td class="col">confidence</td><td>A 0–100 score from fixed rules (evidence quality, how clearly the view is stated, whether a second reader confirmed it). It is <em>not</em> a model's own opinion of its confidence.</td></tr>
       <tr><td class="col">band</td><td>The confidence score in words: High, Medium, or Low.</td></tr>
@@ -124,8 +124,9 @@
     <strong>One call supported by several passages.</strong> When a firm states the
     same view in more than one document, or in more than one place, the call is
     kept once and every passage is preserved: the Reasoning, Verbatim Evidence and
-    Locator cells then list one entry per document, each prefixed with the document
-    title and separated by <code>&nbsp;||||&nbsp;</code>.
+    Locator cells then list one entry per passage, each prefixed with the document
+    title and separated by <code>&nbsp;||||&nbsp;</code>. The Locator cell lists
+    only the passages that have a page.
     <strong>Two views on one asset.</strong> The file holds one row per firm and
     asset. When two of a firm's documents take different positions on the same
     asset, the more recent document wins when both are dated on different days
@@ -156,7 +157,7 @@
       <tr><td class="col">Conflicting views - none kept</td><td>Two views disagreed and could not be reconciled automatically; neither was kept. A human should decide.</td></tr>
       <tr><td class="col">Part of a document couldn't be read or processed / Second-reader check couldn't run / Skipped - source details missing</td><td>A processing issue affected part of a document. Let us know so we can re-run it.</td></tr>
       <tr><td class="col">Suggestion - review recommended</td><td>An implied reading challenges the firm's stated call; the stated call was kept and the challenge recorded for review.</td></tr>
-      <tr><td class="col">Conflicting views - other call kept</td><td>Two documents disagreed; the more current/specific call was kept. Review if the kept call looks wrong.</td></tr>
+      <tr><td class="col">Conflicting views - other call kept</td><td>The document(s) in this group took conflicting views on this asset; the call they hold most clearly was kept. Review if the kept call looks wrong.</td></tr>
       <tr><td class="col">Evidence could not be verified (or "… verified visually")</td><td>The supporting text couldn't be confirmed - even after a visual page check, for the "visually" variant - so the call was dropped rather than kept unverified. A human can check the cited page.</td></tr>
       <tr><td class="col">Evidence location missing</td><td>A chart/table call didn't record where it came from, so it couldn't be verified.</td></tr>
       <tr><td class="col">Evidence points the other way / Evidence is about a different asset / Not a forward-looking view</td><td>A second reader found the cited text doesn't back the call as made, so it was dropped. A human can check the cited page.</td></tr>

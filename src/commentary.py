@@ -31,6 +31,13 @@ from dataclasses import dataclass, replace
 # The segment separator for merged rows. Defined here, re-exported by
 # src.assemble as COMMENTARY_MERGE_SEP so the two never drift.
 SEGMENT_SEP = "  ||||  "
+# Appended to the locator of a passage read from a Markdown source's paired
+# PDF (a `pdf:` chunk). It records where the evidence was read; it does not
+# mean the Markdown lacked it.
+PDF_READ_MARKER = "(read from PDF)"
+# How a separator is recognised when a row is read back: the CSV writer
+# collapses space runs (src.csvio.clean_cell), so on disk it is " |||| ".
+_SEGMENT_SPLIT = re.compile(r"\s+\|\|\|\|\s+")
 
 STRUCTURED_COLUMNS = ("Reasoning", "Verbatim Evidence", "Locator", "Reviewer Notes")
 
@@ -114,18 +121,34 @@ def structured_columns(commentary: Commentary) -> dict[str, str]:
             "Locator": seg.locator,
             "Reviewer Notes": commentary.notes,
         }
+    # A passage with no locator contributes nothing to the Locator cell (no
+    # placeholder). Alignment with the other columns is recovered on re-read
+    # from Full Commentary, whose segment labels carry every locator.
     return {
         "Reasoning": SEGMENT_SEP.join(f"{seg.title}: {seg.reasoning}" for seg in segments),
         "Verbatim Evidence": SEGMENT_SEP.join(f"{seg.title}: {seg.evidence}" for seg in segments),
-        "Locator": SEGMENT_SEP.join(f"{seg.title}: {seg.locator or '-'}" for seg in segments),
+        "Locator": SEGMENT_SEP.join(f"{seg.title}: {seg.locator}" for seg in segments if seg.locator),
         "Reviewer Notes": commentary.notes,
     }
 
 
+def evidence_origin(commentary: Commentary) -> str:
+    """Where a row's retained passages were read: `pdf` when every segment's
+    locator carries PDF_READ_MARKER, `both` when only some do, `markdown`
+    otherwise (also any source with no paired PDF). Derived, never stored on
+    its own, so it follows every merge."""
+    marked = [PDF_READ_MARKER in segment.locator for segment in commentary.segments]
+    if marked and all(marked):
+        return "pdf"
+    return "both" if any(marked) else "markdown"
+
+
 def row_columns(commentary: Commentary) -> dict[str, str]:
-    """Full Commentary plus the four structured columns, from one source of truth."""
+    """Full Commentary plus the four structured columns and the internal
+    `evidence_origin`, from one source of truth."""
     columns = structured_columns(commentary)
     columns["Full Commentary"] = render_full_commentary(commentary)
+    columns["evidence_origin"] = evidence_origin(commentary)
     return columns
 
 
@@ -178,6 +201,7 @@ _NOTE_MARKERS = (
     "Shared evidence:",
     "Also held by this firm:",
     "Reconcile:",
+    "Page check:",
 )
 _NOTE_SPLIT = re.compile(
     r"(?:(?<=\.)|(?<=\.\)))\s+(?=(?:" + "|".join(re.escape(m) for m in _NOTE_MARKERS) + "))"
@@ -200,12 +224,16 @@ def _strip_period(text: str) -> str:
 
 
 def _strip_title_paren(locator: str, titles: list[str]) -> str:
-    """`p.3 (Source Title)` - grouped rows suffix the member title; drop it."""
+    """`p.3 (Source Title)` - grouped rows suffix the member title; drop it,
+    keeping a trailing PDF_READ_MARKER."""
+    marker = ""
+    if locator.endswith(PDF_READ_MARKER):
+        locator, marker = locator[: -len(PDF_READ_MARKER)].rstrip(), f" {PDF_READ_MARKER}"
     for title in titles:
         suffix = f"({title})"
         if title and locator.endswith(suffix):
-            return locator[: -len(suffix)].rstrip()
-    return locator
+            return locator[: -len(suffix)].rstrip() + marker
+    return locator + marker
 
 
 def _take_label(segment: str, titles: list[str]) -> tuple[str, str, str]:
@@ -260,7 +288,7 @@ def parse_full_commentary(text: str, source_cell: str = "") -> Commentary:
     fallback = titles[0] if titles else ""
     segments: list[Segment] = []
     notes: list[str] = []
-    for raw in (text or "").split(SEGMENT_SEP):
+    for raw in _SEGMENT_SPLIT.split(text or ""):
         raw = raw.strip()
         if not raw:
             continue
@@ -282,7 +310,7 @@ def commentary_from_row(row: dict[str, str]) -> Commentary:
 
 def _split_labeled(cell: str, titles: list[str]) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
-    for part in (cell or "").split(SEGMENT_SEP):
+    for part in _SEGMENT_SPLIT.split(cell or ""):
         title, _, body = _take_label(part, titles) if titles else ("", "", part)
         if not title:
             # Structured cells label as `Title: value` (no locator parenthetical).
@@ -294,17 +322,49 @@ def _split_labeled(cell: str, titles: list[str]) -> list[tuple[str, str]]:
     return out
 
 
+def _align_locators_by_title(
+    locators: list[tuple[str, str]],
+    reasonings: list[tuple[str, str]],
+    evidences: list[tuple[str, str]],
+    count: int,
+) -> list[tuple[str, str]]:
+    """Place a short Locator cell's entries by title when no Full Commentary
+    can align them (client files have none). A locator goes to the one passage
+    with its title; when a title labels several passages, or a locator has no
+    title, the locators stay blank rather than land on the wrong passage."""
+    seg_titles = [
+        (reasonings[i][0] if i < len(reasonings) else "")
+        or (evidences[i][0] if i < len(evidences) else "")
+        for i in range(count)
+    ]
+    aligned = [("", "")] * count
+    for title, locator in locators:
+        matches = [i for i, seg_title in enumerate(seg_titles) if title and seg_title == title]
+        if len(matches) != 1:
+            return [("", "")] * count
+        aligned[matches[0]] = (title, locator)
+    return aligned
+
+
 def _commentary_from_structured(row: dict[str, str], titles: list[str]) -> Commentary:
     reasonings = _split_labeled(row.get("Reasoning", ""), titles)
     evidences = _split_labeled(row.get("Verbatim Evidence", ""), titles)
     locators = _split_labeled(row.get("Locator", ""), titles)
     count = max(len(reasonings), len(evidences), 1)
+    if count > 1 and len(locators) != count:
+        # Pageless passages are omitted from the Locator cell, so the cell
+        # cannot be aligned by position; the Full Commentary labels can.
+        rendered = parse_full_commentary(row.get("Full Commentary", ""), row.get("Source", ""))
+        if len(rendered.segments) == count:
+            locators = [(seg.title, seg.locator) for seg in rendered.segments]
+        else:
+            locators = _align_locators_by_title(locators, reasonings, evidences, count)
     segments: list[Segment] = []
     for index in range(count):
         title_r, reasoning = reasonings[index] if index < len(reasonings) else ("", "")
         title_e, evidence = evidences[index] if index < len(evidences) else ("", "")
         _, locator = locators[index] if index < len(locators) else ("", "")
-        locator = "" if locator == "-" else locator
+        locator = "" if locator == "-" else locator  # legacy placeholder
         segments.append(
             Segment(
                 title=title_r or title_e or (titles[0] if titles else ""),

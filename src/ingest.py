@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import html as html_lib
 import json
 import re
 import shutil
@@ -24,6 +25,8 @@ PILOT_CSV = PROJECT_ROOT / "prev-excel" / "pilot.csv"
 TARGET_SOURCES_CSV = PROJECT_ROOT / "excel-file" / "Target Ingestion List.csv"
 
 PDF_PAGE_CHUNK_SIZE = 5
+# Chunk-id prefix for a Markdown source's paired-PDF pages (flagged pages only).
+PDF_CHUNK_PREFIX = "pdf:"
 HTML_CHAR_CHUNK_SIZE = 8000
 MAX_SOURCES_PER_RUN = 20
 
@@ -43,13 +46,16 @@ FETCH_BROWSER_FALLBACK_STATUSES = frozenset({401, 403, 406, 429})
 # each accepts any of these headers (case-insensitive, trimmed) so a real-world
 # export using e.g. `Entity Name` / `Title` / `External link` loads without
 # editing. `firm`, `source`, and `url` are required; `date` and `local_file`
-# are optional (a missing date is "", a missing local_file fetches the URL).
+# and pdf_file are optional (a missing date is "", a missing local_file
+# fetches the URL; pdf_file pairs a PDF with a Markdown local_file and is
+# rejected on any other row).
 _COLUMN_ALIASES = {
     "firm": ("firm", "entity name", "entity", "manager", "asset manager", "company", "provider"),
     "date": ("date", "published at", "published", "publish date"),
     "source": ("source", "title", "document title", "document"),
     "url": ("url", "mr link", "external link", "source link", "link"),
     "local_file": ("local_file", "local file", "local pdf", "file"),
+    "pdf_file": ("pdf_file",),
 }
 _REQUIRED_SOURCE_FIELDS = ("firm", "source", "url")
 
@@ -89,6 +95,33 @@ _DAY_FIRST_DATE_RE = re.compile(
 _MONTH_FIRST_DATE_RE = re.compile(
     rf"\b({_MONTH_RE})\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+({_YEAR_RE})\b"
 )
+
+# Local Markdown documents (a client's PDF-to-Markdown conversion). The received
+# file is copied byte-for-byte as the native source; the snapshot the model
+# reads and quotes are checked against is a plain-text rendering of it, the
+# same role pdfplumber's text plays for a PDF. Only presentation markup is
+# removed (heading hashes, bold/italic markers, inline HTML tags such as <br>,
+# <u>, <sup>, link/image targets, backslash escapes); every word, number and
+# table cell is kept in order, so a quote taken from the snapshot is a quote
+# from the document. HTML comments are kept as bracketed text: the client's
+# converter wraps text OCR'd from a chart or image in
+# `<!-- Start of picture text -->` / `<!-- End of picture text -->`, and the
+# model needs to see that boundary. Markdown has no pages, so locators are
+# char ranges.
+MARKDOWN_SUFFIXES = frozenset({".md", ".markdown"})
+_MD_COMMENT = re.compile(r"<!--\s*(.*?)\s*-->", re.DOTALL)
+# A numeric footnote marker ("2027<sup>2</sup>") is dropped, never glued on:
+# "20272" would corrupt the figure a quote is checked against.
+_MD_FOOTNOTE_MARK = re.compile(r"<sup>\s*[0-9*\u2020\u2021,\s]+\s*</sup>", re.IGNORECASE)
+_MD_BREAK = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_MD_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*)?/?>")
+_MD_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
+_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_MD_HEADING = re.compile(r"(?m)^[ \t]{0,3}#{1,6}[ \t]+")
+_MD_STRONG_BETWEEN_WORDS = re.compile(r"(?<=\w)(?:\*\*|__)(?=\w)")  # "**Title**Body"
+_MD_STRONG = re.compile(r"\*\*|__")
+_MD_EMPHASIS = re.compile(r"(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])")
+_MD_ESCAPE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!<>|$~])")
 
 PRINTED_PDF_NAME = "printed.pdf"
 PRINT_NAVIGATION_TIMEOUT_MS = 60_000
@@ -142,6 +175,7 @@ class SourceRecord:
     resolved_url: str
     source_type: str
     local_path: Path | None = None
+    pdf_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +198,15 @@ class IngestedSource:
     scrambled_pages: tuple[int, ...] = ()  # 1-indexed pages whose text layer is column-interleaved
     ocr_pages: tuple[int, ...] = ()  # 1-indexed pages detected as image-only / low text layer
     ocr_note: str = ""  # empty when no OCR issue; otherwise applied/skipped details
+    # Markdown source with a paired PDF: the copied PDF, its extracted text and
+    # the pages read as `pdf:` chunks. The PDF page sets stay separate from the
+    # source-level fields above, which describe the Markdown read.
+    pdf_native_path: Path | None = None
+    pdf_snapshot_text_path: Path | None = None
+    pdf_page_count: int | None = None
+    flagged_pages: tuple[int, ...] = ()
+    pdf_scrambled_pages: tuple[int, ...] = ()
+    pdf_ocr_pages: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,12 +218,16 @@ class HtmlFetchResult:
 def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
     """Load a source CSV in the pilot column family.
 
-    Canonical fields - firm, date, source (title), url, and optional local_file -
+    Canonical fields - firm, date, source (title), url, optional local_file and pdf_file -
     each accept a few header aliases (see `_COLUMN_ALIASES`), so an export CSV
     using `Entity Name` / `Title` / `External link` loads with no editing.
     A row's `source_type` is `pdf` when it resolves to a local PDF (`local_file`)
     or its URL points at a `.pdf` (fetched remotely); `txt` when local_file is a
-    plain-text transcript (video sources ship as transcripts); otherwise `html`.
+    plain-text transcript (video sources ship as transcripts); `md` when it is a
+    Markdown document; otherwise `html`.
+    An optional `pdf_file` resolves to `pdf_path` for later PDF assistance;
+    it never changes the primary source type or snapshot, and is only valid on
+    a Markdown (`md`) row - see `_resolve_paired_pdf`.
     See `_resolve_local_file` for the local_file contract. Any second test set is
     a CSV of this family - pointing `--sources <path>` at it needs no code change.
     """
@@ -194,7 +241,12 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
         date = row[header["date"]].strip() if "date" in header else ""
         local_raw = row[header["local_file"]] if "local_file" in header else ""
         local_path = _resolve_local_file(local_raw, firm=firm, title=title)
+        pdf_raw = row[header["pdf_file"]] if "pdf_file" in header else ""
         resolved_url = resolve_url(url)
+        source_type = (
+            _local_source_type(local_path) if local_path else detect_source_type(resolved_url)
+        )
+        pdf_path = _resolve_paired_pdf(pdf_raw, source_type=source_type, firm=firm, title=title)
         sources.append(
             SourceRecord(
                 source_id=slugify(f"{firm} {title}"),
@@ -203,12 +255,9 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
                 source=title,
                 url=url,
                 resolved_url=resolved_url,
-                source_type=(
-                    _local_source_type(local_path)
-                    if local_path
-                    else detect_source_type(resolved_url)
-                ),
+                source_type=source_type,
                 local_path=local_path,
+                pdf_path=pdf_path,
             )
         )
     return sources
@@ -248,8 +297,10 @@ def _match_header_alias(header: str | None) -> str | None:
 def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRecord]:
     """Load the target-batch CSV (`Id`, `Firm`, `Title`, `Published At`,
     `Source Link`). It carries no `local_file` column, which resolves as empty
-    for every row (all URLs fetched) - loading is unchanged; the optional column
-    is honoured if a future target CSV adds it."""
+    for every row (all URLs fetched) - loading is unchanged; the optional
+    `local_file` and `pdf_file` columns are honoured if a future target CSV adds
+    them (same contracts as `load_pilot_sources`; preflight tries this loader
+    first, so a paired PDF must not be dropped here)."""
     rows = _read_csv(path)
     sources: list[SourceRecord] = []
     for index, row in enumerate(rows, start=1):
@@ -258,6 +309,12 @@ def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRec
         local_path = _resolve_local_file(row.get("local_file"), firm=firm, title=title)
         source_id = row["Id"] or slugify(f"{index} {firm} {title}")
         resolved_url = resolve_url(raw_url)
+        source_type = (
+            _local_source_type(local_path) if local_path else detect_source_type(resolved_url)
+        )
+        pdf_path = _resolve_paired_pdf(
+            row.get("pdf_file"), source_type=source_type, firm=firm, title=title
+        )
         sources.append(
             SourceRecord(
                 source_id=str(source_id),
@@ -266,12 +323,9 @@ def load_target_sources(path: str | Path = TARGET_SOURCES_CSV) -> list[SourceRec
                 source=title,
                 url=raw_url,
                 resolved_url=resolved_url,
-                source_type=(
-                    _local_source_type(local_path)
-                    if local_path
-                    else detect_source_type(resolved_url)
-                ),
+                source_type=source_type,
                 local_path=local_path,
+                pdf_path=pdf_path,
             )
         )
     return sources
@@ -313,13 +367,38 @@ def detect_source_type(locator: str) -> str:
 
 
 def _local_source_type(local_path: Path) -> str:
-    return "txt" if local_path.suffix.lower() == ".txt" else "pdf"
+    suffix = local_path.suffix.lower()
+    if suffix == ".txt":
+        return "txt"
+    if suffix in MARKDOWN_SUFFIXES:
+        return "md"
+    return "pdf"
 
 
 def date_provenance(source_type: str) -> str:
-    """Where a filled document date came from, keyed by source type:
-    the PDF's first-page text, the transcript's text, or the HTML markup."""
-    return {"pdf": "pdf_text", "txt": "txt_text"}.get(source_type, "html")
+    """Where a filled document date came from, keyed by source type: the PDF's
+    first-page text, the transcript's or Markdown's text, or the HTML markup."""
+    return {"pdf": "pdf_text", "txt": "txt_text", "md": "md_text"}.get(source_type, "html")
+
+
+def markdown_to_text(markdown: str) -> str:
+    """Plain-text rendering of a Markdown document (see MARKDOWN_SUFFIXES):
+    presentation markup removed, content and order untouched. Table rows stay
+    one line each (a <br> inside a cell becomes a space)."""
+    text = _MD_COMMENT.sub(lambda m: f" [{m.group(1)}] " if m.group(1) else " ", markdown)
+    text = _MD_FOOTNOTE_MARK.sub("", text)
+    text = _MD_BREAK.sub(" ", text)
+    text = _MD_TAG.sub("", text)
+    text = _MD_IMAGE.sub(r"\1", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _MD_HEADING.sub("", text)
+    text = _MD_STRONG_BETWEEN_WORDS.sub(" ", text)
+    text = _MD_STRONG.sub("", text)
+    text = _MD_EMPHASIS.sub(r"\1", text)
+    text = _MD_ESCAPE.sub(r"\1", text)
+    text = html_lib.unescape(text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return "\n".join(line.strip() for line in text.splitlines()).strip() + "\n"
 
 
 def extract_html_date(html: str) -> str:
@@ -376,17 +455,42 @@ def create_snapshot(
     ocr_note = ""
     fetched_via = ""
     document_date = ""
-    if source.source_type == "txt":
-        # A local plain-text transcript (video sources): the text IS the
-        # document, so it doubles as the snapshot / quote-check corpus, and
-        # chunking/locators follow the HTML char-range convention.
+    pdf_native_path: Path | None = None
+    pdf_snapshot_path: Path | None = None
+    pdf_page_count: int | None = None
+    flagged: tuple[int, ...] = ()
+    pdf_scrambled: tuple[int, ...] = ()
+    pdf_ocr: tuple[int, ...] = ()
+    pdf_ocr_note = ""
+    if source.source_type in ("txt", "md"):
+        # A local text document - a plain-text transcript (video sources) or a
+        # Markdown conversion: the text IS the document, so it doubles as the
+        # snapshot / quote-check corpus (Markdown rendered to plain text first),
+        # and chunking/locators follow the HTML char-range convention.
         native_path = output_dir / source.local_path.name
         shutil.copy2(source.local_path, native_path)
         snapshot_text = native_path.read_text(encoding="utf-8")
+        if source.source_type == "md":
+            snapshot_text = markdown_to_text(snapshot_text)
         snapshot_path = output_dir / "snapshot.txt"
         snapshot_path.write_text(snapshot_text, encoding="utf-8")
         chunks = _html_chunks(snapshot_path, len(snapshot_text))
         document_date = extract_pdf_text_date(snapshot_text)
+        if source.source_type == "md" and source.pdf_path is not None:
+            # The paired PDF's flagged pages are read as rendered pages after
+            # the Markdown chunks, so the rolling memory already holds the
+            # text's calls. Imported here: pdfinventory imports this module.
+            from src.pdfinventory import flagged_pages
+
+            pdf_native_path = output_dir / source.pdf_path.name
+            shutil.copy2(source.pdf_path, pdf_native_path)
+            pdf_text, pdf_page_count, pdf_scrambled, pdf_ocr, pdf_ocr_note = _extract_pdf_text(
+                pdf_native_path, ocr_runner=ocr_runner
+            )
+            pdf_snapshot_path = output_dir / "pdf_snapshot.txt"
+            pdf_snapshot_path.write_text(pdf_text, encoding="utf-8")
+            flagged = flagged_pages(native_path, pdf_native_path)
+            chunks += _flagged_pdf_chunks(pdf_native_path, flagged)
     elif source.source_type == "pdf":
         native_path = _copy_pdf(source, output_dir, downloader=downloader)
         snapshot_text, page_count, scrambled_pages, ocr_pages, ocr_note = _extract_pdf_text(
@@ -449,6 +553,12 @@ def create_snapshot(
                 "ocr_pages": list(ocr_pages),
                 "ocr_note": ocr_note,
                 "fetched_via": fetched_via,
+                "pdf_file": str(pdf_native_path) if pdf_native_path else "",
+                "pdf_page_count": pdf_page_count,
+                "flagged_pages": list(flagged),
+                "pdf_scrambled_pages": list(pdf_scrambled),
+                "pdf_ocr_pages": list(pdf_ocr),
+                "pdf_ocr_note": pdf_ocr_note,
             },
             indent=2,
         ),
@@ -466,6 +576,12 @@ def create_snapshot(
         scrambled_pages=scrambled_pages,
         ocr_pages=ocr_pages,
         ocr_note=ocr_note,
+        pdf_native_path=pdf_native_path,
+        pdf_snapshot_text_path=pdf_snapshot_path,
+        pdf_page_count=pdf_page_count,
+        flagged_pages=flagged,
+        pdf_scrambled_pages=pdf_scrambled,
+        pdf_ocr_pages=pdf_ocr,
     )
 
 
@@ -575,8 +691,9 @@ def _read_csv(path: str | Path) -> list[dict[str, str]]:
 def _resolve_local_file(
     local_file: str | None, *, firm: str, title: str
 ) -> Path | None:
-    """Resolve a source row's optional `local_file` value to a local PDF or
-    plain-text transcript (`.txt`, for video sources).
+    """Resolve a source row's optional `local_file` value to a local PDF, a
+    plain-text transcript (`.txt`, for video sources) or a Markdown document
+    (`.md`).
 
     `local_file` is a repo-relative path (resolved against PROJECT_ROOT). Its
     three-way contract, shared by every source CSV:
@@ -598,12 +715,48 @@ def _resolve_local_file(
             f"local_file '{raw}' for source '{firm} - {title}' does not exist "
             f"(resolved to {path}); fix the path or clear the column to fetch the URL"
         )
-    if path.suffix.lower() not in {".pdf", ".txt"}:
+    if path.suffix.lower() not in {".pdf", ".txt"} | MARKDOWN_SUFFIXES:
         raise ValueError(
-            f"local_file '{raw}' for source '{firm} - {title}' must be a .pdf "
-            f"or a .txt transcript; got '{path.suffix}'"
+            f"local_file '{raw}' for source '{firm} - {title}' must be a .pdf, "
+            f"a .txt transcript or a .md document; got '{path.suffix}'"
         )
     return path
+
+
+def _resolve_pdf_file(pdf_file: str | None, *, firm: str, title: str) -> Path | None:
+    """Resolve an optional paired PDF, with the local_file path contract."""
+    raw = (pdf_file or "").strip()
+    if not raw:
+        return None
+    path = PROJECT_ROOT / raw
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"pdf_file '{raw}' for source '{firm} - {title}' does not exist "
+            f"(resolved to {path})"
+        )
+    if path.suffix.lower() != ".pdf":
+        raise ValueError(f"pdf_file '{raw}' for source '{firm} - {title}' must be a .pdf")
+    return path
+
+
+def _resolve_paired_pdf(
+    pdf_file: str | None, *, source_type: str, firm: str, title: str
+) -> Path | None:
+    """Resolve `pdf_file` for a row whose primary source type is known.
+
+    Only the Markdown + PDF mode reads a paired PDF (`create_snapshot` reads it
+    for `md` rows alone), so a `pdf_file` on a pdf/txt/html row is a hard error
+    rather than a path that is validated, never read, and yet still handed to
+    the page check."""
+    pdf_path = _resolve_pdf_file(pdf_file, firm=firm, title=title)
+    if pdf_path is not None and source_type != "md":
+        raise ValueError(
+            f"pdf_file '{(pdf_file or '').strip()}' for source '{firm} - {title}' "
+            f"is only supported with a Markdown (.md) local_file; this row's "
+            f"source type is '{source_type}'. Clear pdf_file or point local_file "
+            f"at the Markdown document"
+        )
+    return pdf_path
 
 
 def _copy_pdf(source: SourceRecord, output_dir: Path, *, downloader=None) -> Path:
@@ -798,6 +951,30 @@ def _pdf_chunks(
         chunk_id = f"p{start}-{end}"
         chunks.append(Chunk(chunk_id=chunk_id, locator=f"p.{start}-{end}", source_path=path))
     return chunks
+
+
+def _flagged_pdf_chunks(
+    path: Path,
+    pages: tuple[int, ...],
+    *,
+    page_chunk_size: int = PDF_PAGE_CHUNK_SIZE,
+) -> list[Chunk]:
+    """`pdf:` chunks over consecutive runs of flagged pages, at most
+    page_chunk_size pages each."""
+    runs: list[list[int]] = []
+    for page in pages:
+        if runs and page == runs[-1][-1] + 1 and len(runs[-1]) < page_chunk_size:
+            runs[-1].append(page)
+        else:
+            runs.append([page])
+    return [
+        Chunk(
+            chunk_id=f"{PDF_CHUNK_PREFIX}p{run[0]}-{run[-1]}",
+            locator=f"p.{run[0]}-{run[-1]}",
+            source_path=path,
+        )
+        for run in runs
+    ]
 
 
 def _html_chunks(
