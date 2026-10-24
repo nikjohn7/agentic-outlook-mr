@@ -29,8 +29,11 @@ Guidance:
 - More current date, or a printed house-stance dial/positioning grid over softer prose, are
   the usual reasons one row supersedes another - but only when the rows really
   do differ. If they agree in substance, it is `same_call`, not `superseded`.
-- Analytical inputs (trend, valuation or economic indicators) gain no published-level
-  precedence unless the source adopts them as its position or recommendation.
+- Analytical inputs gain no published-level precedence unless the source adopts
+  them as its position or recommendation: trend, momentum, valuation, risk or
+  economic indicators and their scores or grid cells, a zero or midpoint
+  indicator reading, or a raw weight with no stated neutral/benchmark. The
+  grid rule above covers house-stance grids only.
 - Judge only the presented fields. You do not have the source documents.
 
 ## Output contract

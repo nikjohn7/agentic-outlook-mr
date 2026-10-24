@@ -7,8 +7,12 @@ All final cases used identical code/prompt content and the original model matrix
 
 ## Final cases and artifacts
 
-All paths are relative to `poc/`; batch root is
-`client-runs/runs-23102026-16rows/`. Each run has an adjacent `.log`, preserved
+All paths are relative to the repository root (the POC checkout); batch root
+is `client-runs/runs-23102026-16rows/`. **Local-only evidence:** `client-runs/`
+is gitignored, so the run folders, audits, logs and renders linked below exist
+on the operator's machine and are not in the repository; only the
+implementation fingerprint (`quality-v2-validation/implementation-currency-final-sha256.json`)
+is force-added so the launcher's drift report works from a clean checkout. Each run has an adjacent `.log`, preserved
 `work/<run-id>/`, CSV/XLSX client output and failures, and `pagecheck-audit.csv`.
 
 | Case / manifest | Candidates = kept + failed | Chunks | Review rows | Acceptance audit |
@@ -187,7 +191,9 @@ configured Codex/Claude CLIs; no source/destination approval remains outstanding
 
 ## Checks, preservation and launch decision
 
-`.venv/bin/python -m unittest discover -s tests`: **Ran 553, OK (skipped=1)**
+`.venv/bin/python -m unittest discover -s tests`: **Ran 553, OK (skipped=1)** on the
+validated checkout (565, OK (skipped=1) on the PR head after the #6 merge, the provenance change
+and the review fixes)
 ([final log](../../client-runs/runs-23102026-16rows/quality-v2-validation/unittest-currency-final.log)).
 Synthetic eligibility verdicts prove routing, not model judgment; the source
 findings above are separate live semantic evidence. Fresh no-LLM preflight on
@@ -207,7 +213,17 @@ was not accessed for writing. Temporary test scratch
 retained as review evidence. Preparatory notes remain in
 `quality-v2-validation/preparatory-review-history.md`.
 
-**No execution blocker remains.** Review flags, prose recall and scope items
+**No execution blocker remains, with one caveat.** The validated fingerprint
+predates the merged #6 review fixes to `src/assemble.py`, `src/pagecheck.py`,
+`src/run.py` and `src/scout.py` (page-reference parsing for the `pdf:` chunk
+guard and page check, lazy PDF page re-read, engine-aware scout model) and the
+PR review clarifications to `conventions.md`, `analyze_chunk.md`,
+`check_candidates.md`, `arbitrate_conflict.md` and `crosscheck_conflicts.md`
+(wording that resolves internal contradictions; the prompts are read by the
+run, so model behaviour may shift). The launcher reports this drift without
+blocking, and each split's manifest records its own provenance. Re-running one
+focused control (Neuberger, the largest) on the current code before the splits
+is recommended. Review flags, prose recall and scope items
 above remain analyst work; these controls do not establish benchmark truth for
 all 15 sources. Launch/status commands are in
 [the current plan](oct2026-md-run-commands.md) and

@@ -44,8 +44,8 @@ input however precisely it can be read.
   trend signal on X turned positive") is still an indicator reading.
 - **A house forecast is the house's view, not an input** - a published
   yield/FX/price forecast follows the forecast rules below (and their
-  materiality gate); a third-party or model reading the house does not
-  endorse does not.
+  materiality gate). A third-party or model forecast the house does not
+  endorse is not a house forecast and is not subject to the forecast rules.
 - **Eligibility and basis are separate.** Owning a forecast does not make its
   allocation consequence `stated`. Prose predicting price support, weaker
   prices, currency moves or yield pressure without explicitly positioning or

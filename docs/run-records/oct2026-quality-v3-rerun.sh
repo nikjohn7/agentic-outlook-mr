@@ -9,6 +9,10 @@ n=${2:-}
 # Drift from the validated controls is reported, never blocking: every run's
 # manifest records its own provenance (commit, uncommitted files, hashes).
 warn_drift() {
+  if [[ ! -f "$F" ]]; then
+    echo "WARNING: validated fingerprint not found ($F); drift not checked." >&2
+    return 0
+  fi
   .venv/bin/python - "$F" <<'PY'
 import json,sys
 from pathlib import Path

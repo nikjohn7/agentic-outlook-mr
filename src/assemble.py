@@ -273,7 +273,7 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "the call, so it was dropped. A human can check the cited page.",
     ),
     "checker_not_forward_looking": (
-        "Not a forward-looking view",
+        "Not a view the firm holds",
         "A second reader found the cited text isn't a view the firm takes "
         "(e.g. it describes the past or an analytical input rather than a position), "
         "so it was dropped. A human can check the "
@@ -1093,8 +1093,13 @@ def _leaf_evidence_overlap(leaf_label: str, evidence_text: str) -> int:
         1 for token in _leaf_name_tokens(leaf_label) if _token_matches(token, evidence_words)
     )
     # Ordinary currency names count even when the ISO code is absent. Match
-    # whole adjacent words so a bare 'dollar' does not name AUD.
-    aliases = {"GBP": ("sterling", "pound"), "AUD": ("australian dollar", "aussie")}
+    # whole adjacent words so a bare 'dollar' does not name AUD; a bare
+    # 'pound' (weight, verb) does not name GBP. 'sterling' stays: in evidence
+    # already shared with a GBP call it is the currency.
+    aliases = {
+        "GBP": ("sterling", "british pound", "british pounds", "pound sterling", "pounds sterling"),
+        "AUD": ("australian dollar", "australian dollars", "aussie", "aussie dollar", "aussie dollars"),
+    }
     evidence_phrase = " " + " ".join(re.findall(r"[a-z0-9]+", normalize_quote_text(evidence_text).lower())) + " "
     if any(f" {name} " in evidence_phrase for name in aliases.get(leaf_label, ())):
         return max(1, overlap)

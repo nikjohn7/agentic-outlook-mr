@@ -16,7 +16,7 @@ Decision rules, in order:
    every candidate whose evidence is only an analytical input the source does
    not adopt as its allocation (a trend, momentum, valuation, volatility,
    risk, economic or historical-performance reading; a raw weight with no
-   stated neutral), mixed conditions with no stance drawn, or a product claim
+   stated neutral/benchmark), mixed conditions with no stance drawn, or a product claim
    with no recommendation. A signal that is easier to read, more precise or
    more specific gains no authority from that. Rules 1-4 rank only the
    eligible candidates.
@@ -26,7 +26,7 @@ Decision rules, in order:
      is not a house stance, and the system must not manufacture one.
 1. **Published house level wins.** A printed house rating - a dial, score,
    tier or positioning-grid cell showing the house's position, or a current
-   allocation against a stated neutral - is the call; prose tone and change
+   allocation against a stated neutral/benchmark - is the call; prose tone and change
    verbs ("upgraded", "increasingly cautious") describe the journey, never
    override the printed destination.
 2. **Specific beats general.** Evidence that names the sub-asset class

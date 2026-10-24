@@ -409,7 +409,12 @@ def _agent_command(
         # `codex exec` enables the native web_search tool via config, not a
         # `--search` flag (that is a top-level `codex` flag). Effort must stay
         # >= low (minimal cannot web-search: API 400).
-        command = ["codex", "exec", "-c", "tools.web_search=true", "-m", llm.resolve_codex_model(model)]
+        # features.hooks=false: an interactive Stop hook must not replace the
+        # JSON answer (same per-process override as llm.EngineConfig.command).
+        command = [
+            "codex", "exec", "-c", "features.hooks=false", "-c", "tools.web_search=true",
+            "-m", llm.resolve_codex_model(model),
+        ]
         if effort is not None:
             command += ["-c", f'model_reasoning_effort="{effort}"']
         command.append(prompt)

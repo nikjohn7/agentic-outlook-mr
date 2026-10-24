@@ -148,8 +148,8 @@ only; never emit or reason about numeric confidence.
 Eligibility does not determine basis. A forecast can qualify as a call while
 its translation into O/N/U still requires one analyst step. "The house expects
 this asset's price to be supported" is not "we overweight/prefer this asset".
-Tag directional forecast prose, including flat-price and two-sided yield paths,
-`inferred` unless it actually states a position or preference. A numerical
+Tag directional forecast prose, including flat-price paths and committed
+two-sided yield paths (which net to `N` under the conventions), `inferred` unless it actually states a position or preference. A numerical
 forecast is `forecast_delta` only against an identified current level; two
 future forecast dates do not supply a current baseline. Preserve legitimate
 directional prose inferences even when that numerical baseline is unavailable.
@@ -194,8 +194,10 @@ directional prose inferences even when that numerical baseline is unavailable.
     in the evidence, so this is the multi-call pattern, not a fan-out. This does
     NOT license fanning a *broad stated* call down to countries it never names -
     the Granularity rule above still governs stated calls;
-  - if the implication is genuinely two-sided or weak, use `UNCERTAIN` or emit
-    nothing;
+  - if the implication is ambiguous (it could point either way) or weak, use
+    `UNCERTAIN` or emit nothing. A committed two-sided path - both directions
+    stated across the horizon - is not ambiguous: it is an `inferred` `N` under
+    the conventions;
   - an inference must **never replace or contradict a `stated` call on the same
     leaf** - if the source states a view on that leaf, the stated call wins and
     you do not also emit an inference for it.

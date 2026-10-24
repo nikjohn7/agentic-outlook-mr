@@ -56,8 +56,9 @@ original workspace-relative chunk paths. Archive contents were not rewritten.
 - `poc/tmp/insight-p6-8/` (4 files)
 
 These preserve page renderings, quote/date checks, crops, extracted text and
-five PDF page extracts. The implementation/handoff Markdown files under
-`poc/tmp/` were later deleted (2026-10-24) once their builds were committed. A complete source-to-render mapping was not
+five PDF page extracts. The six implementation/handoff Markdown files directly
+under `poc/tmp/` remained in place at this cleanup (see Verification). A
+complete source-to-render mapping was not
 established; the visual evidence was archived rather than discarded.
 
 ## Batch A: exact duplicates removed
@@ -129,3 +130,15 @@ the corresponding command. Do not rerun the pipeline merely to recover these
 historical artifacts. The original pilot and 98-batch `work/` folders and the
 roadmap's client-summary example PDF were already absent before cleanup;
 these archives do not recover those missing items.
+
+## Later deletion outside this archive (2026-10-24)
+
+The six implementation/handoff Markdown files directly under `poc/tmp/`,
+protected above, were deleted on 2026-10-24 once their builds were committed.
+This deletion is outside the verified cleanup: no archive, receipt or hashes
+were taken. Four names are recoverable from the ROADMAP references removed in
+commit `c4a84d3`: `tmp/instructions-1-checker-context.md`,
+`tmp/instructions-2-scout-groups.md`, `tmp/instructions-3-firm-crosscheck.md`
+and `tmp/instructions-4-reader-summaries.md`; the other two names were not
+recorded. Their content is superseded by the committed builds and their
+ROADMAP / `prompts/REGISTRY.md` entries.

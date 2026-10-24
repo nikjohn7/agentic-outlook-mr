@@ -107,7 +107,8 @@ one of `pass`, `unclear`, `fail`:
      analytical input, see the allocation-eligibility rule below), record it
      on `forward_looking`; judge `supports_view` only on the direction the
      evidence reads, so the failure is filed as a missing stance rather than a
-     sign error.
+     sign error. An unadopted input with no directional reading (a zero or
+     midpoint indicator) is `unclear` on `supports_view`, never `fail`.
    - `unclear` - a direction is plausible but the quote alone is not decisive
      (check `reasoning` for the claimed inference; judge whether the inference
      is sound, not whether you'd have made it).

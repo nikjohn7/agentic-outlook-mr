@@ -45,17 +45,22 @@ Defaults remain analyze codex/gpt-6.1-sol/high; checker
 claude/claude-opus-5-5/high; arbiter claude/claude-haiku-5-5/high; visual
 codex/gpt-6-luna/high; shared-evidence claude/claude-opus-5-5/medium.
 `--checker-context` is omitted (off), shared-evidence gate remains on, no group
-notes or inventory overrides. Exact expanded worker command (N=2, 3, then 1):
+notes or inventory overrides. Launch through the helper's `launch N` mode;
+it runs this worker command (N=2, 3, then 1), including the log and exit
+capture that `status` and `wait23` depend on:
 
 The revised adapter disables lifecycle hooks only for its headless Codex
 subprocesses (`-c features.hooks=false`), following the demonstrated Stop-hook
 answer replacement in the validation record. Global configuration is untouched.
 
 ```bash
+B=client-runs/runs-23102026-16rows
 caffeinate -i .venv/bin/python -u -m src.run \
-  --sources client-runs/runs-23102026-16rows/splits/split-N.csv \
+  --sources $B/splits/split-N.csv \
   --run-id oct26md-qv3-splitN \
-  --out-root client-runs/runs-23102026-16rows
+  --out-root $B \
+  2>&1 | tee $B/oct26md-qv3-splitN.log
+printf '%s\n' "${PIPESTATUS[0]}" > $B/oct26md-qv3-splitN.exit
 ```
 
 URLs remain blank; only dates found in the source may appear. State Street

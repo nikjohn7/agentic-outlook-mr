@@ -172,11 +172,16 @@ the digest stage shares the same Sonnet 5.5 pin (at medium effort). The agreed
 escalation if a sample reads flat is claude/opus/medium. Inputs (appended JSON): firm, digests[], final_calls[] (with
 `unresolved`/`views`/`divergence` for unresolved keys), sources[].
 
-### `crosscheck_conflicts.md` - v1 (2026-07-07)
+### `crosscheck_conflicts.md` - v1.1 (2026-10-25)
 
-2026-10-25 integration clarification: published-level precedence applies only
-to house stances. Trend, valuation and economic indicators gain no precedence
-unless the source adopts them as its position or recommendation.
+Published-level precedence applies only to house stances: "a printed
+house-stance dial/positioning grid" replaces "a printed dial/positioning grid".
+Analytical inputs - trend, momentum, valuation, risk or economic indicators and
+their scores or grid cells, a zero or midpoint reading, a raw weight with no
+stated neutral/benchmark - gain no precedence unless the source adopts them as
+its position or recommendation (pairs with `conventions.md` v1.4).
+
+### `crosscheck_conflicts.md` - v1 (2026-07-07)
 
 The post-run firm cross-check's one agent step (`src/crosscheck.py`, v1 pre-37
 wave instruction set 3). Runs once, batched over ALL `conflicting_views` groups
@@ -200,6 +205,11 @@ v1.5 separates forecast eligibility from basis: directional forecast prose
 without an allocation/preference is inferred; a numerical forecast delta needs
 an identified current baseline. Live validation found eligible prose forecasts
 incorrectly reaching High as stated. The extractor v1.8 repeats this boundary.
+Review clarification (same version): a third-party or model forecast the house
+does not endorse is not a house forecast and is not subject to the forecast
+rules.
+
+### `conventions.md` - v1.4 (2026-10-24)
 
 v1.4 (October batch quality fix, allocation eligibility): a new first section,
 "A call is a position, not an analytical input". Calls are the house's own
@@ -287,6 +297,11 @@ only the presented fields; it now judges them under the same law.
 v1.8 clarifies basis tagging for directional/flat/two-sided forecast prose and
 two-future-date comparisons, preserving eligible inferences when a current
 numeric baseline is unavailable. No source-specific examples or labels added.
+Review clarification (same version): a committed two-sided yield path is an
+`inferred` `N` (as the conventions net it); `UNCERTAIN`/no candidate is for an
+ambiguous or weak implication only.
+
+### `analyze_chunk.md` - v1.7 (2026-10-24)
 
 v1.7 (allocation eligibility, pairs with `conventions.md` v1.4): a new first
 rule, "Positions, not inputs": read a figure's caption, legend, axes and
@@ -436,6 +451,11 @@ rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
 
 ### `check_candidates.md` - v1.9 (2026-10-24)
+
+Review clarification (2026-10-25, same version): an unadopted input with no
+directional reading (a zero or midpoint indicator) is `unclear` on
+`supports_view`, never `fail`, so it is filed as a missing stance, not a sign
+error.
 
 v1.9 (allocation eligibility, pairs with `conventions.md` v1.4): the checker
 enforces the position-vs-input boundary through the existing categorical
@@ -609,6 +629,10 @@ Resolver failure degrades to an ungrouped run. Default engine codex/gpt-6-luna/h
 source_id/firm/title/date; `{{group_notes}}` injected.
 
 ### `arbitrate_conflict.md` - v1.2 (2026-10-24)
+
+Review clarification (2026-10-25, same version): rules 0 and 1 test a raw
+weight or current allocation against a stated neutral/benchmark, matching the
+conventions.
 
 v1.2 (allocation eligibility, pairs with `conventions.md` v1.4): a new rule 0,
 "Eligibility first", runs before the ranking rules: candidates whose evidence
