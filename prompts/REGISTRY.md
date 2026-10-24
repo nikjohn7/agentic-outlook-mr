@@ -190,6 +190,38 @@ sub_asset_leaf, and each row's view/source_title/date/full_commentary. No
 template vars. Deliberately NOT the v1.2 dual-confidence reconcile (ROADMAP.md
 v1.2 item 1) and does no fuzzy/near-leaf matching (v1.2 item 6).
 
+### `conventions.md` - v1.4 (2026-10-24)
+
+v1.4 (October batch quality fix, allocation eligibility): a new first section,
+"A call is a position, not an analytical input". Calls are the house's own
+positions or recommendations: explicit house preference/stance ratings, and
+the current allocation against a weight the source calls neutral/benchmark/
+strategic. Trend, momentum, valuation, volatility, risk, sentiment, economic/
+nowcast, scenario and historical-performance indicators are not calls on
+their own, whatever a cell's colour, sign, zero or midpoint; a zero reading is
+not neutral positioning; a raw holding weight with no stated neutral is not an
+overweight. Readers must identify the figure from its caption, legend, axes
+and the source's explanation; when inputs build a final allocation, only the
+allocation is a call and disagreeing inputs are not a stance conflict. A
+model output is a call when the source adopts it; prose that takes a stance
+is quoted as its own call; house forecasts stay under the forecast rules.
+"Published level wins" (and the dial-vs-commentary protection) now covers
+house stances only. Inference tightened without removing the analyst-style
+rules: the two-sided-path-to-`N` and mixed-region conventions need a supported
+path/view on the asset, not macro pros and cons; an inference needs a bridge
+from the source's own argument (a cheap valuation or one favorable input
+alone is not enough) and stays `inferred` beside a numerical chart; mixed
+macro conditions and product-virtue/performance claims are listed as not
+calls (an actual recommendation to allocate still qualifies); broad and
+country leaves may legitimately differ. "0" and the middle tier now refer to
+house rating scales; hedge allocations may be recommended or adopted.
+Motivated by split 3 of the October Markdown + PDF batch, where trend-signal
+and valuation-signal cells were kept as stated calls and conflicted with each
+other; no firm, figure or row is named in any prompt. Mirrored in
+`analyze_chunk.md` v1.7, `check_candidates.md` v1.9, `arbitrate_conflict.md`
+v1.2 and illustrated synthetically in `brain.md` v1.7. Model settings,
+taxonomy, confidence arithmetic and inventory thresholds are unchanged.
+
 ### `conventions.md` - v1.3 (2026-07-07)
 
 v1.3 (pre-37 checker-context wave, client decision 7): adds the dial-vs-commentary
@@ -241,9 +273,29 @@ convention, the convention-blind checker failed it as a sign mismatch.
 Checker independence is preserved: it still never sees the source and judges
 only the presented fields; it now judges them under the same law.
 
+### `analyze_chunk.md` - v1.7 (2026-10-24)
+
+v1.7 (allocation eligibility, pairs with `conventions.md` v1.4): a new first
+rule, "Positions, not inputs": read a figure's caption, legend, axes and
+explanation before its cells; emit candidates only from house-stance visuals
+(stance ratings, current allocation vs a stated neutral/benchmark); describe
+analytical-input figures in `summary` and emit no candidate from their cells.
+The rule explicitly governs the code-built `pdf:` chunk note ("report what the
+charts, grids and tables show"). Stance-taking prose is quoted as its own call;
+a genuinely ambiguous visual may be emitted with the doubt stated in
+`reasoning`. `explicit_dial` is defined as a house rating with a synthetic
+negative anchor (a momentum-signal heatmap cell); table/visual evidence is for
+house-stance artifacts, an allocation-vs-neutral quote gives both weights, and
+the legacy economic-dial quote/locator examples were replaced. `basis: stated`
+excludes analytical-input readings and inferred calls even with a printed
+number; `basis: inferred` requires a bridge from the source's own argument
+about the asset, not mixed macro conditions, a cheap valuation or one
+favorable input, or product claims. `summary` also lists analytical-input
+figures not emitted. JSON contract unchanged.
+
 ### `analyze_chunk.md` input - Markdown + PDF chunks (2026-10-23/24)
 
-The prompt file is unchanged (still v1.6); the chunk content appended to it
+The prompt file was unchanged by this (then v1.6); the chunk content appended to it
 (`src/run.py` `_chunk_content`, code-built) changed twice:
 
 - 2026-10-23: a Markdown chunk is introduced as a plain-text rendering of a
@@ -369,6 +421,29 @@ sidebar, banner, stat panel, infographic column) must be tagged
 text snapshot scrambles boxed/multi-column layouts, so the hard verbatim check
 rejected 12 correct pilot calls that were misfiled as `prose`. Visual evidence
 gets the key-token-on-page check instead.
+
+### `check_candidates.md` - v1.9 (2026-10-24)
+
+v1.9 (allocation eligibility, pairs with `conventions.md` v1.4): the checker
+enforces the position-vs-input boundary through the existing categorical
+contract. `forward_looking` now asks whether the evidence is a stance the house
+takes (positioning, preference, recommendation, allocation vs a stated
+neutral, house forecast tilt) rather than a recap or an analytical input; a
+clearly unadopted input (indicator reading, raw weight with no neutral, input
+panel of a figure whose allocation is shown elsewhere, mixed macro conditions
+with no stance, product claim with no recommendation) is `forward_looking:
+fail` even when the reading is accurate and tagged `stated`/`explicit_dial`,
+never an `unclear` or `thin` pass, with a note starting "Not an allocation
+stance:". `supports_view` judges only direction, so the failure is filed as
+`checker_not_forward_looking`, not a sign mismatch. Genuinely ambiguous visuals
+stay `unclear` (existing review routing). The visual route no longer passes a
+graphic just because it reads as described; the dial-vs-commentary protection
+and the dialect line cover house ratings only; the "reserve fail" framing and
+the evidence-context rule admit evidence that is not a call at all. Inferred
+candidates whose prose is only macro mix / cheap valuation / product claims
+fail `forward_looking`; implausible leaps still fail `supports_view`. No
+change to the JSON contract or to `src/confidence.py` (a `fail` was already a
+hard failure).
 
 ### `check_candidates.md` - v1.8 (2026-07-10)
 
@@ -520,6 +595,23 @@ Resolver failure degrades to an ungrouped run. Default engine codex/gpt-6-luna/h
 (model revamp 2026-10-23; `--grouper-*` flags). Inputs (appended JSON): sources[] with
 source_id/firm/title/date; `{{group_notes}}` injected.
 
+### `arbitrate_conflict.md` - v1.2 (2026-10-24)
+
+v1.2 (allocation eligibility, pairs with `conventions.md` v1.4): a new rule 0,
+"Eligibility first", runs before the ranking rules: candidates whose evidence
+is only an unadopted analytical input, mixed conditions or a product claim are
+set aside, and readability or precision gives a signal no authority. One
+eligible candidate wins; none eligible → `winning_index: null` (never the
+"least bad" signal - disagreeing inputs are not a house stance). Rule 1
+becomes "published house level wins" (house ratings and allocation vs a stated
+neutral only). Rule 5 also covers opposite positions on segments the one leaf
+cannot distinguish. Null routing was checked in `src/assemble.py`: a null (or
+out-of-range) winner sends every candidate in the group to
+`unresolved_conflict` and keeps none, so both null cases manufacture no
+position. Reasoning must name candidates set aside as not allocation stances.
+JSON contract unchanged; inputs unchanged (the arbiter still does not receive
+`basis` or checker notes).
+
 ### `arbitrate_conflict.md` - v1.1 (2026-07-05)
 
 v1.1: `{{conventions}}` replaces `{{brain_examples}}` (the rules ARE the
@@ -539,6 +631,19 @@ reasoning appended to commentary; losers land in `failures.csv` as
 `arbitrated_out`. The arbiter is deliberately NOT shown the deterministic
 confidence scores (anchoring). `{{brain_examples}}` injected for calibration.
 Default engine claude/claude-haiku-5-5/high (model revamp 2026-10-23; `--arbiter-*` flags).
+
+### `brain.md` - v1.7 (2026-10-24)
+
+v1.7 (allocation eligibility, pairs with `conventions.md` v1.4): a new
+synthetic section "Positions vs analytical inputs" (an invented firm's
+current-vs-neutral bars → `O`/`U`; a holdings pie with no neutral → no call;
+momentum and valuation z-score charts → no candidates, a zero not neutral, and
+only the final-allocation figure called; stance-taking prose quoted instead of
+the chart; an adopted model output → `stated`), plus three synthetic
+not-a-call contrasts (mixed macro conditions vs a real two-sided rate path; a
+fund's performance claim vs a recommendation to allocate; a cheap valuation
+alone vs one the house acts on). Every leaf is an exact locked label; no
+example is drawn from the October batch documents, preserving blindness.
 
 ### `brain.md` - v1.6 (2026-07-07)
 

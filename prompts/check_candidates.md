@@ -1,6 +1,6 @@
 # Verify candidate allocation calls - second reader
 
-_Version: v1.8_
+_Version: v1.9_
 
 You are a skeptical second reader verifying candidate asset-allocation calls
 extracted from one fund/asset-manager outlook source. You do NOT re-extract and
@@ -19,7 +19,9 @@ source's language into calls. Verify each candidate against its evidence AS
 READ UNDER these conventions - never fail a candidate for following one (for
 example, a two-sided path netting to `N` is a correct `N`, not a sign
 mismatch, when the quote shows both directions). Reserve `fail` for evidence
-that contradicts the claimed view even after the conventions are applied.
+that contradicts the claimed view even after the conventions are applied, or
+that the conventions say is not a call at all (an analytical input the house
+does not adopt, a recap, a product claim with no recommendation).
 Your independence is unchanged: you still judge only the fields presented,
 never the source itself.
 
@@ -72,7 +74,8 @@ Normative rules for `evidence_context`:
   reconciliation is the arbiter's and the rolling memory's territory, not this
   window's. Reserve a context-driven `fail`/`unclear` for when the surrounding
   words directly hedge, condition, negate, or re-attribute the quoted stance
-  itself.
+  itself, or show that the quoted text describes an analytical input rather
+  than a stance the house takes.
 
 Some candidates instead carry `context_unreliable: true`. This means the text
 around the quote could NOT be trusted - the cited page is column-interleaved
@@ -96,19 +99,34 @@ one of `pass`, `unclear`, `fail`:
    balanced, **or** a two-sided view that nets to neutral under the house
    conventions (the quote then legitimately shows both directions);
    `UNCERTAIN` = the quote itself is ambiguous or self-conflicting
-   about the stance.
+   about the stance. A zero or midpoint on an analytical indicator is not
+   neutral positioning.
    - `fail` - the evidence points the other way, or expresses no direction at
      all for this view.
+   - When the defect is that the evidence is not a house position at all (an
+     analytical input, see the allocation-eligibility rule below), record it
+     on `forward_looking`; judge `supports_view` only on the direction the
+     evidence reads, so the failure is filed as a missing stance rather than a
+     sign error.
    - `unclear` - a direction is plausible but the quote alone is not decisive
      (check `reasoning` for the claimed inference; judge whether the inference
      is sound, not whether you'd have made it).
 
-2. **forward_looking** - is the evidence a stance (positioning, preference,
-   outlook, forecast-based tilt) rather than a recap?
+2. **forward_looking** - is the evidence a stance the house takes on the
+   asset (positioning, preference, recommendation, current allocation against
+   a stated neutral/benchmark, house forecast-based tilt) rather than a recap
+   or an analytical input?
    - `fail` - pure market-move reporting or past-performance description
      ("equities fell in the quarter", "bonds outperformed") with no stance.
+   - `fail` - the evidence is clearly an analytical input the source does not
+     adopt as its allocation or recommendation: a trend, momentum, valuation,
+     volatility, risk, economic or historical-performance indicator reading; a
+     raw holding weight with no stated neutral/benchmark; mixed macro
+     conditions with no stance drawn; a claim about a product's virtues or
+     performance with no recommendation to allocate.
    - `unclear` - mixes recap with a possible stance and the stance part is
-     thin.
+     thin, or the caption, legend and text leave genuinely open whether the
+     visual is a house stance or an input.
 
 3. **asset_match** - is the evidence about the asset named in
    `sub_asset_class` (allowing the recorded snap from `sub_asset_raw`)?
@@ -139,16 +157,49 @@ Rules:
   `text_unverifiable_visual: true`, the deterministic snapshot check could not
   find the table/visual tokens because the source is a print-captured or
   visual-heavy page. Open `native_source_path`, go to the page named in
-  `locator`, and visually inspect the dial/grid/table:
-  - Clear dial/graphic confirmation of the claimed stance on the claimed asset
-    → all applicable answers `pass`, with `evidence_strength: decisive`.
-  - Graphic is present but reading it requires interpretation (ambiguous dial
-    position, unclear label, or mildly inferred pairing of dial to asset) →
+  `locator`, and visually inspect the dial/grid/table. First read its caption,
+  legend and the explanation around it and apply the allocation-eligibility
+  rule below: confirming that a cell reads as described does not make it a
+  call.
+  - Clear confirmation of the claimed stance on the claimed asset in a
+    house-stance graphic → all applicable answers `pass`, with
+    `evidence_strength: decisive`.
+  - The graphic reads as described but is an analytical input the source does
+    not adopt → `forward_looking: fail`, under the allocation-eligibility
+    rule.
+  - A house-stance graphic is present but reading it requires interpretation
+    (ambiguous dial position, unclear label, or mildly inferred pairing of
+    dial to asset) →
     `pass` with `evidence_strength: thin` or `adequate`, depending on how much
     ambiguity remains.
   - Graphic does not show the claim, contradicts it, or cannot be found →
     `supports_view: fail` or `asset_match: fail` as appropriate, with a note
     saying what was missing or contradictory.
+- **Allocation eligibility: a position, not an analytical input.** Apply the
+  conventions' first section to every candidate, whatever its `basis`,
+  `call_language` or `evidence_kind`. Identify what the evidence is from the
+  `evidence_quote`, the caption or title in `locator`, the `reasoning`, any
+  `evidence_context`, the page image when you open one, and the rolling
+  memory's description of the figure.
+  - Clearly an analytical input the source does not adopt as its allocation
+    or recommendation (trend/momentum/valuation/volatility/risk/economic/
+    historical-performance readings, a raw weight with no stated neutral, an
+    input panel of a figure whose final allocation is shown separately) →
+    `forward_looking: fail`. This holds even when the reading is accurate and
+    the extractor tagged it `stated` or `explicit_dial`: a true but irrelevant
+    chart reading does not support an allocation view. Do not downgrade this
+    to `unclear` or a `thin` pass - an input is not a weak position.
+  - Write the `note` so it names the missing stance: start with "Not an
+    allocation stance:" and say what the evidence is and how you know (e.g.
+    "Not an allocation stance: a cell of a chart captioned as trend-following
+    signals; the source shows its allocation in a separate figure.").
+  - Genuinely open whether the visual is a house stance (no caption, unclear
+    legend, no explanation) → `forward_looking: unclear` with a note saying
+    what is unclear. A source that explicitly adopts a model's output as its
+    allocation or recommendation makes that output a stance → judge it as
+    any other stance.
+  - Current allocation versus a source-stated neutral/benchmark is a stance;
+    judge its direction on `supports_view` as usual.
 - **Closing/reducing/neutralizing/trimming lands at the resulting stance, not
   `U`.** If the evidence describes closing, reducing, neutralizing, dialing
   back, scaling back, paring, or moving an overweight to a flat/neutral end
@@ -174,7 +225,11 @@ Rules:
   **single step** from the quoted prose to the named leaf (e.g. country
   political-crisis prose → that country's equities `U`). A plausible single step
   is a `pass`/`unclear` as the evidence warrants; an implausible leap or a
-  multi-step chain of speculation → `supports_view: fail`. Verbatim/asset checks
+  multi-step chain of speculation → `supports_view: fail`. The step must start
+  from the source's own argument about that asset; when the quoted prose is
+  only mixed macro conditions, a cheap valuation or one favorable input, or a
+  product claim, there is no stance to infer from → `forward_looking: fail`
+  with a "Not an allocation stance:" note. Verbatim/asset checks
   apply as usual. **Use the whole-file rolling memory above as extra context for
   these:** check whether anything elsewhere in the document supports or
   contradicts the inferred stance. Corroboration elsewhere strengthens a `pass`;
@@ -183,8 +238,9 @@ Rules:
   not change the output - you still answer the same categorical questions plus
   `evidence_strength`. Every inferred candidate must be actively judged this way
   and given a verdict; none is passed over silently.
-- **Dial/chart calls vs. narrower commentary.** A clear dial, table, or chart
-  position on a leaf stands on its own. Do not `fail` such a call - including a
+- **Dial/chart calls vs. narrower commentary.** A clear house-stance dial,
+  table, or chart position on a leaf stands on its own (this protection does
+  not apply to analytical-input charts). Do not `fail` such a call - including a
   `text_unverifiable_visual` visual call you confirm on the page image - just
   because nearby prose is cautious or bullish about a *narrower* sub-asset than
   the charted leaf. Cautious commentary on gold *mining* does not contradict a
@@ -204,8 +260,8 @@ Rules:
 - `pass` requires positive support, not absence of doubt about a vague quote -
   a quote you cannot connect to the question is `unclear`, never `pass`.
 - Do not punish house dialect: "constructive" supports `O`, "cautious"
-  supports `U`, a printed dial/score/tier level described in the evidence is
-  the stance.
+  supports `U`, a printed house rating (dial/score/tier showing the house's
+  position) described in the evidence is the stance.
 - `note` is required (one short sentence) whenever any answer is not `pass`;
   keep it empty otherwise.
 
