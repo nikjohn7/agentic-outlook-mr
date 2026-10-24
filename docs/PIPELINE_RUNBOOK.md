@@ -262,7 +262,11 @@ Operational rules (learned on the 98-row batch):
   happened" labels, grouped and sorted most-important-first.
 - `output-client.csv/.xlsx`: the client twin (section 3.4).
 - `manifest.md` — per-source counts, tier counts, run config (the manifest
-  records exactly which models ran). With paired PDFs it also lists PDF chunks
+  records exactly which models ran), and `## Provenance`: the code commit,
+  uncommitted changes under `src/`, `prompts/` and the taxonomy, one
+  implementation hash over all of them, and each prompt's and the taxonomy's
+  hash (`src/provenance.py`; recorded, never blocking). Compare two runs by
+  their implementation hash. With paired PDFs it also lists PDF chunks
   and flagged pages per source, kept rows by evidence origin, and a
   `## Page check (paired PDFs)` section.
 - `pagecheck-audit.csv`: paired-PDF runs only: one row per checked quote

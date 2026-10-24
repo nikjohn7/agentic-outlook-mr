@@ -10,8 +10,11 @@ The baseline `oct26md-split1/2/3`, trial and smoke artifacts remain preserved.
 Validation evidence: [quality validation record](oct2026-quality-validation.md).
 Launch helper: [oct2026-quality-v3-rerun.sh](oct2026-quality-v3-rerun.sh).
 Read the acceptance decision in the record before launching. The helper checks
-the validated source/prompt fingerprint, unused tmux sessions, output, log,
-exit-status and work paths. This task does not launch full splits.
+unused tmux sessions, output, log, exit-status and work paths, and warns (without
+blocking) when code, prompts or taxonomy differ from the validated controls;
+each run's manifest records its own provenance (`## Provenance`: commit,
+uncommitted files, implementation and prompt hashes). This task does not launch
+full splits.
 
 From `poc/`, after reviewing the validation evidence:
 

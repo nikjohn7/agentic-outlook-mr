@@ -6,13 +6,24 @@ F="$B/quality-v2-validation/implementation-currency-final-sha256.json"
 SELF=docs/run-records/oct2026-quality-v3-rerun.sh
 mode=${1:-status}
 n=${2:-}
-check_fingerprint() {
+# Drift from the validated controls is reported, never blocking: every run's
+# manifest records its own provenance (commit, uncommitted files, hashes).
+warn_drift() {
   .venv/bin/python - "$F" <<'PY'
-import hashlib,json,sys
+import json,sys
 from pathlib import Path
-for name,digest in json.loads(Path(sys.argv[1]).read_text()).items():
-    if hashlib.sha256(Path(name).read_bytes()).hexdigest() != digest:
-        raise SystemExit('Implementation changed: '+name)
+from src.provenance import file_hashes
+ref=json.loads(Path(sys.argv[1]).read_text()); now=file_hashes()
+changed=sorted(n for n in ref if n in now and now[n]!=ref[n])
+gone=sorted(n for n in ref if n not in now and not Path(n).is_file())
+new=sorted(n for n in now if n not in ref)
+if not (changed or gone or new):
+    print('Implementation matches the validated controls.')
+else:
+    print('WARNING: implementation differs from the validated controls:')
+    for label,names in (('changed',changed),('removed',gone),('new',new)):
+        for n in names: print(f'  {label}: {n}')
+    print('Launching anyway; the run manifest records its own provenance.')
 PY
 }
 check_unused() {
@@ -45,14 +56,14 @@ PY
 }
 case "$mode" in
   preflight)
-    check_fingerprint
+    warn_drift
     for i in 2 3 1; do check_unused "$i"; done
     .venv/bin/python -m src.run --help >/dev/null
-    echo 'Unused sessions/targets and implementation fingerprint checked. No runs launched.'
+    echo 'Unused sessions/targets checked; drift reported above. No runs launched.'
     ;;
   launch)
     [[ "$n" =~ ^[123]$ ]] || { echo 'Usage: launch 1|2|3' >&2; exit 2; }
-    check_fingerprint
+    warn_drift
     check_unused "$n"
     if [[ "$n" == 1 ]]; then
       check_result 2

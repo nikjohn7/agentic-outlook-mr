@@ -886,6 +886,11 @@ class RunPipelineIngestFaultToleranceTest(unittest.TestCase):
         self.assertIn("Document could not be ingested", client_text)
         self.assertIn("bad-doc (pdf, 0 chunks): 0 candidates emitted [ingest-failed:", manifest)
         self.assertIn("good-doc (pdf, 1p / 1 chunks): 1 candidates emitted", manifest)
+        # Every run records what produced it.
+        self.assertIn("## Provenance", manifest)
+        self.assertIn("- code commit: ", manifest)
+        self.assertIn("- implementation hash: ", manifest)
+        self.assertIn("- prompts/analyze_chunk.md: ", manifest)
 
 
 class RunPipelineEchoedIdentityTest(unittest.TestCase):

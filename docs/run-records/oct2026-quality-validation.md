@@ -215,8 +215,9 @@ all 15 sources. Launch/status commands are in
 two at once, wait for both successful completion checks, then recommended split 1.
 Shell syntax/CLI options and unused paths/sessions are checked without launching.
 The exit-status probe verified Python/caffeinate 7 versus tee 0 is captured
-correctly. The helper checks the final fingerprint and completed manifests/files,
-not merely Python exit 0. Future combine inputs are **only** the three
+correctly. The helper checks completed manifests/files, not merely Python exit
+0. Drift from the final fingerprint is reported as a warning (2026-10-25: changed
+from a hard stop); each run's manifest now records its own provenance. Future combine inputs are **only** the three
 `oct26md-qv3-splitN/output.csv` files and matching failures after split review,
 in new revision-specific destinations. Keeping old split 1 creates a documented
 mixed configuration with its old eligibility/source-ID limitations.

@@ -38,7 +38,7 @@ from src.llm import (
     parse_verdicts,
     resolve_codex_model,
 )
-from src import sharedevidence
+from src import provenance, sharedevidence
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import load_taxonomy
 
@@ -417,6 +417,7 @@ def run_pipeline(
         run_config=run_config,
         grouping=grouping,
         quote_visual_stats=quote_visual_stats,
+        provenance=provenance.collect(),
     )
     return result, chunk_failures, run_dir
 

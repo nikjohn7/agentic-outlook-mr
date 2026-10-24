@@ -1120,14 +1120,16 @@ def write_run_outputs(
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
     quote_visual_stats: dict[str, int] | None = None,
+    provenance: dict[str, object] | None = None,
 ) -> None:
     """Write the run's review files.
 
     chunk_failures are whole-chunk failures (e.g. unparseable model output) that
     produced no candidate; they are recorded in failures.csv and counted
     separately in the manifest so the candidate reconciliation stays exact.
-    run_config (engine/model/effort) is recorded in the manifest so a frozen
-    run states exactly what produced it. grouping is the resolved group-notes
+    run_config (engine/model/effort) and provenance (code commit, working-tree
+    state, content hashes; `src.provenance`) are recorded in the manifest so a
+    frozen run states exactly what produced it. grouping is the resolved group-notes
     plan (groups + warnings) so the manifest shows exactly what was combined.
     sources maps source_id -> SourceInfo so the client-readable failures file can
     show each firm/source title (absent -> the source_id is shown instead).
@@ -1186,6 +1188,7 @@ def write_run_outputs(
         grouping,
         quote_visual_stats,
         page_audit,
+        provenance,
     )
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
 
@@ -1358,6 +1361,7 @@ def _manifest_text(
     grouping: dict[str, object] | None = None,
     quote_visual_stats: dict[str, int] | None = None,
     page_audit: list[dict[str, str]] | None = None,
+    provenance: dict[str, object] | None = None,
 ) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
@@ -1366,6 +1370,10 @@ def _manifest_text(
         lines.append("## Run configuration")
         lines.extend(f"- {key}: {value}" for key, value in run_config.items() if value is not None)
         lines.append("")
+    if provenance:
+        from src.provenance import manifest_lines
+
+        lines.extend(manifest_lines(provenance))
     if grouping:
         lines.append("## Grouping")
         lines.append(f"- group notes: {grouping.get('notes_path')}")
