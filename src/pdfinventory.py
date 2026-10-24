@@ -121,7 +121,11 @@ def _page_report(page, md_words: set[str]) -> PageReport:
     # charts still select through the independent object-count/mark measures.
     vector_area = min(1.0, sum(_area_fraction(obj, page) for obj in unfilled_curves))
     opening_lines = [" ".join(_words(line)) for line in text.splitlines() if line.strip()][:3]
-    excluded = "boilerplate" if any(_BOILERPLATE.match(line) for line in opening_lines) else ""
+    # Boilerplate deliberately overrides graphics (unlike the sparse rule):
+    # back-matter pages carry QR codes, icon grids and decorative dot patterns
+    # that clear the graphics floors (Columbia Threadneedle p.32: 321 rects;
+    # Tikehau p.22: 96 round marks) but hold no allocation content.
+    excluded ="boilerplate" if any(_BOILERPLATE.match(line) for line in opening_lines) else ""
     graphics_heavy = (
         len(unfilled_curves) >= MIN_VECTOR_OBJECTS
         or len(lines) >= MIN_BODY_LINES

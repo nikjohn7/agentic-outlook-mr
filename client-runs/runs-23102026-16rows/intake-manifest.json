@@ -181,6 +181,8 @@
     },
     {
       "intake_id": "oct2026-10",
+      "run_status": "excluded",
+      "exclusion_reason": "Two-year-old edition (Q4 2024); excluded from the run by decision 2026-10-23 (docs/run-records/oct2026-md-run-commands.md). Not in md-sources-15.csv or the splits.",
       "markdown": {
         "path": "client-inputs/2026-10-review/markdown/afi_outlook_q4_2024-c1c3 (1).md",
         "bytes": 28868,

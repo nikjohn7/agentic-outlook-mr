@@ -38,7 +38,8 @@ SCOUT_PROMPT = PROJECT_ROOT / "prompts" / "scout_groups.md"
 
 # Metadata triage over same-firm titles: a fast codex luna model at medium effort
 # (model revamp 2026-10-23, was gpt-5.6-luna; the earlier claude/haiku/low
-# default was never user-approved and is removed). Overridable via the CLI flags.
+# default was never user-approved and is removed). Overridable via the CLI flags;
+# DEFAULT_MODEL applies only to the codex engine (--engine claude needs --model).
 DEFAULT_ENGINE = "codex"
 DEFAULT_MODEL = "gpt-6-luna"
 DEFAULT_EFFORT = "medium"
@@ -338,7 +339,22 @@ def _default_report_path(out_path: str) -> str:
     return str(path.with_name(f"{path.stem}-report{path.suffix or '.md'}"))
 
 
-def main() -> int:
+def _resolve_model(engine: str, model: str | None) -> str | None:
+    """Engine-aware ``--model`` default (the ``crosscheck._resolve_model`` idiom).
+
+    ``DEFAULT_MODEL`` is a codex model, so it is supplied only for the codex
+    engine. claude passes through unchanged - None is rejected by
+    ``resolve_engine_settings`` ("--model is required with --engine claude"),
+    so a claude scout never silently receives a codex model name.
+    """
+    if engine == "codex" and model is None:
+        return DEFAULT_MODEL
+    return model
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """The scout CLI parser. Extracted so the no-flags defaults (and the
+    engine-aware model default) are testable."""
     parser = argparse.ArgumentParser(
         description="Pre-run companion scout: propose read-together groups among "
         "same-firm sources from source metadata only (no URL fetch, no document read)."
@@ -361,14 +377,22 @@ def main() -> int:
     parser.add_argument("--engine", choices=("claude", "codex"), default=DEFAULT_ENGINE)
     parser.add_argument(
         "--model",
-        default=DEFAULT_MODEL,
-        help=f"model (default {DEFAULT_MODEL}; codex allowlist member or claude model)",
+        default=None,
+        help=f"model (codex default: {DEFAULT_MODEL}, an allowlist member; "
+        "required with --engine claude)",
     )
     parser.add_argument("--effort", default=DEFAULT_EFFORT)
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     try:
-        model, effort = resolve_engine_settings(args.engine, args.model, args.effort)
+        model, effort = resolve_engine_settings(
+            args.engine, _resolve_model(args.engine, args.model), args.effort
+        )
     except ValueError as exc:
         parser.error(str(exc))
 

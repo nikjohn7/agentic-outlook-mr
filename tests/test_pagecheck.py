@@ -17,7 +17,9 @@ from src.pagecheck import (
     check_segment,
     cited_pages,
     found_pages,
+    render_summary,
     strip_page,
+    verified_page_count,
 )
 
 PAGES = [
@@ -43,8 +45,25 @@ class LocatorHelpersTest(unittest.TestCase):
         self.assertEqual((1,), found_pages("underweight German-Bunds,JGBs and cash", PAGES))
 
     def test_ellipsis_spans_must_share_a_page(self) -> None:
-        self.assertEqual((1,), found_pages("Key takeaways ... German Bunds, JGBs and cash", PAGES))
+        # Both spans are long enough to count: the first alone is on p.2, the
+        # second on p.2 and p.3, so only their shared page is returned.
+        self.assertEqual((2, 3), found_pages("Malaysia and Singapore to outperform", PAGES))
+        self.assertEqual((2,), found_pages("Equities. We expect Taiwan ... Singapore to outperform regional peers", PAGES))
+        self.assertEqual((1,), found_pages("Key takeaways. We underweight ... German Bunds, JGBs and cash", PAGES))
+        # Each span is on some page, but never both on the same one.
         self.assertEqual((), found_pages("We underweight German Bunds ... Malaysia and Singapore to outperform", PAGES))
+
+    def test_short_span_is_ignored(self) -> None:
+        # "Key takeaways" is under MIN_SPAN_CHARS: it neither locates nor
+        # restricts the page, so the quote is located by its long span only.
+        self.assertEqual((2, 3), found_pages("Key takeaways ... Malaysia and Singapore to outperform", PAGES))
+
+    def test_tolerates_glued_words_and_a_quote_cut_mid_word(self) -> None:
+        # Deliberate: token edges are not required (see _key).
+        pages = [_key("residential whole loans and agricultural mortgageswhile underweighting"),
+                 _key("flat against the greenback.")]
+        self.assertEqual((1,), found_pages("residential whole loans and agricultural mortgages", pages))
+        self.assertEqual((2,), found_pages("flat against the green", pages))
 
 
 class CheckSegmentTest(unittest.TestCase):
@@ -61,6 +80,24 @@ class CheckSegmentTest(unittest.TestCase):
     def _run(self, locator: str, evidence: str) -> tuple[str, str]:
         check = check_segment(_seg(locator, evidence), PAGES)
         return check.outcome, check.locator
+
+
+class SummaryTest(unittest.TestCase):
+    def test_unchecked_no_pdf_pages_are_not_counted_as_verified(self) -> None:
+        def record(outcome: str, locator_after: str) -> dict[str, str]:
+            return {"outcome": outcome, "locator_after": locator_after}
+
+        audit = [
+            record(CONFIRMED, "p.1"),
+            record(CORRECTED, "p.1 - 'Key takeaways' box"),
+            record(ADDED, "p.3"),
+            record(PDF_READ, "p.2 (read from PDF)"),
+            record(AMBIGUOUS, ""),
+            record(NOT_FOUND, "'Rankings' table"),
+            record(NO_PDF, "p.4"),  # the model's page, never checked
+        ]
+        self.assertEqual(4, verified_page_count(audit))
+        self.assertIn("quotes with a verified page after the check: 4", render_summary(audit, 7))
 
 
 class CheckRowTest(unittest.TestCase):

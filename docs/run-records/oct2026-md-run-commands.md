@@ -24,8 +24,10 @@ the client supplied the documents themselves, so there is no link to verify.
 ## Scout - MODEL OVERRIDE for this batch
 
 **Off-matrix:** scout ran on `claude / claude-haiku-5-5 / high` instead of
-the matrix default `codex / gpt-5.6-luna / medium` (Nikhil's choice, this run
-only; the code default and `tests/test_model_matrix.py` are unchanged).
+the then matrix default `codex / gpt-5.6-luna / medium` (Nikhil's choice, this run
+only). `gpt-5.6-luna` was the pre-revamp default when scout ran; after the
+2026-10-23 model revamp the code default and `tests/test_model_matrix.py` use
+`codex / gpt-6-luna / medium`.
 
 ```bash
 .venv/bin/python -m src.scout \
@@ -98,12 +100,15 @@ High 92 / Medium 40. Shared-evidence gate (first live run): 5 calls dropped,
 each for a sound reason; every other shared passage kept as separate calls.
 
 Review found, and fixed before the final run (code after `bc731ff`):
-- Review flags were 48%: 44 rows were flagged only because the
-  shared-evidence gate kept several calls named in one passage, and same-view
-  merges across documents were flagged too. Neither is a judgment; both are
-  now noted but not flagged (only a failed gate verdict, or a conflict picked
-  by rule or left to a human, flags). Split 1 after the change: 41 of 123
-  (33%), mostly substantive checker objections and the sibling tripwire.
+- Review flags were 48% (64 of 132 internal rows; 68 of 123 client rows).
+  44 of the 64 flagged internal rows carried a shared-evidence multi-keep
+  note (the gate kept several calls named in one passage) or a cross-document
+  same-view merge note; many, but not all, had no other flag reason. Neither
+  note is a judgment; both are now noted but not flagged (only a failed gate
+  verdict, or a conflict picked by rule or left to a human, flags). Split 1
+  after the change: 41 of 123 client rows (33%; 68 -> 41), mostly
+  substantive checker objections and the sibling tripwire. The drop is
+  smaller than 44 because some of those rows stay flagged for another reason.
 - Merged rows did not split back into their passages when re-read (the CSV
   writer collapses the separator's double spaces); fixed in
   `src/commentary.py`.
@@ -206,13 +211,17 @@ After the gate: one export-only change (commit after `3e49267`): a merged
 row's Locator cell no longer prints `Title: -` for a passage without a page;
 it lists only the passages that have one (alignment on re-read comes from the
 Full Commentary labels). It does not touch extraction, validation or calls, so
-the gate stands and the final run uses that commit.
+the gate's call-level checks stand and the final run uses that commit. The gate
+did not exercise this Locator export: it sits outside the smoke-tested
+configuration, is covered by unit tests only, and the final run's merged
+Locator cells must be spot-checked at review.
 
 ### 2. The three splits
 
 The tmux commands under "Splits" above, with N = 1, 2, 3 (run ids
 `oct26md-split1` to `oct26md-split3`). At most two at a time. A run writes
-into an existing run folder without warning, so move the trial first:
+into an existing run folder without warning, so move the trial first (done
+2026-10-24: the trial is at `oct26md-split1-trial/`):
 
 ```bash
 mv $B/oct26md-split1 $B/oct26md-split1-trial
@@ -352,7 +361,11 @@ dated = Counter((r["Source"], r["Date"]) for r in rows if r["Date"].strip())
 print(f"rows: {len(rows)}; with a URL: {len(with_url)}")
 for (source, date), count in sorted(dated.items()):
     print(f"dated: {date} | {source} ({count} rows)")
-ok = not with_url and all(
+expected = any(
+    date == "06/10/2026" and "Sector Market Perspectives: Q4 2026" in source
+    for source, date in dated
+)
+ok = not with_url and expected and all(
     date == "06/10/2026" and "Sector Market Perspectives: Q4 2026" in source
     for source, date in dated
 )

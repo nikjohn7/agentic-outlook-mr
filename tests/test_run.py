@@ -21,6 +21,8 @@ from src.run import (
     _html_chunk_text,
     _make_arbiter,
     _make_quote_visual_verifier,
+    _pdf_chunk_text,
+    _pdf_page_spans,
     _resolve_groups,
 )
 from src.schemas import CandidateCall, SourceInfo
@@ -79,6 +81,98 @@ def _candidate_json(chunk_id: str) -> str:
                     "conflict": False,
                 }
             ],
+        }
+    )
+
+
+MD_CHUNK_ID = "char:0-2000"
+PDF_CHUNK_ID = "pdf:p2-2"
+
+
+def _md_source(source_id: str, firm: str, title: str) -> SourceRecord:
+    return SourceRecord(
+        source_id=source_id,
+        firm=firm,
+        date="",
+        source=title,
+        url="",
+        resolved_url="",
+        source_type="md",
+    )
+
+
+def _ingested_md(
+    source: SourceRecord, work_dir: Path, markdown_text: str, pdf_text: str | None = None
+) -> IngestedSource:
+    """A Markdown source with one `char:` chunk and, when pdf_text is given, a
+    paired PDF read as one `pdf:` chunk (page 2 of 3)."""
+    source_dir = Path(work_dir) / source.source_id
+    source_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_path = source_dir / "snapshot.txt"
+    snapshot_path.write_text(markdown_text + " " + "Broader market context. " * 80, encoding="utf-8")
+    native_path = source_dir / "native.md"
+    native_path.write_text(markdown_text, encoding="utf-8")
+    chunks = [Chunk(chunk_id=MD_CHUNK_ID, locator=MD_CHUNK_ID, source_path=snapshot_path)]
+    if pdf_text is None:
+        return IngestedSource(
+            source=source,
+            snapshot_text_path=snapshot_path,
+            native_source_path=native_path,
+            chunks=chunks,
+        )
+    pdf_path = source_dir / "native.pdf"
+    pdf_path.write_bytes(b"%PDF fixture")
+    pdf_snapshot_path = source_dir / "pdf-snapshot.txt"
+    pdf_snapshot_path.write_text(pdf_text + " " + "Grid legend and notes. " * 80, encoding="utf-8")
+    chunks.append(Chunk(chunk_id=PDF_CHUNK_ID, locator="p.2-2", source_path=pdf_path))
+    return IngestedSource(
+        source=source,
+        snapshot_text_path=snapshot_path,
+        native_source_path=native_path,
+        chunks=chunks,
+        pdf_native_path=pdf_path,
+        pdf_snapshot_text_path=pdf_snapshot_path,
+        pdf_page_count=3,
+        flagged_pages=(2,),
+    )
+
+
+def _echoed_candidate(
+    source_id: str, chunk_id: str, leaf: str, quote: str, locator: str, **fields
+) -> dict:
+    """One analyzer candidate whose source_id / chunk_id are whatever the model
+    echoed; the semantic fields are what downstream must keep."""
+    return {
+        "source_id": source_id,
+        "chunk_id": chunk_id,
+        "sub_asset_raw": leaf.lower(),
+        "sub_asset_class": leaf,
+        "taxonomy_match": "exact",
+        "view": "O",
+        "call_language": "explicit_stance",
+        "evidence_kind": "prose",
+        "evidence_quote": quote,
+        "locator": locator,
+        "reasoning": f"The manager states a view on {leaf}.",
+        "conflict": False,
+        **fields,
+    }
+
+
+def _passing_verdicts(count: int) -> str:
+    return json.dumps(
+        {
+            "verdicts": [
+                {
+                    "index": index,
+                    "supports_view": "pass",
+                    "forward_looking": "pass",
+                    "asset_match": "pass",
+                    "evidence_strength": "decisive",
+                    "note": "",
+                }
+                for index in range(count)
+            ]
         }
     )
 
@@ -718,6 +812,93 @@ class RunPipelineIngestFaultToleranceTest(unittest.TestCase):
         self.assertIn("Document could not be ingested", client_text)
         self.assertIn("bad-doc (pdf, 0 chunks): 0 candidates emitted [ingest-failed:", manifest)
         self.assertIn("good-doc (pdf, 1p / 1 chunks): 1 candidates emitted", manifest)
+
+
+class PairedPdfChunkTextTest(unittest.TestCase):
+    """A `pdf:` chunk validates against the text of its own pages only - the
+    pages the model was given - not the whole PDF."""
+
+    PAGES = [
+        "Page one: macro backdrop.",
+        "Positioning grid: EM equities overweight.",
+        "Japan equities are our top underweight.",
+    ]
+
+    def test_page_spans_recover_each_page_of_the_joined_snapshot(self) -> None:
+        pdf_text = "\n\n".join(self.PAGES)
+        spans = _pdf_page_spans(pdf_text, self.PAGES, frozenset())
+
+        self.assertEqual(self.PAGES, [pdf_text[a:b] for a, b in (spans[1], spans[2], spans[3])])
+        self.assertEqual(self.PAGES[1], _pdf_chunk_text(pdf_text, spans, (2,)))
+        self.assertEqual("\n\n".join(self.PAGES[1:]), _pdf_chunk_text(pdf_text, spans, (2, 3)))
+
+    def test_ocr_page_text_is_bounded_by_its_neighbours(self) -> None:
+        # Page 2 was OCR'd: the snapshot holds OCR text, not the text layer.
+        pdf_text = "\n\n".join([self.PAGES[0], "OCR: EM equities overweight.", self.PAGES[2]])
+        spans = _pdf_page_spans(pdf_text, [self.PAGES[0], "", self.PAGES[2]], frozenset({2}))
+
+        self.assertEqual("OCR: EM equities overweight.", _pdf_chunk_text(pdf_text, spans, (2,)))
+
+    def test_misaligned_snapshot_falls_back_to_the_whole_text(self) -> None:
+        pdf_text = "\n\n".join(self.PAGES)
+        self.assertIsNone(_pdf_page_spans(pdf_text, ["something else", *self.PAGES[1:]], frozenset()))
+        self.assertIsNone(_pdf_page_spans(pdf_text, None, frozenset()))
+        self.assertEqual(pdf_text, _pdf_chunk_text(pdf_text, None, (2,)))
+
+    def test_quote_only_on_an_unsupplied_page_fails_validation(self) -> None:
+        source = _md_source("nb-aao", "Neuberger Berman", "Asset Allocation Outlook")
+        pdf_text = "\n\n".join(self.PAGES)
+        filler = " " + "Grid legend and notes. " * 80  # _ingested_md appends this
+        page_texts = [self.PAGES[0], self.PAGES[1], self.PAGES[2] + filler]
+        calls = {
+            MD_CHUNK_ID: [],
+            PDF_CHUNK_ID: [
+                _echoed_candidate("nb-aao", PDF_CHUNK_ID, "Emerging Markets Equities",
+                                  self.PAGES[1], "p.2 - 'Positioning grid'"),
+                # Page 3's sentence, cited as page 2 of the chunk p2-2.
+                _echoed_candidate("nb-aao", PDF_CHUNK_ID, "Japan Equities",
+                                  self.PAGES[2], "p.2", view="U"),
+            ],
+        }
+        verified: list[str] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            if "Verify quote visually" in prompt:
+                verified.append(prompt)
+                return subprocess.CompletedProcess(
+                    command, 0, stdout='{"judgment": "absent"}', stderr=""
+                )
+            if "native_source_path" in prompt:  # the checker
+                return subprocess.CompletedProcess(command, 0, stdout=_passing_verdicts(2), stderr="")
+            chunk_id = PDF_CHUNK_ID if "pages 2-2 of the PDF" in prompt else MD_CHUNK_ID
+            out = json.dumps({"summary": "views", "candidates": calls[chunk_id]})
+            return subprocess.CompletedProcess(command, 0, stdout=out, stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch(
+                "src.run.create_snapshot",
+                side_effect=lambda src, work: _ingested_md(src, work, "markdown body", pdf_text),
+            ), patch("src.run._pdf_page_texts", return_value=page_texts):
+                result, chunk_failures, _ = run_pipeline(
+                    sources=[source],
+                    run_id="pdf-chunk-pages",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    evidence_gate=False,
+                    runner=runner,
+                    out_root=Path(temp_dir) / "out",
+                )
+
+        self.assertEqual([], chunk_failures)
+        self.assertEqual(
+            ["Emerging Markets Equities"], [row["Sub-Asset Class"] for row in result.output_rows]
+        )
+        self.assertEqual(
+            [("Japan Equities", "quote_not_found_visual")],
+            [(f.sub_asset_class, f.reason_code) for f in result.failures],
+        )
+        self.assertEqual(1, len(verified))  # the page image is the only rescue
 
 
 class QuoteVisualVerifierTest(unittest.TestCase):

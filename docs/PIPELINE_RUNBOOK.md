@@ -49,7 +49,8 @@ deliberately deviate.
 | scout (pre-run grouping proposals) | codex | gpt-6-luna | medium |
 | preflight content-sanity call | claude | claude-sonnet-5-5 | low |
 | reconcile scope gate (+ near-leaf pass, inherited) | claude | claude-opus-5-5 | medium |
-| datefill primary → cascade | codex gpt-6-luna high → claude claude-sonnet-5-5 medium |
+| datefill primary | codex | gpt-6-luna | high |
+| datefill cascade (fallback) | claude | claude-sonnet-5-5 | medium |
 | crosscheck (report only) | claude | claude-sonnet-5-5 | medium |
 | summarize digest | claude | claude-sonnet-5-5 (pinned) | medium |
 | summarize firmpages | claude | claude-sonnet-5-5 (pinned) | high |
@@ -162,7 +163,7 @@ Preview the flagged pages before a run (no model calls):
 ```bash
 .venv/bin/python -m src.pdfinventory \
   --sources <batch>/splits/split-N.csv \
-  --out <batch>/pdf-inventory
+  --out <batch>/pdf-inventory/split-N
 ```
 
 It writes `pdf-inventory.csv` (one row per PDF page, with every measure) and
@@ -274,12 +275,15 @@ model calls; never edits the run):
   --out-dir <batch>/<run-id>/pagecheck
 ```
 
-Run the digest step (1 LLM call per source; feeds the firm pages later):
+Run the digest step (1 LLM call per source; feeds the firm pages later).
+Every run writes into the same flat `<batch>/digests` folder (one
+`<source_id>.json` per source; source ids are firm + title slugs, so runs do
+not collide), which is the folder `firmpages --digests` reads:
 
 ```bash
 .venv/bin/python -m src.summarize digest \
   --run <batch>/<run-id> \
-  --out-dir <batch>/digests/<run-id>
+  --out-dir <batch>/digests
 ```
 
 ---

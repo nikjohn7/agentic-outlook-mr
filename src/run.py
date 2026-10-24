@@ -203,6 +203,16 @@ def run_pipeline(
             if ingested.pdf_snapshot_text_path is not None
             else ""
         )
+        pdf_page_spans = (
+            _pdf_page_spans(
+                pdf_text,
+                _pdf_page_texts(ingested.pdf_native_path),
+                frozenset(ingested.pdf_ocr_pages),
+            )
+            if ingested.pdf_native_path is not None
+            else None
+        )
+        pdf_chunk_texts: dict[str, str] = {}
         for chunk in ingested.chunks:
             chunk_pages = pdf_chunk_pages(chunk.chunk_id)
             if not chunk_pages:
@@ -210,8 +220,13 @@ def run_pipeline(
                 continue
             # A paired-PDF chunk validates against the PDF only, keyed per chunk
             # (assemble.validation_key): its text, pages, page count and path.
+            # The text is only the chunk's own pages - the pages the model was
+            # given - so a quote found only on another page cannot pass.
             key = (source.source_id, chunk.chunk_id)
-            snapshots[key] = pdf_text
+            pdf_chunk_texts[chunk.chunk_id] = _pdf_chunk_text(
+                pdf_text, pdf_page_spans, chunk_pages
+            )
+            snapshots[key] = pdf_chunk_texts[chunk.chunk_id]
             page_counts[key] = ingested.pdf_page_count
             native_source_paths[key] = Path(ingested.pdf_native_path)
             visual_pages[key] = set(chunk_pages)
@@ -279,10 +294,10 @@ def run_pipeline(
             pdf_context = None
             if ingested.pdf_native_path is not None:
                 visual_unverified |= _pdf_visual_unverified_candidate_indexes(
-                    candidates, snapshot_text=pdf_text, visual_pages=visual_pages
+                    candidates, chunk_texts=pdf_chunk_texts, visual_pages=visual_pages
                 )
                 pdf_context = (
-                    pdf_text,
+                    pdf_chunk_texts,
                     frozenset(ingested.pdf_scrambled_pages),
                     frozenset(ingested.pdf_ocr_pages),
                 )
@@ -489,7 +504,7 @@ def _check_candidates(
     snapshot_text: str = "",
     scrambled_pages: frozenset[int] = frozenset(),
     ocr_pages: frozenset[int] = frozenset(),
-    pdf_context: tuple[str, frozenset[int], frozenset[int]] | None = None,
+    pdf_context: tuple[dict[str, str], frozenset[int], frozenset[int]] | None = None,
 ) -> tuple[dict[int, CheckVerdict], FailureRecord | None]:
     """One second-reader call for all of a source's candidates.
 
@@ -508,7 +523,8 @@ def _check_candidates(
     reusing native_source_path + the cited page). Routing never fails a run or
     blocks a candidate.
 
-    pdf_context is (PDF text, scrambled pages, OCR pages) for a Markdown source
+    pdf_context is ({`pdf:` chunk id: that chunk's PDF page text}, scrambled
+    pages, OCR pages) for a Markdown source
     with a paired PDF: `pdf:` candidates are routed on it with the PDF page
     image, Markdown candidates on the Markdown text with no page image.
     """
@@ -588,27 +604,103 @@ def _visual_unverified_candidate_indexes(
 def _pdf_visual_unverified_candidate_indexes(
     candidates: list[CandidateCall],
     *,
-    snapshot_text: str,
+    chunk_texts: dict[str, str],
     visual_pages: dict,
 ) -> set[int]:
     """Indexes of `pdf:` candidates whose table/visual evidence only the page
-    image can verify (their chunk's pages, against the PDF text)."""
+    image can verify (their chunk's pages, against that chunk's PDF text)."""
     indexes: set[int] = set()
     for index, candidate in enumerate(candidates):
         if not pdf_chunk_pages(candidate.chunk_id):
             continue
         pages = set(visual_pages.get(validation_key(candidate), ()))
         if _visual_unverified_candidate_indexes(
-            [candidate], snapshot_text=snapshot_text, visual_pages=pages
+            [candidate],
+            snapshot_text=chunk_texts.get(candidate.chunk_id, ""),
+            visual_pages=pages,
         ):
             indexes.add(index)
     return indexes
 
 
+def _pdf_page_texts(pdf_path: str | Path | None) -> list[str] | None:
+    """Per-page pdfplumber text of a paired PDF (the same extraction ingest
+    joins into the PDF snapshot), or None when the file cannot be read."""
+    if pdf_path is None:
+        return None
+    try:
+        import pdfplumber
+
+        with pdfplumber.open(pdf_path) as pdf:
+            return [page.extract_text() or "" for page in pdf.pages]
+    except Exception:
+        return None
+
+
+_PDF_PAGE_JOIN = "\n\n"  # ingest._extract_pdf_text joins page texts with this
+
+
+def _pdf_page_spans(
+    pdf_text: str,
+    page_texts: list[str] | None,
+    ocr_pages: frozenset[int],
+) -> dict[int, tuple[int, int]] | None:
+    """Map page number -> (start, end) offsets of that page in the PDF snapshot.
+
+    The snapshot is the page texts joined by _PDF_PAGE_JOIN, except that an
+    OCR page may carry its OCR text instead; a run of consecutive OCR pages is
+    therefore bounded by its non-OCR neighbours and every page in the run gets
+    the run's whole span. None when the snapshot does not line up with the
+    page texts (callers then fall back to the whole PDF text).
+    """
+    if not page_texts:
+        return None
+    spans: dict[int, tuple[int, int]] = {}
+    cursor = 0
+    pending: list[int] = []
+    pending_start = 0
+    for page_number, page_text in enumerate(page_texts, start=1):
+        if page_number in ocr_pages:
+            if not pending:
+                pending_start = cursor
+            pending.append(page_number)
+            continue
+        if pending:
+            boundary = pdf_text.find(_PDF_PAGE_JOIN + page_text, pending_start)
+            if boundary < 0:
+                return None
+            spans.update((page, (pending_start, boundary)) for page in pending)
+            pending = []
+            cursor = boundary + len(_PDF_PAGE_JOIN)
+        if not pdf_text.startswith(page_text, cursor):
+            return None
+        spans[page_number] = (cursor, cursor + len(page_text))
+        cursor += len(page_text) + len(_PDF_PAGE_JOIN)
+    if pending:
+        spans.update((page, (pending_start, len(pdf_text))) for page in pending)
+    elif cursor - len(_PDF_PAGE_JOIN) != len(pdf_text):
+        return None
+    return spans
+
+
+def _pdf_chunk_text(
+    pdf_text: str,
+    page_spans: dict[int, tuple[int, int]] | None,
+    chunk_pages: tuple[int, ...],
+) -> str:
+    """The PDF snapshot text of a `pdf:` chunk's own pages. Falls back to the
+    whole PDF text only when the page boundaries cannot be recovered."""
+    if page_spans is None or any(page not in page_spans for page in chunk_pages):
+        return pdf_text
+    start = min(page_spans[page][0] for page in chunk_pages)
+    end = max(page_spans[page][1] for page in chunk_pages)
+    return pdf_text[start:end]
+
+
 def _candidate_context_fields(
     candidate: CandidateCall,
     *,
-    pdf_context: tuple[str, frozenset[int], frozenset[int]] | None,
+    pdf_context: tuple[dict[str, str], frozenset[int], frozenset[int]] | None,
     native_pdf_available: bool,
     **fields,
 ) -> dict[str, object]:
@@ -616,8 +708,12 @@ def _candidate_context_fields(
     if pdf_context is None:
         return _context_fields(candidate, native_pdf_available=native_pdf_available, **fields)
     if pdf_chunk_pages(candidate.chunk_id):
-        text, scrambled, ocr = pdf_context
-        fields.update(snapshot_text=text, scrambled_pages=scrambled, ocr_pages=ocr)
+        chunk_texts, scrambled, ocr = pdf_context
+        fields.update(
+            snapshot_text=chunk_texts.get(candidate.chunk_id, ""),
+            scrambled_pages=scrambled,
+            ocr_pages=ocr,
+        )
         return _context_fields(candidate, native_pdf_available=native_pdf_available, **fields)
     return _context_fields(candidate, native_pdf_available=False, **fields)
 

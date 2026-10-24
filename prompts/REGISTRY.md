@@ -168,7 +168,7 @@ disciplined to ~500–800 words (one printed page). Single-source firms pass thr
 the same call for a consistent voice. Parsed by `summarize.parse_firm_page` (requires
 the `# ` heading + a `## Sources` section). Default engine
 claude/claude-sonnet-5-5/high (pinned Sonnet 5.5 id for editorial prose, model revamp 2026-10-23; overridable);
-the digest stage uses its separate Sonnet 5 pin. The agreed
+the digest stage shares the same Sonnet 5.5 pin (at medium effort). The agreed
 escalation if a sample reads flat is claude/opus/medium. Inputs (appended JSON): firm, digests[], final_calls[] (with
 `unresolved`/`views`/`divergence` for unresolved keys), sources[].
 

@@ -235,8 +235,8 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
     ),
     "arbitrated_out": (
         "Conflicting views - other call kept",
-        "The document took conflicting views on this asset; the call it holds "
-        "most clearly was kept. Review if the kept call looks wrong.",
+        "The document(s) in this group took conflicting views on this asset; the call "
+        "they hold most clearly was kept. Review if the kept call looks wrong.",
     ),
     "quote_not_found": (
         "Evidence could not be verified",
@@ -559,8 +559,11 @@ def assemble_candidates(
         source_visual_pages = frozenset((visual_pages or {}).get(key, ()))
         verdict = (verdicts or {}).get(index)
         chunk_pages = pdf_chunk_pages(candidate.chunk_id)
-        if chunk_pages and _cited_page(candidate.locator) not in chunk_pages:
-            # Checked before scoring, so the visual verifier never rescues it.
+        cited_pages = _cited_pages(candidate.locator) if chunk_pages else ()
+        if chunk_pages and (not cited_pages or not set(cited_pages) <= set(chunk_pages)):
+            # Every cited page (a range `p.3-9` included) must be one the chunk
+            # was given. Checked before scoring, so the visual verifier never
+            # rescues it.
             failures.append(
                 FailureRecord.from_candidate(
                     HARD_FAILURE_QUOTE,
@@ -1338,6 +1341,26 @@ def _cited_page(locator: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+# `p.3`, `pp. 3-4`, `p.3–9`, `page 3`; a dash whose right side is >= 1000 is not a page
+# range (`p.2 - 2026 outlook`), so only the first page counts there.
+_CITED_PAGE_RE = re.compile(
+    r"\b(?:pages?|pp?\.?)\s*(\d+)(?:\s*[-\u2013\u2014]\s*(?:pp?\.?\s*)?(\d+))?", re.IGNORECASE
+)
+_MAX_PAGE_RANGE_END = 999
+
+
+def _cited_pages(locator: str) -> tuple[int, ...]:
+    """Every page a locator cites: each `p.N` mention, with ranges expanded."""
+    pages: list[int] = []
+    for match in _CITED_PAGE_RE.finditer(locator):
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else start
+        if end < start or end > _MAX_PAGE_RANGE_END:
+            end = start
+        pages.extend(range(start, end + 1))
+    return tuple(dict.fromkeys(pages))
+
+
 def _manifest_text(
     result: AssemblyResult,
     source_summaries: list[dict[str, object]],
@@ -1432,7 +1455,7 @@ def _manifest_text(
         page_counts = Counter(record["outcome"] for record in page_audit)
         lines.append("## Page check (paired PDFs)")
         lines.append(f"- quotes checked: {len(page_audit)}")
-        lines.append(f"- quotes with a page after the check: {verified_page_count(page_audit)}")
+        lines.append(f"- quotes with a verified page after the check: {verified_page_count(page_audit)}")
         lines.extend(f"- {outcome}: {page_counts.get(outcome, 0)}" for outcome in OUTCOMES)
         lines.append("")
     reason_counts = Counter(

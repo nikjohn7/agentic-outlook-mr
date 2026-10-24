@@ -666,5 +666,24 @@ class NearLeafEndToEndTests(unittest.TestCase):
             self.assertEqual(list(COVERAGE_COLUMNS), list(_read_csv(written["coverage"])[0].keys()))
 
 
+class ReconcileModelDefaultTest(unittest.TestCase):
+    """The --model default must not be a claude name: `--engine codex` without
+    `--model` has to reach the codex adapter as None (its own default)."""
+
+    def _model(self, argv: list[str]) -> str | None:
+        args = reconcile.build_parser().parse_args(["--outputs", "a.csv", "--out-dir", "d", *argv])
+        return reconcile._resolve_model(args.engine, args.model)
+
+    def test_bare_invocation_keeps_claude_opus(self) -> None:
+        self.assertEqual("claude-opus-5-5", self._model([]))
+
+    def test_engine_codex_without_model_defers_to_codex_default(self) -> None:
+        from src.llm import DEFAULT_CODEX_MODEL, resolve_codex_model
+
+        model = self._model(["--engine", "codex"])
+        self.assertIsNone(model)
+        self.assertEqual(DEFAULT_CODEX_MODEL, resolve_codex_model(model))
+
+
 if __name__ == "__main__":
     unittest.main()
