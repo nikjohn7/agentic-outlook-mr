@@ -1131,7 +1131,21 @@ def write_run_outputs(
     run_dir = Path(output_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     all_failures = [*result.failures, *chunk_failures]
-    write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, result.output_rows)
+    # Page check (src/pagecheck.py, no model calls): rows naming a source with a
+    # paired PDF get their Markdown quotes' pages checked against the PDF text
+    # before anything is written. Other rows are written exactly as assembled.
+    from src import pagecheck
+
+    output_rows = list(result.output_rows)
+    pdf_for_title = pagecheck.pdf_map_from_infos(sources or {})
+    page_audit: list[dict[str, str]] | None = None
+    if pdf_for_title:
+        indexes = pagecheck.rows_with_pdf(output_rows, pdf_for_title)
+        checked, page_audit = pagecheck.page_check([output_rows[i] for i in indexes], pdf_for_title)
+        for index, row in zip(indexes, checked):
+            output_rows[index] = row
+        write_csv(run_dir / "pagecheck-audit.csv", pagecheck.AUDIT_COLUMNS, page_audit)
+    write_csv(run_dir / "output.csv", OUTPUT_COLUMNS, output_rows)
     write_csv(
         run_dir / "failures.csv",
         FAILURE_COLUMNS,
@@ -1151,7 +1165,7 @@ def write_run_outputs(
     # forgotten at hand-off time. Late import: export reads these columns.
     from src.export import write_client_files
 
-    write_client_files(run_dir, result.output_rows, client_failure_rows)
+    write_client_files(run_dir, output_rows, client_failure_rows)
     manifest = _manifest_text(
         result,
         source_summaries or [],
@@ -1159,6 +1173,7 @@ def write_run_outputs(
         run_config,
         grouping,
         quote_visual_stats,
+        page_audit,
     )
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
 
@@ -1330,6 +1345,7 @@ def _manifest_text(
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
     quote_visual_stats: dict[str, int] | None = None,
+    page_audit: list[dict[str, str]] | None = None,
 ) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
@@ -1409,6 +1425,15 @@ def _manifest_text(
         lines.extend(
             f"- {key}: {count}" for key, count in sorted(quote_visual_stats.items())
         )
+        lines.append("")
+    if page_audit is not None:
+        from src.pagecheck import OUTCOMES, verified_page_count
+
+        page_counts = Counter(record["outcome"] for record in page_audit)
+        lines.append("## Page check (paired PDFs)")
+        lines.append(f"- quotes checked: {len(page_audit)}")
+        lines.append(f"- quotes with a page after the check: {verified_page_count(page_audit)}")
+        lines.extend(f"- {outcome}: {page_counts.get(outcome, 0)}" for outcome in OUTCOMES)
         lines.append("")
     reason_counts = Counter(
         failure.reason_code for failure in [*result.failures, *chunk_failures]

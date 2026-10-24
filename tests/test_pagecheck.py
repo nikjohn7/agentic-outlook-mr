@@ -11,6 +11,7 @@ from src.pagecheck import (
     CORRECTED,
     NO_PDF,
     NOT_FOUND,
+    PDF_READ,
     _key,
     check_row,
     check_segment,
@@ -86,6 +87,21 @@ class CheckRowTest(unittest.TestCase):
         row = {"Firm": "F", "Source": "Doc A", **row_columns(Commentary((_seg("p.1", "We underweight German Bunds, JGBs and cash"),)))}
         out, _ = check_row(row, {"doc a": Path("x.pdf")}, {Path("x.pdf"): PAGES})
         self.assertNotIn("Page check", out["Reviewer Notes"])
+
+    def test_mixed_origin_row_checks_markdown_and_leaves_pdf_read_segment(self) -> None:
+        pdf_locator = "p.2 - 'Positioning grid' (read from PDF)"
+        commentary = Commentary(
+            (
+                _seg("p.7", "We underweight German Bunds, JGBs and cash"),
+                _seg(pdf_locator, "German Bunds: underweight dot"),
+            )
+        )
+        row = {"Firm": "F", "Source": "Doc A", **row_columns(commentary)}
+        out, audit = check_row(row, {"doc a": Path("x.pdf")}, {Path("x.pdf"): PAGES})
+        segments = commentary_from_row(out).segments
+        self.assertEqual(["p.1", pdf_locator], [s.locator for s in segments])
+        self.assertEqual([CORRECTED, PDF_READ], [a["outcome"] for a in audit])
+        self.assertEqual("both", out["evidence_origin"])
 
 
 if __name__ == "__main__":

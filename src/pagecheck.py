@@ -24,6 +24,11 @@ Outputs: `output.csv` (page-checked, every column), `output-client.csv/.xlsx`
 and `failures-client.csv/.xlsx` (the run's failures re-exported alongside),
 `pagecheck-audit.csv` (one row per checked quote) and `pagecheck-summary.md`.
 The page notes are information, not judgments: they never set review_flag.
+
+Every run now does this itself (src.assemble.write_run_outputs, for rows whose
+source has a paired PDF); the CLI stays for runs made before that. A segment
+whose locator carries PDF_READ_MARKER was read from the PDF page itself, so
+its page is kept as it is and audited as `pdf_read`.
 """
 
 from __future__ import annotations
@@ -37,7 +42,7 @@ from pathlib import Path
 
 import pdfplumber
 
-from src.commentary import Commentary, Segment, commentary_from_row, row_columns
+from src.commentary import PDF_READ_MARKER, Commentary, Segment, commentary_from_row, row_columns
 from src.confidence import normalize_quote_text
 from src.csvio import read_csv, write_csv
 from src.ingest import PROJECT_ROOT
@@ -59,6 +64,8 @@ ADDED = "added"
 AMBIGUOUS = "ambiguous"
 NOT_FOUND = "not_found"
 NO_PDF = "no_pdf"
+PDF_READ = "pdf_read"
+OUTCOMES = (CONFIRMED, CORRECTED, ADDED, AMBIGUOUS, NOT_FOUND, PDF_READ, NO_PDF)
 
 AUDIT_COLUMNS = (
     "Firm", "Source", "Sub-Asset Class", "View", "outcome",
@@ -118,6 +125,10 @@ class SegmentCheck:
 
 def check_segment(segment: Segment, pages: list[str] | None) -> SegmentCheck:
     cited = cited_pages(segment.locator)
+    if PDF_READ_MARKER in segment.locator:
+        # Read from the PDF page itself: a chart quote missing from the text
+        # layer must not cost it its page.
+        return SegmentCheck(PDF_READ, cited, (), segment.locator)
     if pages is None:
         return SegmentCheck(NO_PDF, cited, (), segment.locator)
     found = found_pages(segment.evidence, pages)
@@ -231,11 +242,31 @@ def page_check(
     return checked, audit
 
 
+def pdf_map_from_infos(sources: dict[str, object]) -> dict[str, Path]:
+    """Lower-cased source title -> paired PDF, from run SourceInfo records."""
+    return {
+        info.source.strip().lower(): Path(info.pdf_path)
+        for info in sources.values()
+        if getattr(info, "pdf_path", "")
+    }
+
+
+def rows_with_pdf(rows: list[dict[str, str]], pdf_for_title: dict[str, Path]) -> list[int]:
+    """Indexes of the rows naming at least one source with a paired PDF."""
+    return [
+        index
+        for index, row in enumerate(rows)
+        if any(t.strip().lower() in pdf_for_title for t in (row.get("Source") or "").split("|"))
+    ]
+
+
+def verified_page_count(audit: list[dict[str, str]]) -> int:
+    return sum(1 for record in audit if cited_pages(record["locator_after"]))
+
+
 def render_summary(audit: list[dict[str, str]], rows_in: int) -> str:
     counts = Counter(record["outcome"] for record in audit)
-    with_page = sum(
-        1 for record in audit if cited_pages(record["locator_after"])
-    )
+    with_page = verified_page_count(audit)
     lines = [
         "# Page check summary",
         "",
@@ -246,7 +277,7 @@ def render_summary(audit: list[dict[str, str]], rows_in: int) -> str:
         "| outcome | quotes |",
         "| --- | ---: |",
     ]
-    for outcome in (CONFIRMED, CORRECTED, ADDED, AMBIGUOUS, NOT_FOUND, NO_PDF):
+    for outcome in OUTCOMES:
         lines.append(f"| {outcome} | {counts.get(outcome, 0)} |")
     lines.append("")
     return "\n".join(lines)
