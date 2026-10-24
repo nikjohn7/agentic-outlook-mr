@@ -227,8 +227,8 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
     ),
     "arbitrated_out": (
         "Conflicting views - other call kept",
-        "Two documents disagreed; the more current or more specific call was "
-        "kept. Review if the kept call looks wrong.",
+        "The document took conflicting views on this asset; the call it holds "
+        "most clearly was kept. Review if the kept call looks wrong.",
     ),
     "quote_not_found": (
         "Evidence could not be verified",

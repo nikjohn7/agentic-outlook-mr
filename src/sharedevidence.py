@@ -101,7 +101,10 @@ class GroupOutcome:
 
     @property
     def review(self) -> bool:
-        return self.failed or len(self.kept) > 1
+        # Keeping several equally supported calls is the gate doing its job
+        # (a passage that names several assets), not a judgment left open; only
+        # a failed verdict leaves the ranking to a human.
+        return self.failed
 
 
 Judge = Callable[[list[EvidenceGroup]], dict[int, GroupVerdict]]
@@ -294,7 +297,7 @@ def kept_note(outcome: GroupOutcome, row_id: int) -> str:
         parts.append(
             "Shared evidence: this passage equally supports "
             + ", ".join(f"'{leaf}'" for leaf in kept_others)
-            + " (kept as separate calls; review recommended)."
+            + " (kept as separate calls)."
         )
     if dropped:
         parts.append(

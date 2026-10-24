@@ -127,11 +127,13 @@ class ApplyTest(unittest.TestCase):
         self.assertIn("also read as 'Supply Chain Reshoring'", note)
         self.assertIn("most compelling fit", note)
 
-    def test_keep_both_flags_review(self) -> None:
+    def test_keep_both_is_noted_not_flagged(self) -> None:
         outcome = apply_verdict(self.group, GroupVerdict((1, 2), "names both"))
         self.assertEqual((), outcome.dropped)
-        self.assertTrue(outcome.review)
-        self.assertIn("equally supports 'Supply Chain Reshoring'", sharedevidence.kept_note(outcome, 1))
+        self.assertFalse(outcome.review)
+        note = sharedevidence.kept_note(outcome, 1)
+        self.assertIn("equally supports 'Supply Chain Reshoring'", note)
+        self.assertNotIn("review", note)
 
     def test_ids_outside_the_group_fail_closed(self) -> None:
         outcome = apply_verdict(self.group, GroupVerdict((1, 9), "?"))
@@ -178,10 +180,10 @@ class GateRowsTest(unittest.TestCase):
         # Input rows untouched.
         self.assertEqual("none", rows[0]["review_flag"])
 
-    def test_keep_both_and_failed_verdicts_flag_review(self) -> None:
+    def test_only_a_failed_verdict_flags_review(self) -> None:
         rows = [self._row("South Korea Equities", LONG), self._row("Taiwan Equities", LONG)]
         both, both_failures, _, _ = gate_rows(rows, lambda groups: {0: GroupVerdict((0, 1), "names both")})
-        self.assertEqual({"review"}, {r["review_flag"] for r in both})
+        self.assertEqual({"none"}, {r["review_flag"] for r in both})
         self.assertEqual([], both_failures)
         failed, _, audit, _ = gate_rows(rows, lambda groups: {})
         self.assertEqual({"review"}, {r["review_flag"] for r in failed})

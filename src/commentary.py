@@ -31,6 +31,9 @@ from dataclasses import dataclass, replace
 # The segment separator for merged rows. Defined here, re-exported by
 # src.assemble as COMMENTARY_MERGE_SEP so the two never drift.
 SEGMENT_SEP = "  ||||  "
+# How a separator is recognised when a row is read back: the CSV writer
+# collapses space runs (src.csvio.clean_cell), so on disk it is " |||| ".
+_SEGMENT_SPLIT = re.compile(r"\s+\|\|\|\|\s+")
 
 STRUCTURED_COLUMNS = ("Reasoning", "Verbatim Evidence", "Locator", "Reviewer Notes")
 
@@ -178,6 +181,7 @@ _NOTE_MARKERS = (
     "Shared evidence:",
     "Also held by this firm:",
     "Reconcile:",
+    "Page check:",
 )
 _NOTE_SPLIT = re.compile(
     r"(?:(?<=\.)|(?<=\.\)))\s+(?=(?:" + "|".join(re.escape(m) for m in _NOTE_MARKERS) + "))"
@@ -260,7 +264,7 @@ def parse_full_commentary(text: str, source_cell: str = "") -> Commentary:
     fallback = titles[0] if titles else ""
     segments: list[Segment] = []
     notes: list[str] = []
-    for raw in (text or "").split(SEGMENT_SEP):
+    for raw in _SEGMENT_SPLIT.split(text or ""):
         raw = raw.strip()
         if not raw:
             continue
@@ -282,7 +286,7 @@ def commentary_from_row(row: dict[str, str]) -> Commentary:
 
 def _split_labeled(cell: str, titles: list[str]) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
-    for part in (cell or "").split(SEGMENT_SEP):
+    for part in _SEGMENT_SPLIT.split(cell or ""):
         title, _, body = _take_label(part, titles) if titles else ("", "", part)
         if not title:
             # Structured cells label as `Title: value` (no locator parenthetical).

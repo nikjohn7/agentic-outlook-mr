@@ -183,6 +183,26 @@ class ParseLegacyTest(unittest.TestCase):
         rebuilt = commentary_from_row(row)
         self.assertEqual(original, rebuilt)
 
+    def test_merged_row_from_one_document_round_trips_through_the_csv_writer(self) -> None:
+        # The CSV writer collapses space runs, so "  ||||  " is " |||| " on disk;
+        # a same-document merge (one title) must still split into its segments.
+        import tempfile
+        from pathlib import Path
+
+        from src.csvio import read_csv, write_csv
+
+        original = Commentary(
+            (Segment("Doc A", "p.3", "Reason one.", "Quote one"), Segment("Doc A", "p.9", "Reason two.", "Quote two")),
+            "Checker: not run.",
+        )
+        row = {"Source": "Doc A", **row_columns(original)}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "out.csv"
+            write_csv(path, tuple(row), [row])
+            _, [read_back] = read_csv(path)
+        self.assertIn(" |||| ", read_back["Verbatim Evidence"])
+        self.assertEqual(original, commentary_from_row(read_back))
+
     def test_commentary_from_row_falls_back_to_full_commentary(self) -> None:
         row = {"Source": "Doc A", "Full Commentary": "R. Evidence: Q. Locator: p.4."}
         parsed = commentary_from_row(row)
