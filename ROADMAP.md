@@ -79,25 +79,24 @@ without re-deriving the reasoning._
     metadata tier by producer/creator signature, and every candidate is
     year-windowed (2025–2026) to reject trap/epoch dates.
 
-## v1 pre-37 wave (in flight)
+## v1 pre-37 wave (built)
 
-Three independent instruction sets, one agent session each (files in `tmp/`,
-gitignored):
+Four independent builds, one agent session each:
 
-1. `tmp/instructions-1-checker-context.md` — checker receives the source's
+1. Checker context — checker receives the source's
    rolling memory; implied-call verification rule (stated-beats-implied,
    challenges logged as flagged recommendations); dial-vs-commentary
    convention line.
-2. `tmp/instructions-2-scout-groups.md` — pre-run companion scout: a light
+2. Scout groups — pre-run companion scout: a light
    metadata-only agent pass that proposes read-together groups among
    same-firm sources and emits a `--group-notes`-compatible file. Feeds the
    existing group-ledger machinery; zero pipeline changes.
-3. `tmp/instructions-3-firm-crosscheck.md` — bare-bones post-run firm
+3. Firm cross-check — bare-bones post-run firm
    cross-check: deterministic join on (firm, sub-asset leaf) across run
    outputs; same-view overlaps auto-marked; conflicting groups reviewed by
    one cheap agent pass into a "similar" report with a needs-human flag.
    Purely additive report; never modifies run outputs.
-4. `tmp/instructions-4-reader-summaries.md` — the reader-summaries feature
+4. Reader summaries — the reader-summaries feature
    (see "Reader summaries" section below): per-source digest, deterministic
    reconciled-calls stopgap over the crosscheck verdicts, per-firm page
    synthesis, `python-docx` binder, smoke run on the frozen second test.
@@ -125,8 +124,8 @@ single Word document at the combine step.
 ## Reader summaries (client request, 2026-07-07)
 
 The client compiles a reader-facing document of one-page firm summaries
-(example: `tmp/pdfs/Recons - 2026 Investment Outlook Summaries - Markets
-Recon - Jan 2026 1.pdf`) and asked for a Word-document output of a one-page
+(example: "Recons - 2026 Investment Outlook Summaries - Markets Recon - Jan
+2026", a client PDF) and asked for a Word-document output of a one-page
 summary per document analysed, to feed that compilation. Assessment:
 **add-on, not a new build**, but the example's editorial density (themed
 sections, named specifics, figures) exceeds what the call-extraction

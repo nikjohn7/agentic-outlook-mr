@@ -56,8 +56,8 @@ original workspace-relative chunk paths. Archive contents were not rewritten.
 - `poc/tmp/insight-p6-8/` (4 files)
 
 These preserve page renderings, quote/date checks, crops, extracted text and
-five PDF page extracts. The six implementation/handoff Markdown files directly
-under `poc/tmp/` remain in place. A complete source-to-render mapping was not
+five PDF page extracts. The implementation/handoff Markdown files under
+`poc/tmp/` were later deleted (2026-10-24) once their builds were committed. A complete source-to-render mapping was not
 established; the visual evidence was archived rather than discarded.
 
 ## Batch A: exact duplicates removed
