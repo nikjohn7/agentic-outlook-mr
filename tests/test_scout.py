@@ -281,6 +281,24 @@ class ScoutModelDefaultTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             scout.main(["--sources", "s.csv", "--out", "o.md", "--engine", "claude"])
 
+    def test_run_scout_with_claude_and_no_model_is_rejected(self) -> None:
+        # The programmatic entry point shares the CLI's engine-aware default.
+        sources = [_record("a1", "Acme", "Review"), _record("a2", "Acme", "Outlook")]
+        commands: list[list[str]] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout="{}", stderr="")
+
+        with self.assertRaisesRegex(ValueError, "--model is required"):
+            run_scout(sources, engine="claude", runner=runner)
+        self.assertEqual([], commands)
+        run_scout(sources, engine="claude", model="sonnet", runner=runner)
+        self.assertTrue(commands and all("sonnet" in c and "gpt-6-luna" not in c for c in commands))
+        commands.clear()
+        run_scout(sources, runner=runner)
+        self.assertTrue(commands and all("gpt-6-luna" in c for c in commands))
+
     def test_engine_claude_with_model_passes_through(self) -> None:
         from src import scout
 

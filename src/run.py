@@ -210,6 +210,7 @@ def run_pipeline(
                 frozenset(ingested.pdf_ocr_pages),
             )
             if ingested.pdf_native_path is not None
+            and any(pdf_chunk_pages(chunk.chunk_id) for chunk in ingested.chunks)
             else None
         )
         pdf_chunk_texts: dict[str, str] = {}

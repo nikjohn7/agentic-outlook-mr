@@ -1293,7 +1293,13 @@ class PairedPdfValidationTest(unittest.TestCase):
                 self.assertIn("p.3-4", result.failures[0].message)
 
     def test_pdf_candidate_citing_a_range_inside_its_chunk_passes(self) -> None:
-        for locator in ("p.3-4", "pp. 3-4 - 'Positioning grid'", "p.4 - 2026 outlook grid"):
+        for locator in (
+            "p.3-4",
+            "pp. 3-4 - 'Positioning grid'",
+            "p.4 - 2026 outlook grid",
+            "p.3 - 5 year yields",
+            "p.4 - 'Rates p.9 recap'",
+        ):
             with self.subTest(locator=locator):
                 result = self._assemble(
                     [_candidate(chunk_id="pdf:p3-4", locator=locator,

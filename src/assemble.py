@@ -31,6 +31,7 @@ from src.confidence import (
     score_candidate,
 )
 from src.csvio import write_csv
+from src.pagecheck import cited_pages
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.sharedevidence import Entry as EvidenceEntry
 from src.sharedevidence import Judge as EvidenceJudge
@@ -559,8 +560,8 @@ def assemble_candidates(
         source_visual_pages = frozenset((visual_pages or {}).get(key, ()))
         verdict = (verdicts or {}).get(index)
         chunk_pages = pdf_chunk_pages(candidate.chunk_id)
-        cited_pages = _cited_pages(candidate.locator) if chunk_pages else ()
-        if chunk_pages and (not cited_pages or not set(cited_pages) <= set(chunk_pages)):
+        cited = cited_pages(candidate.locator) if chunk_pages else ()
+        if chunk_pages and (not cited or not set(cited) <= set(chunk_pages)):
             # Every cited page (a range `p.3-9` included) must be one the chunk
             # was given. Checked before scoring, so the visual verifier never
             # rescues it.
@@ -1339,26 +1340,6 @@ def _group_scored(
 def _cited_page(locator: str) -> int | None:
     match = re.search(r"p\.?\s*(\d+)", locator, flags=re.IGNORECASE)
     return int(match.group(1)) if match else None
-
-
-# `p.3`, `pp. 3-4`, `p.3–9`, `page 3`; a dash whose right side is >= 1000 is not a page
-# range (`p.2 - 2026 outlook`), so only the first page counts there.
-_CITED_PAGE_RE = re.compile(
-    r"\b(?:pages?|pp?\.?)\s*(\d+)(?:\s*[-\u2013\u2014]\s*(?:pp?\.?\s*)?(\d+))?", re.IGNORECASE
-)
-_MAX_PAGE_RANGE_END = 999
-
-
-def _cited_pages(locator: str) -> tuple[int, ...]:
-    """Every page a locator cites: each `p.N` mention, with ranges expanded."""
-    pages: list[int] = []
-    for match in _CITED_PAGE_RE.finditer(locator):
-        start = int(match.group(1))
-        end = int(match.group(2)) if match.group(2) else start
-        if end < start or end > _MAX_PAGE_RANGE_END:
-            end = start
-        pages.extend(range(start, end + 1))
-    return tuple(dict.fromkeys(pages))
 
 
 def _manifest_text(

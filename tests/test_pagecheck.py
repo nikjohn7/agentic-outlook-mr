@@ -41,6 +41,20 @@ class LocatorHelpersTest(unittest.TestCase):
         self.assertEqual("'Rankings' table", strip_page("p.12 - 'Rankings' table"))
         self.assertEqual("", strip_page("p.3"))
 
+    def test_cited_pages_reads_only_the_page_reference(self) -> None:
+        # A spaced dash before a bare number is title text, not a range end.
+        self.assertEqual((3,), cited_pages("p.3 - 5 year yields"))
+        self.assertEqual((4,), cited_pages("p.4 - 2026 outlook grid"))
+        self.assertEqual((3, 4), cited_pages("p.3-p.4"))
+        self.assertEqual((3, 4, 5), cited_pages("p.3 - p.5 - 'Grid'"))
+        self.assertEqual((4, 7), cited_pages("p.4; p.7"))
+        self.assertEqual((2,), cited_pages("p.2-2026"))
+        # Quoted title text never cites a page.
+        self.assertEqual((3,), cited_pages("p.3 - 'Q3 p.7 recap'"))
+        self.assertEqual((), cited_pages("'See p.7' table"))
+        self.assertEqual("'See p.7' table", strip_page("'See p.7' table"))
+        self.assertEqual("5 year yields", strip_page("p.3 - 5 year yields"))
+
     def test_found_pages_ignores_spacing_hyphens_and_punctuation(self) -> None:
         self.assertEqual((1,), found_pages("underweight German-Bunds,JGBs and cash", PAGES))
 

@@ -49,8 +49,16 @@ from src.ingest import PROJECT_ROOT
 
 NOTE_PREFIX = "Page check:"
 
-# A cited page or page range anywhere in a locator: "p.12", "p. 4-5", "pp.3-4".
-_PAGE_TOKEN = re.compile(r"\bpp?\.\s*(\d+)(?:\s*[-–]\s*(\d+))?")
+# A cited page or page range: "p.12", "p. 4-5", "pp.3-4", "p.3-p.4", "p.3 - p.9".
+# A range end needs an unspaced dash or its own p./pp. marker, so the number in
+# "p.3 - 5 year yields" is title text, not page 5.
+_PAGE_TOKEN = re.compile(
+    r"\bpp?\.\s*(\d+)(?:[-–—](?:pp?\.\s*)?(\d+)|\s+[-–—]\s+pp?\.\s*(\d+))?"
+)
+# Quoted title text ("p.3 - 'Q3 p.7 recap'") never cites a page.
+_QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"|‘[^’]*’|“[^”]*”")
+# A range end past this is a year or a figure ("p.2-2026"), not a page.
+_MAX_PAGE = 999
 # Separators left dangling once the page token is removed: "p.12 - 'Table'".
 _LEADING_SEP = re.compile(r"^[\s,;:\-–]+")
 # A quote's spans: the model joins non-adjacent passages with an ellipsis.
@@ -97,13 +105,29 @@ def load_pdf_pages(path: Path) -> list[str]:
         return [_key(page.extract_text() or "") for page in pdf.pages]
 
 
+def _page_matches(locator: str) -> list[re.Match[str]]:
+    """Page tokens outside quoted title text, in order."""
+    locator = locator or ""
+    quoted = [m.span() for m in _QUOTED.finditer(locator)]
+    return [
+        m for m in _PAGE_TOKEN.finditer(locator)
+        if not any(start <= m.start() < end for start, end in quoted)
+    ]
+
+
 def cited_pages(locator: str) -> tuple[int, ...]:
-    match = _PAGE_TOKEN.search(locator or "")
-    if not match:
-        return ()
-    start = int(match.group(1))
-    end = int(match.group(2)) if match.group(2) else start
-    return tuple(range(start, end + 1)) if end >= start else (start,)
+    """Every page a locator cites, ranges expanded, in order: "p.3-5" ->
+    (3, 4, 5); "p.4; p.7" -> (4, 7). Shared by the page check and assembly's
+    `pdf:` chunk page guard, so both read a locator the same way."""
+    pages: list[int] = []
+    for match in _page_matches(locator):
+        start = int(match.group(1))
+        end_text = match.group(2) or match.group(3)
+        end = int(end_text) if end_text else start
+        if end < start or end > _MAX_PAGE:
+            end = start
+        pages.extend(range(start, end + 1))
+    return tuple(dict.fromkeys(pages))
 
 
 def found_pages(evidence: str, pages: list[str]) -> tuple[int, ...]:
@@ -118,7 +142,11 @@ def found_pages(evidence: str, pages: list[str]) -> tuple[int, ...]:
 def strip_page(locator: str) -> str:
     """The locator without its page token: "p.12 - 'Rankings' table" ->
     "'Rankings' table"; a bare "p.12" -> ""."""
-    text = _PAGE_TOKEN.sub("", locator or "", count=1)
+    locator = locator or ""
+    matches = _page_matches(locator)
+    if not matches:
+        return locator.strip()
+    text = locator[: matches[0].start()] + locator[matches[0].end():]
     return _LEADING_SEP.sub("", text).strip()
 
 
