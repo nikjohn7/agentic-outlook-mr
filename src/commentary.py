@@ -121,10 +121,13 @@ def structured_columns(commentary: Commentary) -> dict[str, str]:
             "Locator": seg.locator,
             "Reviewer Notes": commentary.notes,
         }
+    # A passage with no locator contributes nothing to the Locator cell (no
+    # placeholder). Alignment with the other columns is recovered on re-read
+    # from Full Commentary, whose segment labels carry every locator.
     return {
         "Reasoning": SEGMENT_SEP.join(f"{seg.title}: {seg.reasoning}" for seg in segments),
         "Verbatim Evidence": SEGMENT_SEP.join(f"{seg.title}: {seg.evidence}" for seg in segments),
-        "Locator": SEGMENT_SEP.join(f"{seg.title}: {seg.locator or '-'}" for seg in segments),
+        "Locator": SEGMENT_SEP.join(f"{seg.title}: {seg.locator}" for seg in segments if seg.locator),
         "Reviewer Notes": commentary.notes,
     }
 
@@ -324,12 +327,18 @@ def _commentary_from_structured(row: dict[str, str], titles: list[str]) -> Comme
     evidences = _split_labeled(row.get("Verbatim Evidence", ""), titles)
     locators = _split_labeled(row.get("Locator", ""), titles)
     count = max(len(reasonings), len(evidences), 1)
+    if count > 1 and len(locators) != count:
+        # Pageless passages are omitted from the Locator cell, so the cell
+        # cannot be aligned by position; the Full Commentary labels can.
+        rendered = parse_full_commentary(row.get("Full Commentary", ""), row.get("Source", ""))
+        if len(rendered.segments) == count:
+            locators = [(seg.title, seg.locator) for seg in rendered.segments]
     segments: list[Segment] = []
     for index in range(count):
         title_r, reasoning = reasonings[index] if index < len(reasonings) else ("", "")
         title_e, evidence = evidences[index] if index < len(evidences) else ("", "")
         _, locator = locators[index] if index < len(locators) else ("", "")
-        locator = "" if locator == "-" else locator
+        locator = "" if locator == "-" else locator  # legacy placeholder
         segments.append(
             Segment(
                 title=title_r or title_e or (titles[0] if titles else ""),

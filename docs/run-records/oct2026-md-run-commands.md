@@ -176,6 +176,38 @@ Review `$B/oct26md-smoke-aao/`: `manifest.md` (PDF chunks and flagged pages,
 `output.csv` (`Locator`, `evidence_origin`), `pagecheck-audit.csv`,
 `failures.csv` and `output-client.csv`, against the gate above.
 
+**Result (ran 2026-10-24 12:24-12:36, code `3e49267`): PASSED.** 109 candidates
+-> 54 kept, 55 failed (46 duplicate_same_view, 5 checker_sign_mismatch,
+2 arbitrated_out, 2 taxonomy_no_match); 54 client rows; High 47 / Medium 7;
+6 rows flagged. Evidence origin: pdf 18, both 24, markdown 12.
+
+- Grid calls recovered: the positioning grids on p.5, p.6 and p.7 gave 42
+  PDF-read passages, 18 of them leaves the Markdown never yielded (the
+  currency block, TIPS, munis, ABS/CMBS, IG corporates, India, LatAm, the EMD
+  sub-leaves). Every PDF-read dot was checked against the rendered page: all
+  agree, including the change arrows. p.4 is the summary grid (its leaves were
+  cited from the detailed pages) and p.9 is a chart page with no allocation
+  content; neither needs its own call.
+- PDF markers: every `(read from PDF)` passage cites a flagged page, no
+  Markdown passage carries it, `evidence_origin` agrees with the Locator on
+  all 54 rows.
+- Markdown validation: no quote failure of any kind. 32 of the trial's 35 calls
+  on this document reappear with the same view. Duration - Long now lands on
+  Long-Dated US Treasuries (same quote); Oil (a thin inferred call) was not
+  proposed; TIPS changed U -> N (below).
+- Merges and conflicts: the one PDF-vs-Markdown view conflict is TIPS. The
+  grid reads At Target; the arbiter ruled the published level wins over the
+  prose preference for five-year nominals (N, flagged for review). Correct.
+
+Page check: 100 quotes; 42 pdf_read, 31 added, 27 not found word for word
+(Markdown prose quotes; page removed, label kept).
+
+After the gate: one export-only change (commit after `3e49267`): a merged
+row's Locator cell no longer prints `Title: -` for a passage without a page;
+it lists only the passages that have one (alignment on re-read comes from the
+Full Commentary labels). It does not touch extraction, validation or calls, so
+the gate stands and the final run uses that commit.
+
 ### 2. The three splits
 
 The tmux commands under "Splits" above, with N = 1, 2, 3 (run ids

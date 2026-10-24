@@ -76,8 +76,47 @@ class RenderTest(unittest.TestCase):
         columns = structured_columns(commentary)
         self.assertEqual("Doc A: Reason one." + SEGMENT_SEP + "Doc B: Reason two.", columns["Reasoning"])
         self.assertEqual("Doc A: Quote one" + SEGMENT_SEP + "Doc B: Quote two", columns["Verbatim Evidence"])
-        self.assertEqual("Doc A: p.3" + SEGMENT_SEP + "Doc B: -", columns["Locator"])
+        self.assertEqual("Doc A: p.3", columns["Locator"])
         self.assertEqual("Arbiter: kept A.", columns["Reviewer Notes"])
+
+    def test_merged_locator_omits_pageless_segments_and_round_trips(self) -> None:
+        # Same-title segments, the pageless one first: the Locator cell shows
+        # only real locators, and re-reading the row keeps each locator on its
+        # own segment (aligned through Full Commentary, not by position).
+        commentary = Commentary(
+            (
+                Segment("Doc A", "", "Reason one.", "Quote one"),
+                Segment("Doc A", "p.4", "Reason two.", "Quote two"),
+                Segment("Doc A", "p.10 (read from PDF)", "Reason three.", "Quote three"),
+            ),
+        )
+        columns = row_columns(commentary)
+        self.assertEqual("Doc A: p.4" + SEGMENT_SEP + "Doc A: p.10 (read from PDF)", columns["Locator"])
+        row = {"Source": "Doc A", **columns}
+        back = commentary_from_row(row)
+        self.assertEqual(["", "p.4", "p.10 (read from PDF)"], [s.locator for s in back.segments])
+        self.assertEqual(["Quote one", "Quote two", "Quote three"], [s.evidence for s in back.segments])
+        self.assertEqual("both", columns["evidence_origin"])
+
+    def test_merged_locator_blank_when_no_segment_has_one(self) -> None:
+        commentary = Commentary(
+            (Segment("Doc A", "", "R1.", "Q1"), Segment("Doc B", "", "R2.", "Q2")),
+        )
+        columns = row_columns(commentary)
+        self.assertEqual("", columns["Locator"])
+        back = commentary_from_row({"Source": "Doc A | Doc B", **columns})
+        self.assertEqual(["", ""], [s.locator for s in back.segments])
+        self.assertEqual(["Doc A", "Doc B"], [s.title for s in back.segments])
+
+    def test_legacy_dash_placeholder_still_reads_as_blank(self) -> None:
+        row = {
+            "Source": "Doc A | Doc B",
+            "Reasoning": "Doc A: R1." + SEGMENT_SEP + "Doc B: R2.",
+            "Verbatim Evidence": "Doc A: Q1" + SEGMENT_SEP + "Doc B: Q2",
+            "Locator": "Doc A: p.3" + SEGMENT_SEP + "Doc B: -",
+            "Reviewer Notes": "",
+        }
+        self.assertEqual(["p.3", ""], [s.locator for s in commentary_from_row(row).segments])
 
     def test_row_columns_carries_full_commentary_and_the_four(self) -> None:
         columns = row_columns(Commentary((Segment("T", "p.1", "R.", "Q"),)))
