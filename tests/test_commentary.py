@@ -82,9 +82,11 @@ class RenderTest(unittest.TestCase):
     def test_row_columns_carries_full_commentary_and_the_four(self) -> None:
         columns = row_columns(Commentary((Segment("T", "p.1", "R.", "Q"),)))
         self.assertEqual(
-            {"Full Commentary", "Reasoning", "Verbatim Evidence", "Locator", "Reviewer Notes"},
+            {"Full Commentary", "Reasoning", "Verbatim Evidence", "Locator", "Reviewer Notes",
+             "evidence_origin"},
             set(columns),
         )
+        self.assertEqual("markdown", columns["evidence_origin"])
 
 
 class MergeAndNoteTest(unittest.TestCase):

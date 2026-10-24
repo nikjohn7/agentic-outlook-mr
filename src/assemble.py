@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable
 
 from src.commentary import (
+    PDF_READ_MARKER,
     SEGMENT_SEP,
     STRUCTURED_COLUMNS,
     Commentary,
@@ -55,10 +56,14 @@ def _candidate_segment(candidate: CandidateCall, title: str, *, locator_source: 
     """One structured segment for a candidate: reader-facing locator (page for
     PDF; `char:` chunk offsets of HTML/transcript sources render blank), the
     model's reasoning, and the verbatim quote. A grouped-source row suffixes
-    the member title to the locator so the reader knows which document p.N is in."""
+    the member title to the locator so the reader knows which document p.N is in.
+    A candidate read from a paired-PDF chunk (`pdf:`) ends with PDF_READ_MARKER,
+    which `evidence_origin` reads back after any merge."""
     locator = display_locator(candidate.locator)
     if locator and locator_source:
         locator = f"{locator} ({locator_source})"
+    if candidate.chunk_id.startswith("pdf:"):
+        locator = f"{locator} {PDF_READ_MARKER}".strip()
     return Segment(
         title=title,
         locator=locator,
@@ -84,7 +89,9 @@ TARGET_OUTPUT_COLUMNS = (
 # workbook shape; `Full Commentary` is rendered from them for internal
 # consumers. `basis`, `checker_strength`, `call_language` and `quote_match`
 # are internal diagnostics for analysts (stated vs inferred, checker grade,
-# quote-verification tier); the client file (src/export.py) never carries them.
+# quote-verification tier); `evidence_origin` (markdown | pdf | both) is derived
+# from the Locator's PDF_READ_MARKER by src.commentary.row_columns. The client
+# file (src/export.py) never carries them.
 OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + STRUCTURED_COLUMNS + (
     "confidence",
     "band",
@@ -93,6 +100,7 @@ OUTPUT_COLUMNS = TARGET_OUTPUT_COLUMNS + STRUCTURED_COLUMNS + (
     "checker_strength",
     "call_language",
     "quote_match",
+    "evidence_origin",
 )
 
 FAILURE_COLUMNS = (
@@ -446,6 +454,9 @@ class AssemblyResult:
     output_rows: list[dict[str, str]]
     failures: list[FailureRecord]
     candidate_count: int
+    # Same source/leaf view conflicts whose candidates came from both a `pdf:`
+    # and a Markdown chunk (counted on the conflict groups themselves).
+    mixed_origin_conflicts: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -637,12 +648,15 @@ def assemble_candidates(
             )
 
     selected_entries: list[_Selected] = []
+    mixed_origin_conflicts = 0
     for group in _group_scored(scored, group_map).values():
         views = {item.candidate.view for item in group}
         arbiter_note = ""
         merged_segments: list[tuple[str, str, str]] = []
         challenge_note = ""
         if len(views) > 1:
+            if len({item.candidate.chunk_id.startswith("pdf:") for item in group}) > 1:
+                mixed_origin_conflicts += 1
             stated_resolution = _resolve_stated_vs_implied(group)
             if stated_resolution is not None:
                 # A clean stated-vs-implied split on one leaf: stated wins
@@ -750,6 +764,7 @@ def assemble_candidates(
         output_rows=output_rows,
         failures=failures,
         candidate_count=len(candidates),
+        mixed_origin_conflicts=mixed_origin_conflicts,
     )
 
 
@@ -1365,6 +1380,19 @@ def _manifest_text(
         lines.extend(
             f"- {language}: {count}"
             for language, count in sorted(call_language_counts.items())
+        )
+        lines.append("")
+    origin_counts = Counter(
+        row.get("evidence_origin") or "(none)" for row in result.output_rows
+    )
+    if "pdf" in origin_counts or "both" in origin_counts or result.mixed_origin_conflicts:
+        lines.append("## Evidence origin (kept rows)")
+        lines.extend(
+            f"- {origin}: {count}" for origin, count in sorted(origin_counts.items())
+        )
+        lines.append(
+            "- view conflicts between a PDF-read and a Markdown-read candidate: "
+            f"{result.mixed_origin_conflicts}"
         )
         lines.append("")
     quote_match_counts = Counter(

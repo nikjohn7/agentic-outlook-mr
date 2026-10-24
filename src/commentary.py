@@ -31,6 +31,9 @@ from dataclasses import dataclass, replace
 # The segment separator for merged rows. Defined here, re-exported by
 # src.assemble as COMMENTARY_MERGE_SEP so the two never drift.
 SEGMENT_SEP = "  ||||  "
+# Appended to the locator of a passage read from a Markdown source's paired
+# PDF (a `pdf:` chunk). It records where the evidence was read; it does not
+# mean the Markdown lacked it.
 PDF_READ_MARKER = "(read from PDF)"
 # How a separator is recognised when a row is read back: the CSV writer
 # collapses space runs (src.csvio.clean_cell), so on disk it is " |||| ".
@@ -126,10 +129,23 @@ def structured_columns(commentary: Commentary) -> dict[str, str]:
     }
 
 
+def evidence_origin(commentary: Commentary) -> str:
+    """Where a row's retained passages were read: `pdf` when every segment's
+    locator carries PDF_READ_MARKER, `both` when only some do, `markdown`
+    otherwise (also any source with no paired PDF). Derived, never stored on
+    its own, so it follows every merge."""
+    marked = [PDF_READ_MARKER in segment.locator for segment in commentary.segments]
+    if marked and all(marked):
+        return "pdf"
+    return "both" if any(marked) else "markdown"
+
+
 def row_columns(commentary: Commentary) -> dict[str, str]:
-    """Full Commentary plus the four structured columns, from one source of truth."""
+    """Full Commentary plus the four structured columns and the internal
+    `evidence_origin`, from one source of truth."""
     columns = structured_columns(commentary)
     columns["Full Commentary"] = render_full_commentary(commentary)
+    columns["evidence_origin"] = evidence_origin(commentary)
     return columns
 
 
@@ -205,12 +221,16 @@ def _strip_period(text: str) -> str:
 
 
 def _strip_title_paren(locator: str, titles: list[str]) -> str:
-    """`p.3 (Source Title)` - grouped rows suffix the member title; drop it."""
+    """`p.3 (Source Title)` - grouped rows suffix the member title; drop it,
+    keeping a trailing PDF_READ_MARKER."""
+    marker = ""
+    if locator.endswith(PDF_READ_MARKER):
+        locator, marker = locator[: -len(PDF_READ_MARKER)].rstrip(), f" {PDF_READ_MARKER}"
     for title in titles:
         suffix = f"({title})"
         if title and locator.endswith(suffix):
-            return locator[: -len(suffix)].rstrip()
-    return locator
+            return locator[: -len(suffix)].rstrip() + marker
+    return locator + marker
 
 
 def _take_label(segment: str, titles: list[str]) -> tuple[str, str, str]:

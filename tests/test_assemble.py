@@ -60,6 +60,7 @@ class AssembleTest(unittest.TestCase):
                 "checker_strength",
                 "call_language",
                 "quote_match",
+                "evidence_origin",
             ),
             OUTPUT_COLUMNS,
         )
@@ -1289,6 +1290,66 @@ class PairedPdfValidationTest(unittest.TestCase):
         self.assertIn("EM equities are favored in the outlook.", commentary)
         self.assertIn("Emerging markets equities: overweight grid.", commentary)
         self.assertEqual(["duplicate_same_view"], [f.reason_code for f in result.failures])
+
+    def test_pdf_candidate_locator_carries_the_read_from_pdf_marker(self) -> None:
+        result = self._assemble(
+            [_candidate(chunk_id="pdf:p3-4", locator="p.3 - 'Positioning grid'",
+                        evidence_quote="Emerging markets equities: overweight grid.")],
+            [],
+        )
+
+        row = result.output_rows[0]
+        self.assertEqual("p.3 - 'Positioning grid' (read from PDF)", row["Locator"])
+        self.assertEqual("pdf", row["evidence_origin"])
+
+    def test_mixed_origin_row_keeps_marker_through_reconcile_and_export(self) -> None:
+        from src import export, reconcile
+
+        result = self._assemble(
+            [
+                _candidate(chunk_id="pdf:p3-4", locator="p.3",
+                           evidence_quote="Emerging markets equities: overweight grid."),
+                _candidate(chunk_id="char:0-8000", locator="char:0-8000"),
+            ],
+            [],
+        )
+        self.assertEqual("both", result.output_rows[0]["evidence_origin"])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir, sources=self.sources)
+            client = _read_csv(Path(temp_dir) / "output-client.csv")
+            raw = _read_csv(Path(temp_dir) / "output.csv")[0]
+
+        # A same-view reconcile merge with another document's Markdown row.
+        other = dict(raw, Source="Outlook 2027", **{
+            "Reasoning": "The manager favors it.", "Verbatim Evidence": "EM favored.",
+            "Locator": "", "Reviewer Notes": "", "Full Commentary": "",
+            "evidence_origin": "markdown"})
+        merged, _, _ = reconcile.merge_same_view(
+            [reconcile.row_from_raw(raw, "a", 0), reconcile.row_from_raw(other, "b", 1)]
+        )
+        exported = export.normalize_row(merged)
+
+        self.assertEqual("both", merged["evidence_origin"])
+        self.assertEqual("both", exported["evidence_origin"])
+        self.assertIn("p.3 (read from PDF)", exported["Locator"])
+        self.assertIn("p.3 (read from PDF)", client[0]["Locator"])
+        self.assertNotIn("evidence_origin", client[0])
+        self.assertNotIn("evidence_origin", export.CLIENT_COLUMNS)
+
+    def test_manifest_counts_origins_and_mixed_origin_conflicts(self) -> None:
+        result = self._assemble(
+            [
+                _candidate(chunk_id="pdf:p3-4", locator="p.3", view="U",
+                           evidence_quote="Emerging markets equities: overweight grid."),
+                _candidate(chunk_id="char:0-8000", locator="char:0-8000"),
+            ],
+            [],
+        )
+        self.assertEqual(1, result.mixed_origin_conflicts)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            write_run_outputs(result, temp_dir)
+            manifest = (Path(temp_dir) / "manifest.md").read_text(encoding="utf-8")
+        self.assertIn("view conflicts between a PDF-read and a Markdown-read candidate: 1", manifest)
 
 
 def _verdict(**overrides: object) -> CheckVerdict:
