@@ -83,6 +83,101 @@ def _candidate_json(chunk_id: str) -> str:
     )
 
 
+# The split 1 defect: the model echoed a Neuberger source id with a repeated
+# fragment, so the evidence lookup keyed on a source that does not exist.
+ECHOED_BAD_SOURCE_ID = "nb-aao-repricing-risk-repricing-risk"
+MD_CHUNK_ID = "char:0-2000"
+PDF_CHUNK_ID = "pdf:p2-2"
+
+
+def _md_source(source_id: str, firm: str, title: str) -> SourceRecord:
+    return SourceRecord(
+        source_id=source_id,
+        firm=firm,
+        date="",
+        source=title,
+        url="",
+        resolved_url="",
+        source_type="md",
+    )
+
+
+def _ingested_md(
+    source: SourceRecord, work_dir: Path, markdown_text: str, pdf_text: str | None = None
+) -> IngestedSource:
+    """A Markdown source with one `char:` chunk and, when pdf_text is given, a
+    paired PDF read as one `pdf:` chunk (page 2 of 3)."""
+    source_dir = Path(work_dir) / source.source_id
+    source_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_path = source_dir / "snapshot.txt"
+    snapshot_path.write_text(markdown_text + " " + "Broader market context. " * 80, encoding="utf-8")
+    native_path = source_dir / "native.md"
+    native_path.write_text(markdown_text, encoding="utf-8")
+    chunks = [Chunk(chunk_id=MD_CHUNK_ID, locator=MD_CHUNK_ID, source_path=snapshot_path)]
+    if pdf_text is None:
+        return IngestedSource(
+            source=source,
+            snapshot_text_path=snapshot_path,
+            native_source_path=native_path,
+            chunks=chunks,
+        )
+    pdf_path = source_dir / "native.pdf"
+    pdf_path.write_bytes(b"%PDF fixture")
+    pdf_snapshot_path = source_dir / "pdf-snapshot.txt"
+    pdf_snapshot_path.write_text(pdf_text + " " + "Grid legend and notes. " * 80, encoding="utf-8")
+    chunks.append(Chunk(chunk_id=PDF_CHUNK_ID, locator="p.2-2", source_path=pdf_path))
+    return IngestedSource(
+        source=source,
+        snapshot_text_path=snapshot_path,
+        native_source_path=native_path,
+        chunks=chunks,
+        pdf_native_path=pdf_path,
+        pdf_snapshot_text_path=pdf_snapshot_path,
+        pdf_page_count=3,
+        flagged_pages=(2,),
+    )
+
+
+def _echoed_candidate(
+    source_id: str, chunk_id: str, leaf: str, quote: str, locator: str, **fields
+) -> dict:
+    """One analyzer candidate whose source_id / chunk_id are whatever the model
+    echoed; the semantic fields are what downstream must keep."""
+    return {
+        "source_id": source_id,
+        "chunk_id": chunk_id,
+        "sub_asset_raw": leaf.lower(),
+        "sub_asset_class": leaf,
+        "taxonomy_match": "exact",
+        "view": "O",
+        "call_language": "explicit_stance",
+        "evidence_kind": "prose",
+        "evidence_quote": quote,
+        "locator": locator,
+        "reasoning": f"The manager states a view on {leaf}.",
+        "conflict": False,
+        **fields,
+    }
+
+
+def _passing_verdicts(count: int) -> str:
+    return json.dumps(
+        {
+            "verdicts": [
+                {
+                    "index": index,
+                    "supports_view": "pass",
+                    "forward_looking": "pass",
+                    "asset_match": "pass",
+                    "evidence_strength": "decisive",
+                    "note": "",
+                }
+                for index in range(count)
+            ]
+        }
+    )
+
+
 class AnalyzeSourceTest(unittest.TestCase):
     def test_collects_candidates_fills_template_and_rolls_memory(self) -> None:
         prompts: list[str] = []
@@ -160,6 +255,77 @@ class AnalyzeSourceTest(unittest.TestCase):
         self.assertEqual(2, len(failures))
         self.assertEqual({"json_parse_error"}, {f.reason_code for f in failures})
         self.assertIn("json_parse_error; chunk skipped", memory)
+
+    def test_echoed_ids_are_replaced_by_the_source_and_chunk_actually_read(self) -> None:
+        source = _md_source("nb-aao", "Neuberger Berman", "Asset Allocation Outlook")
+        # Markdown chunk: a repeated-fragment source id echoing the PDF chunk's
+        # id, plus a correctly echoed call. PDF chunk: another (valid) source's
+        # id with the Markdown chunk's id.
+        markdown_calls = [
+            _echoed_candidate(
+                ECHOED_BAD_SOURCE_ID, PDF_CHUNK_ID, "US Equities",
+                ["We favor US equities.", "Repricing risk is contained."], MD_CHUNK_ID,
+                basis="forecast_delta", delta_value=4.5, delta_unit="pct", conflict=True,
+            ),
+            _echoed_candidate("nb-aao", MD_CHUNK_ID, "Japan Equities",
+                              "Japan stays attractive.", MD_CHUNK_ID, view="N"),
+        ]
+        pdf_calls = [
+            _echoed_candidate("other-doc", MD_CHUNK_ID, "Emerging Markets Equities",
+                              "EM equities: overweight.", "p.2 - 'Positioning grid'",
+                              view="U", basis="inferred", taxonomy_match="semantic"),
+        ]
+        prompts: list[str] = []
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            prompts.append(prompt)
+            calls = pdf_calls if "pages 2-2 of the PDF" in prompt else markdown_calls
+            out = json.dumps({"summary": f"chunk {len(prompts)}", "candidates": calls})
+            return subprocess.CompletedProcess(command, 0, stdout=out, stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work_dir = Path(temp_dir)
+            ingested = _ingested_md(source, work_dir, "markdown body", pdf_text="pdf page")
+            candidates, failures = analyze_source(
+                ingested,
+                work_dir,
+                taxonomy_block="- US Equities",
+                brain_text="none",
+                engine="claude",
+                runner=runner,
+            )
+            memory = (work_dir / "nb-aao" / "memory.md").read_text(encoding="utf-8")
+
+        self.assertEqual([], failures)
+        self.assertEqual(
+            [("nb-aao", MD_CHUNK_ID), ("nb-aao", MD_CHUNK_ID), ("nb-aao", PDF_CHUNK_ID)],
+            [(c.source_id, c.chunk_id) for c in candidates],
+        )
+        # Every other field is exactly what the model returned.
+        for candidate, raw in zip(candidates, markdown_calls + pdf_calls):
+            expected = CandidateCall.from_mapping(
+                {**raw, "source_id": "nb-aao", "chunk_id": candidate.chunk_id}
+            )
+            self.assertEqual(expected, candidate)
+        self.assertEqual(
+            ("We favor US equities.", "Repricing risk is contained."),
+            candidates[0].evidence_spans,
+        )
+        self.assertEqual(("forecast_delta", 4.5, "pct", True),
+                         (candidates[0].basis, candidates[0].delta_value,
+                          candidates[0].delta_unit, candidates[0].conflict))
+        self.assertEqual(("U", "inferred", "p.2 - 'Positioning grid'"),
+                         (candidates[2].view, candidates[2].basis, candidates[2].locator))
+        # Rolling memory (and the PDF chunk's prompt built from it) names the
+        # source and chunks read, never an echoed id.
+        self.assertIn("(nb-aao)", memory)
+        self.assertIn(f"## Chunk {MD_CHUNK_ID}", memory)
+        self.assertIn(f"## Chunk {PDF_CHUNK_ID}", memory)
+        self.assertIn("US Equities=O[char:0-2000]", memory)
+        self.assertIn("Emerging Markets Equities=U[p.2 - 'Positioning grid']", memory)
+        for text in (memory, prompts[1]):
+            self.assertNotIn(ECHOED_BAD_SOURCE_ID, text)
+            self.assertNotIn("other-doc", text)
 
 
 class LoadSourcesTest(unittest.TestCase):
@@ -718,6 +884,107 @@ class RunPipelineIngestFaultToleranceTest(unittest.TestCase):
         self.assertIn("Document could not be ingested", client_text)
         self.assertIn("bad-doc (pdf, 0 chunks): 0 candidates emitted [ingest-failed:", manifest)
         self.assertIn("good-doc (pdf, 1p / 1 chunks): 1 candidates emitted", manifest)
+
+
+class RunPipelineEchoedIdentityTest(unittest.TestCase):
+    """Evidence lookup and validation routing follow the source and chunk the
+    model read, whatever ids it echoed (split 1: a Neuberger call echoing a
+    repeated-fragment source id failed as `snapshot text is empty`)."""
+
+    def test_echoed_ids_cannot_redirect_evidence_lookup_or_validation(self) -> None:
+        neuberger = _md_source("nb-aao", "Neuberger Berman", "Asset Allocation Outlook")
+        other = _md_source("other-doc", "Other Firm", "Other Outlook")
+        # Each quote exists in exactly one snapshot: Neuberger's Markdown,
+        # Neuberger's paired PDF, or the other source's Markdown. Both Markdown
+        # sources have a chunk with the same id, so an echoed source id alone
+        # would land on the other source's text.
+        texts = {
+            "nb-aao": (
+                "We favor US equities. Japan stays attractive.",
+                "Positioning grid: EM equities overweight.",
+            ),
+            "other-doc": ("Gold remains a core hedge.", None),
+        }
+        calls = {
+            ("nb-aao", MD_CHUNK_ID): [
+                # The split 1 defect: a repeated-fragment source id, and the
+                # PDF chunk's id echoed for a Markdown read.
+                _echoed_candidate(ECHOED_BAD_SOURCE_ID, PDF_CHUNK_ID, "US Equities",
+                                  "We favor US equities.", MD_CHUNK_ID),
+                # Another valid source's id.
+                _echoed_candidate("other-doc", MD_CHUNK_ID, "Japan Equities",
+                                  "Japan stays attractive.", MD_CHUNK_ID, view="N"),
+            ],
+            ("nb-aao", PDF_CHUNK_ID): [
+                # Another source's id and the Markdown chunk's id for a PDF read.
+                _echoed_candidate("other-doc", MD_CHUNK_ID, "Emerging Markets Equities",
+                                  "Positioning grid: EM equities overweight.",
+                                  "p.2 - 'Positioning grid'"),
+            ],
+            ("other-doc", MD_CHUNK_ID): [
+                # Correctly echoed.
+                _echoed_candidate("other-doc", MD_CHUNK_ID, "Gold/Precious",
+                                  "Gold remains a core hedge.", MD_CHUNK_ID),
+            ],
+        }
+
+        def fake_snapshot(source: SourceRecord, work_dir: Path) -> IngestedSource:
+            markdown_text, pdf_text = texts[source.source_id]
+            return _ingested_md(source, work_dir, markdown_text, pdf_text=pdf_text)
+
+        def runner(command: list[str], prompt: str) -> subprocess.CompletedProcess[str]:
+            if "native_source_path" in prompt:  # the checker
+                return subprocess.CompletedProcess(command, 0, stdout=_passing_verdicts(3), stderr="")
+            source_id = "nb-aao" if '"source_id": "nb-aao"' in prompt else "other-doc"
+            chunk_id = PDF_CHUNK_ID if "pages 2-2 of the PDF" in prompt else MD_CHUNK_ID
+            out = json.dumps({"summary": "views", "candidates": calls[(source_id, chunk_id)]})
+            return subprocess.CompletedProcess(command, 0, stdout=out, stderr="")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("src.run.create_snapshot", side_effect=fake_snapshot):
+                result, chunk_failures, run_dir = run_pipeline(
+                    sources=[neuberger, other],
+                    run_id="echoed-ids",
+                    engine="claude",
+                    model="fable",
+                    effort="high",
+                    evidence_gate=False,
+                    runner=runner,
+                    out_root=Path(temp_dir) / "out",
+                )
+            with (run_dir / "output.csv").open(newline="", encoding="utf-8-sig") as handle:
+                written = {row["Sub-Asset Class"]: row for row in csv.DictReader(handle)}
+
+        self.assertEqual([], chunk_failures)
+        self.assertEqual([], [(f.reason_code, f.message) for f in result.failures])
+        rows = {row["Sub-Asset Class"]: row for row in result.output_rows}
+        self.assertEqual(
+            {
+                "US Equities": ("Neuberger Berman", "Asset Allocation Outlook", "O"),
+                "Japan Equities": ("Neuberger Berman", "Asset Allocation Outlook", "N"),
+                "Emerging Markets Equities": ("Neuberger Berman", "Asset Allocation Outlook", "O"),
+                "Gold/Precious": ("Other Firm", "Other Outlook", "O"),
+            },
+            {leaf: (row["Firm"], row["Source"], row["View"]) for leaf, row in rows.items()},
+        )
+        # Validation routing follows the chunk read: the Markdown calls
+        # validated on the Markdown, the PDF call on the PDF (and is marked).
+        self.assertEqual(
+            {
+                "US Equities": "markdown",
+                "Japan Equities": "markdown",
+                "Emerging Markets Equities": "pdf",
+                "Gold/Precious": "markdown",
+            },
+            {leaf: row["evidence_origin"] for leaf, row in rows.items()},
+        )
+        self.assertEqual(
+            "p.2 - 'Positioning grid' (read from PDF)",
+            rows["Emerging Markets Equities"]["Locator"],
+        )
+        self.assertIn("We favor US equities.", rows["US Equities"]["Verbatim Evidence"])
+        self.assertEqual(set(rows), set(written))
+        self.assertEqual("Neuberger Berman", written["US Equities"]["Firm"])
 
 
 class QuoteVisualVerifierTest(unittest.TestCase):

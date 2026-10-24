@@ -462,10 +462,12 @@ def analyze_source(
             _append_memory(memory_path, chunk.chunk_id, f"({reason}; chunk skipped)", [])
             continue
 
-        # The chunk id routes validation (Markdown vs paired PDF), so it is the
-        # chunk actually read, never the id the model echoed.
+        # The source and chunk ids route evidence lookup and validation
+        # (Markdown vs paired PDF), so they are the source and chunk actually
+        # read, never the ids the model echoed.
         chunk_candidates = [
-            replace(candidate, chunk_id=chunk.chunk_id) for candidate in call_result.candidates
+            replace(candidate, source_id=source.source_id, chunk_id=chunk.chunk_id)
+            for candidate in call_result.candidates
         ]
         candidates.extend(chunk_candidates)
         _append_memory(memory_path, chunk.chunk_id, call_result.summary, chunk_candidates)
