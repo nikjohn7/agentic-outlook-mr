@@ -38,7 +38,7 @@ from src.llm import (
     parse_verdicts,
     resolve_codex_model,
 )
-from src import sharedevidence
+from src import provenance, sharedevidence
 from src.schemas import CandidateCall, CheckVerdict, SourceInfo
 from src.taxonomy import load_taxonomy
 
@@ -100,6 +100,9 @@ def run_pipeline(
     any analysis).
     """
     enforce_source_limit(sources)
+    # Captured before any model call, so a mid-run edit is not recorded as
+    # having produced the whole run.
+    run_provenance = provenance.collect()
     # A direct run_pipeline caller (e.g. a test) may leave a codex step's model
     # None; fill the default so run_config always states the model. The CLI has
     # already resolved these via resolve_engine_settings.
@@ -417,6 +420,7 @@ def run_pipeline(
         run_config=run_config,
         grouping=grouping,
         quote_visual_stats=quote_visual_stats,
+        provenance=run_provenance,
     )
     return result, chunk_failures, run_dir
 
@@ -478,10 +482,12 @@ def analyze_source(
             _append_memory(memory_path, chunk.chunk_id, f"({reason}; chunk skipped)", [])
             continue
 
-        # The chunk id routes validation (Markdown vs paired PDF), so it is the
-        # chunk actually read, never the id the model echoed.
+        # The source and chunk ids route evidence lookup and validation
+        # (Markdown vs paired PDF), so they are the source and chunk actually
+        # read, never the ids the model echoed.
         chunk_candidates = [
-            replace(candidate, chunk_id=chunk.chunk_id) for candidate in call_result.candidates
+            replace(candidate, source_id=source.source_id, chunk_id=chunk.chunk_id)
+            for candidate in call_result.candidates
         ]
         candidates.extend(chunk_candidates)
         _append_memory(memory_path, chunk.chunk_id, call_result.summary, chunk_candidates)
@@ -948,8 +954,9 @@ def _chunk_content(ingested: IngestedSource, chunk: Chunk) -> str:
         if paired_pdf:
             capture_note = (
                 "(These pages were flagged because the Markdown conversion of this "
-                "document may have lost their graphics: report what the charts, "
-                "grids and tables show. Calls already taken from the text are "
+                "document may have lost their graphics: report the house ratings "
+                "and allocations the charts, grids and tables show; describe "
+                "analytical-input charts in your summary. Calls already taken from the text are "
                 "merged downstream.)\n\n"
             )
         return (

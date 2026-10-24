@@ -265,6 +265,8 @@ class AgentCommandTests(unittest.TestCase):
     def test_codex_command_has_search_and_prompt_in_argv(self) -> None:
         command, stdin_text = _agent_command("codex", None, "low", "PROMPT")
         self.assertIn("tools.web_search=true", command)
+        # An interactive Stop hook must not replace the JSON answer.
+        self.assertEqual(["-c", "features.hooks=false"], command[2:4])
         self.assertIn("gpt-5.5", command)  # None → default codex model
         self.assertEqual("PROMPT", command[-1])
         self.assertIsNone(stdin_text)

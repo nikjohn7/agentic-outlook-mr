@@ -29,11 +29,11 @@ class LLMTest(unittest.TestCase):
         command = ENGINE_CONFIGS["claude"].command("go", model="fable", effort="high")
         self.assertEqual(["claude", "-p", "--model", "fable", "--effort", "high", "go"], command)
 
-    def test_codex_default_model_command_is_byte_identical_to_old_pin(self) -> None:
-        # model=None must emit exactly the command the old single-pin produced.
+    def test_codex_default_model_command_disables_interactive_hooks(self) -> None:
+        # A Stop hook can replace valid extraction JSON with its own reply.
         command = ENGINE_CONFIGS["codex"].command("go", effort="high")
         self.assertEqual(
-            ["codex", "exec", "-m", "gpt-5.5", "-c", 'model_reasoning_effort="high"', "go"],
+            ["codex", "exec", "-c", "features.hooks=false", "-m", "gpt-5.5", "-c", 'model_reasoning_effort="high"', "go"],
             command,
         )
         self.assertEqual("gpt-5.5", DEFAULT_CODEX_MODEL)
@@ -42,7 +42,7 @@ class LLMTest(unittest.TestCase):
         for model in CODEX_MODELS:
             command = ENGINE_CONFIGS["codex"].command("go", model=model, effort="high")
             self.assertEqual(
-                ["codex", "exec", "-m", model, "-c", 'model_reasoning_effort="high"', "go"],
+                ["codex", "exec", "-c", "features.hooks=false", "-m", model, "-c", 'model_reasoning_effort="high"', "go"],
                 command,
             )
 

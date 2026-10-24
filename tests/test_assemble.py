@@ -800,6 +800,33 @@ class CrossLeafDedupTest(unittest.TestCase):
         self.assertEqual({"NOK", "AUD"}, {row["Sub-Asset Class"] for row in result.output_rows})
         self.assertEqual([], [f for f in result.failures if f.reason_code == "duplicate_cross_leaf"])
 
+    def test_sterling_is_named_when_sharing_evidence_with_another_currency(self) -> None:
+        evidence = "We expect sterling and the Australian dollar to remain flat against the dollar."
+        result = self._assemble(self._cluster(evidence, ["GBP", "AUD"], view="N"), [evidence])
+        self.assertEqual({"GBP", "AUD"}, {r["Sub-Asset Class"] for r in result.output_rows})
+        self.assertFalse(any(f.reason_code == "duplicate_cross_leaf" for f in result.failures))
+
+    def test_unnamed_sterling_call_still_loses_to_named_currency(self) -> None:
+        evidence = "We expect the Australian dollar to remain flat against the dollar."
+        result = self._assemble(self._cluster(evidence, ["GBP", "AUD"], view="N"), [evidence])
+        self.assertEqual({"AUD"}, {r["Sub-Asset Class"] for r in result.output_rows})
+        self.assertEqual(["GBP"], [f.sub_asset_class for f in result.failures if f.reason_code == "duplicate_cross_leaf"])
+
+    def test_plural_currency_names_count(self) -> None:
+        for evidence in (
+            "We expect British pounds and Australian dollars to stay range-bound.",
+            "We expect UK pounds and Australian dollars to stay range-bound.",
+        ):
+            with self.subTest(evidence=evidence):
+                result = self._assemble(self._cluster(evidence, ["GBP", "AUD"], view="N"), [evidence])
+                self.assertEqual({"GBP", "AUD"}, {r["Sub-Asset Class"] for r in result.output_rows})
+
+    def test_bare_pound_does_not_name_sterling(self) -> None:
+        # "pound" alone is too often a weight or a verb to name GBP.
+        evidence = "Investors pound the Australian dollar on weaker commodity demand."
+        result = self._assemble(self._cluster(evidence, ["GBP", "AUD"], view="N"), [evidence])
+        self.assertEqual({"AUD"}, {r["Sub-Asset Class"] for r in result.output_rows})
+
     def test_jpm_sector_pair_both_named_survive(self) -> None:
         evidence = "We maintain overweights to the information technology and communication services sectors."
         candidates = self._cluster(evidence, ["IT/Tech/Telecomms (inc. AI)", "Communication Services"])

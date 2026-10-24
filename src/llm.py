@@ -61,6 +61,10 @@ class EngineConfig:
     ) -> list[str]:
         args = list(self.command_prefix)
         if self.name == "codex":
+            # Headless readers must return the extraction/review JSON, not a
+            # later answer to an interactive Stop hook (e.g. a STATE.md nudge).
+            # Scope this to this process; leave user config and sandbox intact.
+            args += ["-c", "features.hooks=false"]
             args += ["-m", model or DEFAULT_CODEX_MODEL]
             if effort is not None:
                 args += ["-c", f'model_reasoning_effort="{effort}"']

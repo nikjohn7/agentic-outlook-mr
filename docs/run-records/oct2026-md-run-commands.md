@@ -1,4 +1,83 @@
-# October 2026 Markdown batch commands (16-pair evaluation intake, 2026-10-23)
+# October 2026 Markdown batch commands (quality rerun plan, 2026-10-25)
+
+## Current plan: quality revision v3
+
+The quality-first instruction supersedes the earlier freeze-once plan. All
+commands below the historical heading are retained as evidence only: do not
+reuse their IDs, move folders, or run their combine/export/summary steps now.
+The baseline `oct26md-split1/2/3`, trial and smoke artifacts remain preserved.
+
+Validation evidence: [quality validation record](oct2026-quality-validation.md).
+Launch helper: [oct2026-quality-v3-rerun.sh](oct2026-quality-v3-rerun.sh).
+Read the acceptance decision in the record before launching. The helper checks
+unused tmux sessions, output, log, exit-status and work paths, and warns (without
+blocking) when code, prompts or taxonomy differ from the validated controls;
+each run's manifest records its own provenance (`## Provenance`: commit,
+uncommitted files, implementation and prompt hashes). This task does not launch
+full splits.
+
+From `poc/`, after reviewing the validation evidence:
+
+```bash
+bash -n docs/run-records/oct2026-quality-v3-rerun.sh
+bash docs/run-records/oct2026-quality-v3-rerun.sh preflight
+# Two runs maximum; launch sequentially from this terminal:
+bash docs/run-records/oct2026-quality-v3-rerun.sh launch 2
+bash docs/run-records/oct2026-quality-v3-rerun.sh launch 3
+bash docs/run-records/oct2026-quality-v3-rerun.sh status
+# Wait for BOTH to finish successfully, then launch recommended split 1:
+bash docs/run-records/oct2026-quality-v3-rerun.sh wait23 && \
+  bash docs/run-records/oct2026-quality-v3-rerun.sh launch 1
+bash docs/run-records/oct2026-quality-v3-rerun.sh status
+```
+
+Do not run these alongside focused model validations or unrelated batch runs.
+Each session is named `oct26md-qv3-splitN`; output is
+`client-runs/runs-23102026-16rows/oct26md-qv3-splitN/`, log is the adjacent
+`.log`, work is `work/oct26md-qv3-splitN/`, Python exit is the adjacent `.exit`.
+Worker commands use `caffeinate -i`, unbuffered Python, `tee`, and
+`PIPESTATUS[0]`; a Python exit of zero alone does not prove extraction success.
+The helper also requires a completed manifest, count reconciliation, zero chunk
+failures, and CSV/XLSX/audit files. Inspect semantic failures and review flags
+before acceptance. Empty logs while a model works do not imply failure.
+
+Defaults remain analyze codex/gpt-6.1-sol/high; checker
+claude/claude-opus-5-5/high; arbiter claude/claude-haiku-5-5/high; visual
+codex/gpt-6-luna/high; shared-evidence claude/claude-opus-5-5/medium.
+`--checker-context` is omitted (off), shared-evidence gate remains on, no group
+notes or inventory overrides. Launch through the helper's `launch N` mode;
+it runs this worker command (N=2, 3, then 1), including the log and exit
+capture that `status` and `wait23` depend on:
+
+The revised adapter disables lifecycle hooks only for its headless Codex
+subprocesses (`-c features.hooks=false`), following the demonstrated Stop-hook
+answer replacement in the validation record. Global configuration is untouched.
+
+```bash
+B=client-runs/runs-23102026-16rows
+caffeinate -i .venv/bin/python -u -m src.run \
+  --sources $B/splits/split-N.csv \
+  --run-id oct26md-qv3-splitN \
+  --out-root $B \
+  2>&1 | tee $B/oct26md-qv3-splitN.log
+printf '%s\n' "${PIPESTATUS[0]}" > $B/oct26md-qv3-splitN.exit
+```
+
+URLs remain blank; only dates found in the source may appear. State Street
+Sector Market Perspectives retains `06/10/2026`. No datefill. The L&G Q4 2024
+edition remains excluded; the Q4 2026 ETF outlook remains included.
+
+A future combine should consume only `oct26md-qv3-split1/output.csv`,
+`oct26md-qv3-split2/output.csv`, `oct26md-qv3-split3/output.csv` and their
+matching failures, after per-split review. It must not consume focused
+validations, old splits, smoke or trial output. Keep any future combined,
+reconciled or summary artifacts in new revision-specific destinations.
+Retaining old split 1 is a user choice that creates a mixed configuration:
+its old eligibility and echoed-source-ID defects remain, and the complete
+batch cannot then claim validation under the revised configuration.
+No combine, reconcile, final export, digest, firm page or binder is run here.
+
+## Historical commands and results (superseded; do not execute)
 
 _Batch folder: `client-runs/runs-23102026-16rows/`. Inputs: the client
 engine's Markdown conversions under `client-inputs/2026-10-review/markdown/`

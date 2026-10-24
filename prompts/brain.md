@@ -1,6 +1,6 @@
 # Brain - worked examples for allocation-call extraction
 
-_Version: v1.6_
+_Version: v1.7_
 
 Distilled from five analyst-reviewed outlook sources (a sector strategist, a
 real-assets macro house, two multi-asset managers, a wealth manager). The
@@ -37,6 +37,31 @@ contract.
   neutral. By contrast, "we pared our overweight in emerging-market debt but
   remain above benchmark" → `EM Debt - General` `O`; the trim is a smaller
   overweight, not an underweight.
+
+## Positions vs analytical inputs (synthetic)
+
+- Kestrel Multi-Asset prints a bar chart titled "Current allocation vs
+  strategic neutral": Europe IG credit 14% against a 10% neutral, Japan
+  equities 3% against 5%. → `Europe IG Credit` `O` and `Japan Equities` `U`
+  (`stated`, `explicit_dial`), quoting both weights.
+- The same report's pie chart "Portfolio holdings" shows 12% in US equities,
+  with no neutral or benchmark anywhere → no call: holding an asset is not an
+  overweight.
+- A heatmap captioned "Momentum signals by market" shows a green cell for a
+  Canadian equity index, and a chart "Valuation z-scores" shows Swiss
+  government bonds at 0.0 → no candidates. The green cell is a signal reading,
+  and a zero z-score is not neutral positioning. Mention both figures in
+  `summary`. If a later figure, "Final tactical allocation", shows Canadian
+  equities above neutral, that figure is the call (`Canada Equities` `O`),
+  and the two signal charts disagreeing elsewhere is not a conflict.
+- "Our valuation work shows Australian government bonds at their cheapest in
+  a decade, and we have begun adding duration there" → `Australia Govt Bonds`
+  `O` from the prose (an action), quoting that sentence - not from the
+  valuation chart.
+- Adoption makes a model output a call: "The fund's tilts are set by our
+  regime model; this quarter it moves us to +1 on emerging-market equities" →
+  `Emerging Markets Equities` `O` (`stated`). Without the adoption sentence,
+  the same model chart is an input.
 
 ## Implied calls
 
@@ -82,6 +107,19 @@ contract.
   keep widening, but we are not taking an active duration position here" →
   `UNCERTAIN` (a flagged risk with no stance taken is not a `U`; the house
   explicitly declines to position).
+- Synthetic macro mix: "Growth is holding up, but inflation is sticky and the
+  policy outlook is uncertain" → no equities call. Mixed conditions are not a
+  neutral position and not a two-sided path; the rate path example above
+  (hikes then cuts) is.
+- Synthetic product claim: "Our multi-strategy fund has delivered positive
+  returns in nine of the last ten years and has low correlation to equities"
+  → no `Multi-Strategy Hedge Funds` call. By contrast, "we recommend investors
+  hold a 5-10% allocation to multi-strategy hedge funds as diversifiers" →
+  `Multi-Strategy Hedge Funds` `O`.
+- Synthetic valuation alone: "Emerging-market local bonds screen as the
+  cheapest asset on our valuation model" → no call. Adding "and we see this as
+  an entry point we are building into portfolios" makes it `EM Debt - Local
+  Currency` `O`.
 
 ## Snapping
 

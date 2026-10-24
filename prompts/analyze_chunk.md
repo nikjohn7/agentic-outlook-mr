@@ -46,6 +46,25 @@ under analysis and never override the locked taxonomy.
 
 ## Rules
 
+**Positions, not inputs.** Emit a candidate only for the house's own position
+or recommendation on an asset (conventions: "A call is a position, not an
+analytical input"). Before reading any chart, grid or table cell, read its
+caption, legend, axis labels and the surrounding explanation, and decide what
+it shows:
+- a house stance rating, or the current allocation against a neutral/benchmark
+  weight the source states → its cells can be calls;
+- an analytical input (trend, momentum, valuation, volatility, risk, economic
+  or historical-performance indicator) the source does not adopt as its
+  allocation → emit **no** candidate from its cells, whatever their colour,
+  sign, zero or midpoint. Describe the figure in `summary` instead, so later
+  readers know it exists.
+When you are asked to report what the charts, grids and tables on a page show,
+this rule still applies: report the house stances; analytical inputs belong in
+`summary`. If the source's own prose takes a stance (including one it explains
+with these inputs), quote that prose as the evidence. If you genuinely cannot
+tell from the caption, legend and text whether a visual is a stance or an
+input, you may emit the call, but say so in `reasoning`.
+
 **Granularity - call at the level stated.** Make the call at exactly the level
 the source expresses it. "We favor EM equities" → `Emerging Markets Equities`,
 not a fan-out to `Taiwan Equities`, `India Equities`, etc. Never propagate a
@@ -70,10 +89,12 @@ don't emit leaves the source merely mentions without taking a stance.
 
 **Call language.** Choose exactly one bucket. This is a categorical judgment
 only; never emit or reason about numeric confidence.
-- `explicit_dial` - a printed dial, grid, score, tier, or dashboard position is
-  the stance. The stance is a rendered artifact, not a sentence.
+- `explicit_dial` - a printed house rating (dial, grid, score, tier, or
+  dashboard position showing the house's stance) or a current-versus-neutral
+  allocation is the stance. The stance is a rendered artifact, not a sentence.
   Synthetic anchor: a regional-allocation grid places "Japan Equities" in the
-  Overweight column.
+  Overweight column. Not an anchor: a green cell for a Japanese equity index
+  in a heatmap captioned "Momentum signals" - that is an input, not a call.
 - `explicit_stance` - prose states a position using positioning vocabulary:
   overweight, underweight, neutral, marketweight, hold an overweight/underweight.
   Synthetic anchor: "We are overweight Japan equities."
@@ -105,13 +126,16 @@ only; never emit or reason about numeric confidence.
     with "..." between the passages, and do NOT reorder the spans. If a single
     contiguous quote already supports the call, keep `evidence_quote` a single
     string.
-- `evidence_kind: table` - the call comes from a table. In `evidence_quote`
-  give the row/column labels and cell value you read (e.g. "US Duration -
-  Underweight"). The `locator` must name the specific table.
-- `evidence_kind: visual` - the call comes from a chart, arrow grid, dial, or
-  infographic. In `evidence_quote` describe what you see (e.g. "Inflation dial
-  needle between Target and Overshoot"). The `locator` must name the specific
-  figure.
+- `evidence_kind: table` - the call comes from a house-stance table (see
+  "Positions, not inputs"). In `evidence_quote` give the row/column labels and
+  cell value you read (e.g. "US Duration - Underweight"); for an allocation
+  against neutral, give both weights (e.g. "Euro IG credit: current 14% vs
+  neutral 10%"). The `locator` must name the specific table.
+- `evidence_kind: visual` - the call comes from a house-stance chart, arrow
+  grid, dial, or infographic. In `evidence_quote` describe what you see (e.g.
+  "Euro Govt Bonds dial needle in the Underweight segment"). The `locator`
+  must name the specific figure, by its caption or printed title where it has
+  one.
 - **Text inside a designed layout artifact is `visual`, not `prose`.** A
   callout box, sidebar, banner, stat panel, or infographic column counts as
   `visual` even when it contains full sentences: quote the text you see, and
@@ -121,9 +145,20 @@ only; never emit or reason about numeric confidence.
 
 **Basis - tag how each call was derived.** Every candidate MUST carry a
 `basis`:
-- `basis: stated` - an explicit dial/score/tier position or explicit OW/N/UW
-  prose ("we are overweight X"; a printed Neutral dial). Stated views are
-  first-class and must **always** be captured - unchanged from before.
+Eligibility does not determine basis. A forecast can qualify as a call while
+its translation into O/N/U still requires one analyst step. "The house expects
+this asset's price to be supported" is not "we overweight/prefer this asset".
+Tag directional forecast prose, including flat-price paths and committed
+two-sided yield paths (which net to `N` under the conventions), `inferred` unless it actually states a position or preference. A numerical
+forecast is `forecast_delta` only against an identified current level; two
+future forecast dates do not supply a current baseline. Preserve legitimate
+directional prose inferences even when that numerical baseline is unavailable.
+- `basis: stated` - an explicit house dial/score/tier position, a current
+  allocation against a stated neutral/benchmark, or explicit OW/N/UW or
+  preference prose ("we are overweight X"; "we prefer X"; a printed Neutral
+  house dial). Stated views are first-class and must **always** be captured.
+  A reading of an analytical-input chart is never `stated`, and neither is a
+  call you had to infer - a number printed beside it does not change that.
 - `basis: forecast_delta` - the call rests on a house forecast **endpoint versus
   the current level** (a yield, FX, or price-target table: "10-yr yield 4.15% →
   4.02%"). When `basis` is `forecast_delta` you MUST also emit `delta_value` -
@@ -142,6 +177,11 @@ only; never emit or reason about numeric confidence.
     other prose call (same evidence contract; `evidence_kind: prose`);
   - **single step only** - one bridge from the prose to the leaf, never a chained
     chain of speculation;
+  - **the bridge starts from the source's own argument about that asset** - an
+    opportunity it names and explains, a risk it says it is acting on. Mixed
+    macro conditions, a cheap valuation or one favorable input on its own,
+    and claims about a product's virtues or past performance do not support
+    an inference (see the conventions' "What is NOT a call");
   - **infer at the granularity the prose names.** When the grounding prose names
     a specific country or market and the taxonomy contains that country's leaf,
     land the inference on the **named country leaf**, not a regional aggregate
@@ -154,8 +194,10 @@ only; never emit or reason about numeric confidence.
     in the evidence, so this is the multi-call pattern, not a fan-out. This does
     NOT license fanning a *broad stated* call down to countries it never names -
     the Granularity rule above still governs stated calls;
-  - if the implication is genuinely two-sided or weak, use `UNCERTAIN` or emit
-    nothing;
+  - if the implication is ambiguous (it could point either way) or weak, use
+    `UNCERTAIN` or emit nothing. A committed two-sided path - both directions
+    stated across the horizon - is not ambiguous: it is an `inferred` `N` under
+    the conventions;
   - an inference must **never replace or contradict a `stated` call on the same
     leaf** - if the source states a view on that leaf, the stated call wins and
     you do not also emit an inference for it.
@@ -168,7 +210,7 @@ only; never emit or reason about numeric confidence.
 - prose/HTML: the `char:start-end` locator of this chunk.
 - table/visual: page number **plus** the specific artifact - its caption,
   printed title, or figure/table number; the nearest heading if it is unlabeled
-  (e.g. `p.2 - 'Global Macro Outlook' dials`, `p.5 - 'Fixed Income Views' grid`).
+  (e.g. `p.2 - 'Asset Class Views' dials`, `p.5 - 'Fixed Income Views' grid`).
   A bare page number is not enough for table/visual evidence.
 
 **Unseen figures (HTML).** If the text points at a graphic you cannot see ("as
@@ -202,7 +244,7 @@ Return exactly one JSON object of this shape and nothing else:
       "delta_unit": "bp"
     }
   ],
-  "summary": "one paragraph: what this chunk covered, plus any unseen figures"
+  "summary": "one paragraph: what this chunk covered, plus any unseen figures and any analytical-input figures not emitted as calls"
 }
 ```
 

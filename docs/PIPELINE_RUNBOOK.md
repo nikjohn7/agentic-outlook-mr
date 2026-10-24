@@ -26,6 +26,15 @@ Prerequisites (already satisfied on the current machine):
   leaves). This file is the authority for every taxonomy field in the output;
   it is never edited.
 
+Headless Codex calls include `-c features.hooks=false` per process. Interactive
+lifecycle hooks can append a new question after a reader's JSON answer and
+replace the extracted candidates with the answer to that question. This does
+not edit global configuration or change the selected model/effort or sandbox.
+See the [October quality validation record](run-records/oct2026-quality-validation.md)
+for the observed failure and the revised split launch commands. A zero Python
+exit requires a manifest check: engine/chunk failures are audited and can still
+produce a completed run with no useful calls.
+
 Sanity check before a production batch:
 
 ```bash
@@ -253,7 +262,11 @@ Operational rules (learned on the 98-row batch):
   happened" labels, grouped and sorted most-important-first.
 - `output-client.csv/.xlsx`: the client twin (section 3.4).
 - `manifest.md` — per-source counts, tier counts, run config (the manifest
-  records exactly which models ran). With paired PDFs it also lists PDF chunks
+  records exactly which models ran), and `## Provenance`: the code commit,
+  uncommitted changes under `src/`, `prompts/` and the taxonomy, one
+  implementation hash over all of them, and each prompt's and the taxonomy's
+  hash (`src/provenance.py`; recorded, never blocking). Compare two runs by
+  their implementation hash. With paired PDFs it also lists PDF chunks
   and flagged pages per source, kept rows by evidence origin, and a
   `## Page check (paired PDFs)` section.
 - `pagecheck-audit.csv`: paired-PDF runs only: one row per checked quote

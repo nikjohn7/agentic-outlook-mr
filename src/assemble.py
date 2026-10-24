@@ -273,9 +273,10 @@ CLIENT_FAILURE_LABELS: dict[str, tuple[str, str]] = {
         "the call, so it was dropped. A human can check the cited page.",
     ),
     "checker_not_forward_looking": (
-        "Not a forward-looking view",
-        "A second reader found the cited text isn't a forward-looking view "
-        "(e.g. it describes the past), so it was dropped. A human can check the "
+        "Not a view the firm holds",
+        "A second reader found the cited text isn't a view the firm takes "
+        "(e.g. it describes the past or an analytical input rather than a position), "
+        "so it was dropped. A human can check the "
         "cited page.",
     ),
     "taxonomy_no_match": (
@@ -1088,9 +1089,24 @@ def _leaf_name_tokens(label: str) -> list[str]:
 def _leaf_evidence_overlap(leaf_label: str, evidence_text: str) -> int:
     """Count leaf-name tokens grounded in the evidence text."""
     evidence_words = set(re.findall(r"[a-z0-9]+", normalize_quote_text(evidence_text).lower()))
-    return sum(
+    overlap = sum(
         1 for token in _leaf_name_tokens(leaf_label) if _token_matches(token, evidence_words)
     )
+    # Ordinary currency names count even when the ISO code is absent. Match
+    # whole adjacent words so a bare 'dollar' does not name AUD; a bare
+    # 'pound' (weight, verb) does not name GBP. 'sterling' stays: in evidence
+    # already shared with a GBP call it is the currency.
+    aliases = {
+        "GBP": (
+            "sterling", "british pound", "british pounds", "uk pound", "uk pounds",
+            "pound sterling", "pounds sterling",
+        ),
+        "AUD": ("australian dollar", "australian dollars", "aussie", "aussie dollar", "aussie dollars"),
+    }
+    evidence_phrase = " " + " ".join(re.findall(r"[a-z0-9]+", normalize_quote_text(evidence_text).lower())) + " "
+    if any(f" {name} " in evidence_phrase for name in aliases.get(leaf_label, ())):
+        return max(1, overlap)
+    return overlap
 
 
 def _token_matches(token: str, evidence_words: set[str]) -> bool:
@@ -1112,14 +1128,16 @@ def write_run_outputs(
     run_config: dict[str, object] | None = None,
     grouping: dict[str, object] | None = None,
     quote_visual_stats: dict[str, int] | None = None,
+    provenance: dict[str, object] | None = None,
 ) -> None:
     """Write the run's review files.
 
     chunk_failures are whole-chunk failures (e.g. unparseable model output) that
     produced no candidate; they are recorded in failures.csv and counted
     separately in the manifest so the candidate reconciliation stays exact.
-    run_config (engine/model/effort) is recorded in the manifest so a frozen
-    run states exactly what produced it. grouping is the resolved group-notes
+    run_config (engine/model/effort) and provenance (code commit, working-tree
+    state, content hashes; `src.provenance`) are recorded in the manifest so a
+    frozen run states exactly what produced it. grouping is the resolved group-notes
     plan (groups + warnings) so the manifest shows exactly what was combined.
     sources maps source_id -> SourceInfo so the client-readable failures file can
     show each firm/source title (absent -> the source_id is shown instead).
@@ -1178,6 +1196,7 @@ def write_run_outputs(
         grouping,
         quote_visual_stats,
         page_audit,
+        provenance,
     )
     (run_dir / "manifest.md").write_text(manifest, encoding="utf-8")
 
@@ -1350,6 +1369,7 @@ def _manifest_text(
     grouping: dict[str, object] | None = None,
     quote_visual_stats: dict[str, int] | None = None,
     page_audit: list[dict[str, str]] | None = None,
+    provenance: dict[str, object] | None = None,
 ) -> str:
     kept = len(result.output_rows)
     failed = len(result.failures)
@@ -1358,6 +1378,10 @@ def _manifest_text(
         lines.append("## Run configuration")
         lines.extend(f"- {key}: {value}" for key, value in run_config.items() if value is not None)
         lines.append("")
+    if provenance:
+        from src.provenance import manifest_lines
+
+        lines.extend(manifest_lines(provenance))
     if grouping:
         lines.append("## Grouping")
         lines.append(f"- group notes: {grouping.get('notes_path')}")
