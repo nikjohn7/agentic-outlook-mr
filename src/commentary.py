@@ -31,6 +31,7 @@ from dataclasses import dataclass, replace
 # The segment separator for merged rows. Defined here, re-exported by
 # src.assemble as COMMENTARY_MERGE_SEP so the two never drift.
 SEGMENT_SEP = "  ||||  "
+PDF_READ_MARKER = "(read from PDF)"
 # How a separator is recognised when a row is read back: the CSV writer
 # collapses space runs (src.csvio.clean_cell), so on disk it is " |||| ".
 _SEGMENT_SPLIT = re.compile(r"\s+\|\|\|\|\s+")

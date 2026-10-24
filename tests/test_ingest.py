@@ -111,6 +111,33 @@ class LocalFileLoaderTest(unittest.TestCase):
 
     HEADER = "Firm,Date,Source,MR Link,local_file\n"
 
+    def test_optional_paired_pdf_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "outlook.md").write_text("# Outlook", encoding="utf-8")
+            (root / "outlook.pdf").write_bytes(b"%PDF-1.4\n")
+            csv_path = root / "sources.csv"
+            with patch("src.ingest.PROJECT_ROOT", root):
+                for value in ("outlook.pdf", "", None, "missing.pdf", "outlook.md"):
+                    with self.subTest(pdf_file=value):
+                        header = "Firm,Source,URL,local_file"
+                        row = "Test Firm,Outlook,,outlook.md"
+                        if value is not None:
+                            header += ",pdf_file"
+                            row += f",{value}"
+                        csv_path.write_text(header + "\n" + row + "\n", encoding="utf-8")
+                        if value == "missing.pdf":
+                            with self.assertRaisesRegex(FileNotFoundError, "pdf_file.*Outlook"):
+                                load_pilot_sources(csv_path)
+                        elif value == "outlook.md":
+                            with self.assertRaisesRegex(ValueError, r"pdf_file.*must be a \.pdf"):
+                                load_pilot_sources(csv_path)
+                        else:
+                            [source] = load_pilot_sources(csv_path)
+                            self.assertEqual("md", source.source_type)
+                            expected = root / "outlook.pdf" if value else None
+                            self.assertEqual(expected, source.pdf_path)
+
     def _write_csv(self, temp_dir: str, body: str) -> Path:
         path = Path(temp_dir) / "sources.csv"
         path.write_text(self.HEADER + body, encoding="utf-8")

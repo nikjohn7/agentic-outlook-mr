@@ -44,13 +44,15 @@ FETCH_BROWSER_FALLBACK_STATUSES = frozenset({401, 403, 406, 429})
 # each accepts any of these headers (case-insensitive, trimmed) so a real-world
 # export using e.g. `Entity Name` / `Title` / `External link` loads without
 # editing. `firm`, `source`, and `url` are required; `date` and `local_file`
-# are optional (a missing date is "", a missing local_file fetches the URL).
+# and pdf_file are optional (a missing date is "", a missing local_file
+# fetches the URL; pdf_file only records the paired PDF).
 _COLUMN_ALIASES = {
     "firm": ("firm", "entity name", "entity", "manager", "asset manager", "company", "provider"),
     "date": ("date", "published at", "published", "publish date"),
     "source": ("source", "title", "document title", "document"),
     "url": ("url", "mr link", "external link", "source link", "link"),
     "local_file": ("local_file", "local file", "local pdf", "file"),
+    "pdf_file": ("pdf_file",),
 }
 _REQUIRED_SOURCE_FIELDS = ("firm", "source", "url")
 
@@ -170,6 +172,7 @@ class SourceRecord:
     resolved_url: str
     source_type: str
     local_path: Path | None = None
+    pdf_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,13 +206,15 @@ class HtmlFetchResult:
 def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
     """Load a source CSV in the pilot column family.
 
-    Canonical fields - firm, date, source (title), url, and optional local_file -
+    Canonical fields - firm, date, source (title), url, optional local_file and pdf_file -
     each accept a few header aliases (see `_COLUMN_ALIASES`), so an export CSV
     using `Entity Name` / `Title` / `External link` loads with no editing.
     A row's `source_type` is `pdf` when it resolves to a local PDF (`local_file`)
     or its URL points at a `.pdf` (fetched remotely); `txt` when local_file is a
     plain-text transcript (video sources ship as transcripts); `md` when it is a
     Markdown document; otherwise `html`.
+    An optional `pdf_file` resolves to `pdf_path` for later PDF assistance;
+    it never changes the primary source type or snapshot.
     See `_resolve_local_file` for the local_file contract. Any second test set is
     a CSV of this family - pointing `--sources <path>` at it needs no code change.
     """
@@ -223,6 +228,8 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
         date = row[header["date"]].strip() if "date" in header else ""
         local_raw = row[header["local_file"]] if "local_file" in header else ""
         local_path = _resolve_local_file(local_raw, firm=firm, title=title)
+        pdf_raw = row[header["pdf_file"]] if "pdf_file" in header else ""
+        pdf_path = _resolve_pdf_file(pdf_raw, firm=firm, title=title)
         resolved_url = resolve_url(url)
         sources.append(
             SourceRecord(
@@ -238,6 +245,7 @@ def load_pilot_sources(path: str | Path = PILOT_CSV) -> list[SourceRecord]:
                     else detect_source_type(resolved_url)
                 ),
                 local_path=local_path,
+                pdf_path=pdf_path,
             )
         )
     return sources
@@ -661,6 +669,22 @@ def _resolve_local_file(
             f"local_file '{raw}' for source '{firm} - {title}' must be a .pdf, "
             f"a .txt transcript or a .md document; got '{path.suffix}'"
         )
+    return path
+
+
+def _resolve_pdf_file(pdf_file: str | None, *, firm: str, title: str) -> Path | None:
+    """Resolve an optional paired PDF, with the local_file path contract."""
+    raw = (pdf_file or "").strip()
+    if not raw:
+        return None
+    path = PROJECT_ROOT / raw
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"pdf_file '{raw}' for source '{firm} - {title}' does not exist "
+            f"(resolved to {path})"
+        )
+    if path.suffix.lower() != ".pdf":
+        raise ValueError(f"pdf_file '{raw}' for source '{firm} - {title}' must be a .pdf")
     return path
 
 

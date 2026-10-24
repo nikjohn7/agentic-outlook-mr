@@ -163,6 +163,7 @@ def run_pipeline(
             date=source.date,
             source=source.source,
             url=source.url,
+            pdf_path=str(source.pdf_path) if source.pdf_path else "",
         )
         try:
             ingested = create_snapshot(source, work_dir)
@@ -211,6 +212,7 @@ def run_pipeline(
             date=ingested.source.date,
             source=source.source,
             url=source.url,
+            pdf_path=str(source.pdf_path) if source.pdf_path else "",
         )
 
         group_id = group_map.get(source.source_id)

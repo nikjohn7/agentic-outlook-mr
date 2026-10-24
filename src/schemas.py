@@ -198,6 +198,7 @@ class SourceInfo:
     date: str
     source: str
     url: str
+    pdf_path: str = ""
 
 
 REQUIRED_CANDIDATE_FIELDS = (
